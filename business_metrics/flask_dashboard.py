@@ -492,18 +492,23 @@ HTML_TEMPLATE = '''
 
     <!-- 업체별 탭 -->
     <div id="client" class="tab-content">
-        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <label style="margin-right: 10px; font-weight: bold;">👤 담당자 필터:</label>
-            <select id="clientManagerFilter" onchange="updateClientTables()">
-                <option value="">전체 담당자</option>
-            </select>
+        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <div>
+                <span id="clientYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
+            </div>
+            <div>
+                <label style="margin-right: 10px; font-weight: bold;">👤 담당자 필터:</label>
+                <select id="clientManagerFilter" onchange="updateClientTables()">
+                    <option value="">전체 담당자</option>
+                </select>
+            </div>
         </div>
         <div class="charts">
             <div class="chart-container">
                 <h3>🏆 매출 TOP 20 업체</h3>
                 <div class="scroll-table">
                     <table id="clientTopTable">
-                        <thead><tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
+                        <thead id="clientTopTableHead"><tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -512,7 +517,7 @@ HTML_TEMPLATE = '''
                 <h3>💎 고효율 업체 (높은 단가)</h3>
                 <div class="scroll-table">
                     <table id="clientEffTable">
-                        <thead><tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr></thead>
+                        <thead id="clientEffTableHead"><tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -521,7 +526,7 @@ HTML_TEMPLATE = '''
                 <h3>📦 대량 업체 (많은 건수)</h3>
                 <div class="scroll-table">
                     <table id="clientVolTable">
-                        <thead><tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr></thead>
+                        <thead id="clientVolTableHead"><tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -531,11 +536,16 @@ HTML_TEMPLATE = '''
 
     <!-- 지역별 탭 -->
     <div id="region" class="tab-content">
-        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <label style="margin-right: 10px; font-weight: bold;">👤 담당자 필터:</label>
-            <select id="regionManagerFilter" onchange="updateRegionTables()">
-                <option value="">전체 담당자</option>
-            </select>
+        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <div>
+                <span id="regionYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
+            </div>
+            <div>
+                <label style="margin-right: 10px; font-weight: bold;">👤 담당자 필터:</label>
+                <select id="regionManagerFilter" onchange="updateRegionTables()">
+                    <option value="">전체 담당자</option>
+                </select>
+            </div>
         </div>
         <div class="charts">
             <div class="chart-container">
@@ -874,7 +884,23 @@ HTML_TEMPLATE = '''
         function updateClientTables() {
             const selectedManager = document.getElementById('clientManagerFilter').value;
 
+            // 연도 라벨 업데이트
+            const yearLabel = document.getElementById('clientYearLabel');
+            if (compareData) {
+                yearLabel.textContent = `📅 ${currentData.year}년 vs ${compareData.year}년`;
+            } else {
+                yearLabel.textContent = `📅 ${currentData.year}년`;
+            }
+
             let clientData, effData, volData;
+            let compareClientMap = {};
+
+            // 비교 데이터 맵 생성
+            if (compareData) {
+                compareData.by_client.forEach(c => {
+                    compareClientMap[c[0]] = c[1];
+                });
+            }
 
             if (selectedManager && currentData.manager_top_clients[selectedManager]) {
                 // 담당자별 데이터 사용
@@ -901,23 +927,59 @@ HTML_TEMPLATE = '''
                 volData = currentData.high_volume;
             }
 
-            // TOP 20 업체
+            // TOP 20 업체 (비교 모드 지원)
+            const topThead = document.getElementById('clientTopTableHead');
             const topTbody = document.querySelector('#clientTopTable tbody');
-            topTbody.innerHTML = clientData.map((d, i) =>
-                `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
-            ).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
 
-            // 고효율 업체
+            if (compareData) {
+                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                topTbody.innerHTML = clientData.map((d, i) => {
+                    const compSales = compareClientMap[d[0]]?.sales || 0;
+                    const diff = d[1].sales - compSales;
+                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${d[1].count}</td></tr>`;
+                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+            } else {
+                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
+                topTbody.innerHTML = clientData.map((d, i) =>
+                    `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
+                ).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            }
+
+            // 고효율 업체 (비교 모드 지원)
+            const effThead = document.getElementById('clientEffTableHead');
             const effTbody = document.querySelector('#clientEffTable tbody');
-            effTbody.innerHTML = effData.map(d =>
-                `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td></tr>`
-            ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
 
-            // 대량 업체
+            if (compareData) {
+                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th></tr>`;
+                effTbody.innerHTML = effData.map(d => {
+                    const compSales = compareClientMap[d[0]]?.sales || 0;
+                    const diff = d[1].sales - compSales;
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td></tr>`;
+                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            } else {
+                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr>`;
+                effTbody.innerHTML = effData.map(d =>
+                    `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td></tr>`
+                ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
+            }
+
+            // 대량 업체 (비교 모드 지원)
+            const volThead = document.getElementById('clientVolTableHead');
             const volTbody = document.querySelector('#clientVolTable tbody');
-            volTbody.innerHTML = volData.map(d =>
-                `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
-            ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
+
+            if (compareData) {
+                volThead.innerHTML = `<tr><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>매출액</th></tr>`;
+                volTbody.innerHTML = volData.map(d => {
+                    const compCount = compareClientMap[d[0]]?.count || 0;
+                    const diff = d[1].count - compCount;
+                    return `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${compCount}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diff}</td><td>${formatCurrency(d[1].sales)}</td></tr>`;
+                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            } else {
+                volThead.innerHTML = `<tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr>`;
+                volTbody.innerHTML = volData.map(d =>
+                    `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
+                ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
+            }
         }
 
         function updateDefectChart() {
@@ -1003,6 +1065,10 @@ HTML_TEMPLATE = '''
 
         function updateRegionTables() {
             if (!currentData.by_region) return;
+
+            // 연도 라벨 업데이트
+            const yearLabel = document.getElementById('regionYearLabel');
+            yearLabel.textContent = `📅 ${currentData.year}년`;
 
             const tbody = document.querySelector('#regionTable tbody');
             const totalSales = currentData.by_region.reduce((sum, d) => sum + d[1].sales, 0);

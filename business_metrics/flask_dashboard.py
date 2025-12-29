@@ -127,6 +127,8 @@ def process_data(data, purpose_filter=None):
     by_defect_month = {}
     by_region = {}  # 지역별 데이터
     by_region_manager = {}  # 지역-담당자별 데이터
+    by_purpose_manager = {}  # 목적별-담당자 데이터
+    by_purpose_region = {}  # 목적별-지역 데이터
     purposes = set()
     total_sales = 0
     total_count = 0
@@ -204,6 +206,14 @@ def process_data(data, purpose_filter=None):
             by_purpose[purpose]['sales'] += sales
             by_purpose[purpose]['count'] += 1
 
+            # 목적별-담당자 데이터
+            if purpose not in by_purpose_manager:
+                by_purpose_manager[purpose] = {}
+            if manager not in by_purpose_manager[purpose]:
+                by_purpose_manager[purpose][manager] = {'sales': 0, 'count': 0}
+            by_purpose_manager[purpose][manager]['sales'] += sales
+            by_purpose_manager[purpose][manager]['count'] += 1
+
         # 부적합항목별
         if defect:
             if defect not in by_defect:
@@ -252,6 +262,15 @@ def process_data(data, purpose_filter=None):
             by_region_manager[manager][region_key]['sales'] += sales
             by_region_manager[manager][region_key]['count'] += 1
 
+            # 목적별-지역 데이터
+            if purpose:
+                if purpose not in by_purpose_region:
+                    by_purpose_region[purpose] = {}
+                if region_key not in by_purpose_region[purpose]:
+                    by_purpose_region[purpose][region_key] = {'sales': 0, 'count': 0}
+                by_purpose_region[purpose][region_key]['sales'] += sales
+                by_purpose_region[purpose][region_key]['count'] += 1
+
         total_sales += sales
         total_count += 1
 
@@ -296,6 +315,24 @@ def process_data(data, purpose_filter=None):
             for r, d in sorted_mgr_regions[:10]
         ]
 
+    # 목적별 담당자 데이터 정리
+    purpose_managers = {}
+    for purpose, managers in by_purpose_manager.items():
+        sorted_pm = sorted(managers.items(), key=lambda x: x[1]['sales'], reverse=True)
+        purpose_managers[purpose] = [
+            {'name': m, 'sales': d['sales'], 'count': d['count']}
+            for m, d in sorted_pm[:20]
+        ]
+
+    # 목적별 지역 데이터 정리
+    purpose_regions = {}
+    for purpose, regions in by_purpose_region.items():
+        sorted_pr = sorted(regions.items(), key=lambda x: x[1]['sales'], reverse=True)
+        purpose_regions[purpose] = [
+            {'region': r, 'sales': d['sales'], 'count': d['count']}
+            for r, d in sorted_pr[:20]
+        ]
+
     return {
         'by_manager': [(m, {'sales': d['sales'], 'count': d['count']}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
@@ -315,6 +352,8 @@ def process_data(data, purpose_filter=None):
                       for r, d in sorted_regions[:50]],
         'region_top_managers': region_top_managers,
         'manager_regions': manager_regions,
+        'purpose_managers': purpose_managers,
+        'purpose_regions': purpose_regions,
         'purposes': sorted(list(purposes)),
         'total_sales': total_sales,
         'total_count': total_count
@@ -438,6 +477,7 @@ HTML_TEMPLATE = '''
         <button class="tab" onclick="showTab('monthly')">📅 월별</button>
         <button class="tab" onclick="showTab('client')">🏭 업체별</button>
         <button class="tab" onclick="showTab('region')">📍 지역별</button>
+        <button class="tab" onclick="showTab('purpose')">🎯 목적별</button>
         <button class="tab" onclick="showTab('defect')">⚠️ 부적합</button>
     </div>
 
@@ -592,6 +632,53 @@ HTML_TEMPLATE = '''
         </div>
     </div>
 
+    <!-- 목적별 탭 -->
+    <div id="purpose" class="tab-content">
+        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;">
+                <span id="purposeYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
+                <button onclick="selectAllPurposes()" style="padding: 5px 10px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">전체선택</button>
+                <button onclick="clearAllPurposes()" style="padding: 5px 10px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">선택해제</button>
+            </div>
+            <div id="purposeCheckboxes" style="display: flex; flex-wrap: wrap; gap: 10px; max-height: 100px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                <!-- 검사목적 체크박스들이 여기에 동적으로 추가됨 -->
+            </div>
+        </div>
+        <div class="charts">
+            <div class="chart-container">
+                <h3>🎯 선택된 목적별 매출</h3>
+                <canvas id="purposeChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>목적별 상세</h3>
+                <div class="scroll-table">
+                    <table id="purposeTable">
+                        <thead><tr><th>검사목적</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>👤 목적별 담당자 실적</h3>
+                <div class="scroll-table">
+                    <table id="purposeManagerTable">
+                        <thead><tr><th>담당자</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>📍 목적별 지역 실적</h3>
+                <div class="scroll-table">
+                    <table id="purposeRegionTable">
+                        <thead><tr><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 부적합 탭 -->
     <div id="defect" class="tab-content">
         <div class="charts">
@@ -723,6 +810,8 @@ HTML_TEMPLATE = '''
             updateRegionChart();
             updateRegionTables();
             updateRegionSelects();
+            updatePurposeCheckboxes();
+            updatePurposeTab();
             updateDefectChart();
             updateDefectTable();
             updateDefectSelect();
@@ -1137,6 +1226,131 @@ HTML_TEMPLATE = '''
             tbody.innerHTML = regions.map((r, i) =>
                 `<tr><td>${i+1}</td><td>${r.region}</td><td>${formatCurrency(r.sales)}</td><td>${r.count}</td><td>${(r.sales / totalSales * 100).toFixed(1)}%</td></tr>`
             ).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+        }
+
+        // 목적별 탭 함수들
+        function updatePurposeCheckboxes() {
+            const container = document.getElementById('purposeCheckboxes');
+            container.innerHTML = '';
+
+            if (!currentData.purposes) return;
+
+            currentData.purposes.forEach(p => {
+                if (!p) return;
+                const label = document.createElement('label');
+                label.style.cssText = 'display: flex; align-items: center; gap: 5px; background: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; border: 1px solid #ddd;';
+                label.innerHTML = `<input type="checkbox" value="${p}" onchange="updatePurposeTab()" checked> ${p}`;
+                container.appendChild(label);
+            });
+        }
+
+        function selectAllPurposes() {
+            document.querySelectorAll('#purposeCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = true);
+            updatePurposeTab();
+        }
+
+        function clearAllPurposes() {
+            document.querySelectorAll('#purposeCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+            updatePurposeTab();
+        }
+
+        function getSelectedPurposes() {
+            const checkboxes = document.querySelectorAll('#purposeCheckboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function updatePurposeTab() {
+            // 연도 라벨 업데이트
+            const yearLabel = document.getElementById('purposeYearLabel');
+            yearLabel.textContent = `📅 ${currentData.year}년`;
+
+            const selectedPurposes = getSelectedPurposes();
+
+            if (selectedPurposes.length === 0) {
+                document.querySelector('#purposeTable tbody').innerHTML = '<tr><td colspan="5">검사목적을 선택해주세요</td></tr>';
+                document.querySelector('#purposeManagerTable tbody').innerHTML = '<tr><td colspan="5">검사목적을 선택해주세요</td></tr>';
+                document.querySelector('#purposeRegionTable tbody').innerHTML = '<tr><td colspan="5">검사목적을 선택해주세요</td></tr>';
+                if (charts.purpose) charts.purpose.destroy();
+                return;
+            }
+
+            // 선택된 목적별 데이터 필터링
+            const filteredPurposes = currentData.by_purpose.filter(p => selectedPurposes.includes(p[0]));
+            const totalSales = filteredPurposes.reduce((sum, p) => sum + p[1].sales, 0);
+
+            // 목적별 차트
+            const ctx = document.getElementById('purposeChart').getContext('2d');
+            if (charts.purpose) charts.purpose.destroy();
+            charts.purpose = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: filteredPurposes.map(p => p[0]),
+                    datasets: [{
+                        data: filteredPurposes.map(p => p[1].sales),
+                        backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#a8edea', '#fed6e3']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'right' } } }
+            });
+
+            // 목적별 테이블
+            document.querySelector('#purposeTable tbody').innerHTML = filteredPurposes.map(p => {
+                const avg = p[1].count > 0 ? p[1].sales / p[1].count : 0;
+                const ratio = totalSales > 0 ? (p[1].sales / totalSales * 100).toFixed(1) : 0;
+                return `<tr><td>${p[0]}</td><td>${formatCurrency(p[1].sales)}</td><td>${p[1].count}</td><td>${formatCurrency(avg)}</td><td>${ratio}%</td></tr>`;
+            }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+
+            // 목적별 담당자 테이블 (선택된 목적에 해당하는 담당자 데이터)
+            if (currentData.purpose_managers) {
+                const managerData = {};
+                selectedPurposes.forEach(purpose => {
+                    if (currentData.purpose_managers[purpose]) {
+                        currentData.purpose_managers[purpose].forEach(m => {
+                            if (!managerData[m.name]) {
+                                managerData[m.name] = { sales: 0, count: 0 };
+                            }
+                            managerData[m.name].sales += m.sales;
+                            managerData[m.name].count += m.count;
+                        });
+                    }
+                });
+                const sortedManagers = Object.entries(managerData).sort((a, b) => b[1].sales - a[1].sales);
+                const managerTotalSales = sortedManagers.reduce((sum, m) => sum + m[1].sales, 0);
+
+                document.querySelector('#purposeManagerTable tbody').innerHTML = sortedManagers.slice(0, 20).map(([name, data]) => {
+                    const avg = data.count > 0 ? data.sales / data.count : 0;
+                    const ratio = managerTotalSales > 0 ? (data.sales / managerTotalSales * 100).toFixed(1) : 0;
+                    return `<tr><td>${name}</td><td>${formatCurrency(data.sales)}</td><td>${data.count}</td><td>${formatCurrency(avg)}</td><td>${ratio}%</td></tr>`;
+                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            } else {
+                document.querySelector('#purposeManagerTable tbody').innerHTML = '<tr><td colspan="5">담당자 데이터 없음</td></tr>';
+            }
+
+            // 목적별 지역 테이블
+            if (currentData.purpose_regions) {
+                const regionData = {};
+                selectedPurposes.forEach(purpose => {
+                    if (currentData.purpose_regions[purpose]) {
+                        currentData.purpose_regions[purpose].forEach(r => {
+                            if (!regionData[r.region]) {
+                                regionData[r.region] = { sales: 0, count: 0 };
+                            }
+                            regionData[r.region].sales += r.sales;
+                            regionData[r.region].count += r.count;
+                        });
+                    }
+                });
+                const sortedRegions = Object.entries(regionData).sort((a, b) => b[1].sales - a[1].sales);
+                const regionTotalSales = sortedRegions.reduce((sum, r) => sum + r[1].sales, 0);
+
+                document.querySelector('#purposeRegionTable tbody').innerHTML = sortedRegions.slice(0, 20).map(([region, data]) => {
+                    const avg = data.count > 0 ? data.sales / data.count : 0;
+                    const ratio = regionTotalSales > 0 ? (data.sales / regionTotalSales * 100).toFixed(1) : 0;
+                    return `<tr><td>${region}</td><td>${formatCurrency(data.sales)}</td><td>${data.count}</td><td>${formatCurrency(avg)}</td><td>${ratio}%</td></tr>`;
+                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            } else {
+                document.querySelector('#purposeRegionTable tbody').innerHTML = '<tr><td colspan="5">지역 데이터 없음</td></tr>';
+            }
         }
 
         showToast('연도를 선택하고 [조회하기] 버튼을 클릭하세요.', 'loading', 5000);

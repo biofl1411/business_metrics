@@ -1223,23 +1223,23 @@ HTML_TEMPLATE = '''
 
         function updateRegionChart(regionData, compareRegionData) {
             const top20 = regionData.slice(0, 20);
-            if (regionChart) {
-                regionChart.data.labels = top20.map(d => d[0]);
+            if (charts.region) {
+                charts.region.data.labels = top20.map(d => d[0]);
 
                 if (compareData && compareRegionData) {
                     const compareMap = Object.fromEntries(compareRegionData);
-                    regionChart.data.datasets = [
+                    charts.region.data.datasets = [
                         { label: currentData.year + '년', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' },
                         { label: compareData.year + '년', data: top20.map(d => (compareMap[d[0]]?.sales || 0)), backgroundColor: 'rgba(118, 75, 162, 0.6)' }
                     ];
-                    regionChart.options.plugins.legend = { display: true };
+                    charts.region.options.plugins.legend = { display: true };
                 } else {
-                    regionChart.data.datasets = [
+                    charts.region.data.datasets = [
                         { label: '매출액', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' }
                     ];
-                    regionChart.options.plugins.legend = { display: false };
+                    charts.region.options.plugins.legend = { display: false };
                 }
-                regionChart.update();
+                charts.region.update();
             }
         }
 

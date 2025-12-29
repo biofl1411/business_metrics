@@ -75,7 +75,7 @@ def process_data(data):
 
     for row in data:
         manager = row.get('영업담당', '미지정')
-        sales = row.get('수수료', 0) or 0
+        sales = row.get('공급가액', 0) or 0
         date = row.get('접수일자')
 
         if isinstance(sales, str):

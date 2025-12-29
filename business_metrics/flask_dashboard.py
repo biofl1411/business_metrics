@@ -132,7 +132,7 @@ def process_data(data, purpose_filter=None):
     total_count = 0
 
     # 주소 컬럼 자동 감지
-    address_columns = ['주소', '시료주소', '업체주소', '거래처주소', '검체주소', '시료채취장소']
+    address_columns = ['거래처 주소', '채품지주소', '채품장소', '주소', '시료주소', '업체주소', '거래처주소', '검체주소', '시료채취장소']
 
     for row in data:
         purpose = str(row.get('검사목적', '') or '').strip()

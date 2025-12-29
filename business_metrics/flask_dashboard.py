@@ -2,7 +2,7 @@
 경영지표 대시보드 (Flask 버전)
 - 오래된 CPU에서도 작동
 - Chart.js 사용
-- 연도 비교 기능
+- 연도 비교, 검사목적 필터, 업체별 분석, 부적합항목 분석
 """
 from flask import Flask, render_template_string, jsonify, request
 import os
@@ -31,61 +31,66 @@ def load_excel_data(year):
     from openpyxl import load_workbook
 
     data_path = DATA_DIR / str(year)
-    print(f"[DEBUG] Looking for data in: {data_path}")
-    print(f"[DEBUG] Path exists: {data_path.exists()}")
-
     if not data_path.exists():
-        print(f"[DEBUG] Data path does not exist!")
         return []
 
     all_data = []
     files = sorted(data_path.glob("*.xlsx"))
-    print(f"[DEBUG] Found {len(files)} Excel files")
 
     for f in files:
         try:
-            print(f"[DEBUG] Loading: {f.name}")
             wb = load_workbook(f, read_only=True, data_only=True)
             ws = wb.active
-
             headers = [cell.value for cell in ws[1]]
-            print(f"[DEBUG] Headers: {headers[:5]}...")
 
-            row_count = 0
             for row in ws.iter_rows(min_row=2, values_only=True):
                 row_dict = dict(zip(headers, row))
                 all_data.append(row_dict)
-                row_count += 1
-
-            print(f"[DEBUG] Loaded {row_count} rows from {f.name}")
             wb.close()
         except Exception as e:
             print(f"[ERROR] Loading {f}: {e}")
 
-    print(f"[DEBUG] Total loaded: {len(all_data)} records")
     return all_data
 
-def process_data(data):
+def process_data(data, purpose_filter=None):
     """데이터 처리"""
     by_manager = {}
     by_branch = {}
     by_month = {}
+    by_client = {}
+    by_purpose = {}
+    by_defect = {}
+    by_defect_month = {}
+    purposes = set()
     total_sales = 0
     total_count = 0
 
     for row in data:
+        purpose = str(row.get('검사목적', '') or '').strip()
+        purposes.add(purpose) if purpose else None
+
+        # 검사목적 필터 적용
+        if purpose_filter and purpose_filter != '전체' and purpose != purpose_filter:
+            continue
+
         manager = row.get('영업담당', '미지정')
         sales = row.get('공급가액', 0) or 0
         date = row.get('접수일자')
+        client = str(row.get('거래처', '') or '').strip() or '미지정'
+        defect = str(row.get('부적합항목', '') or '').strip()
 
         if isinstance(sales, str):
             sales = float(sales.replace(',', '').replace('원', '')) if sales else 0
 
         # 매니저별
         if manager not in by_manager:
-            by_manager[manager] = {'sales': 0, 'count': 0}
+            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}}
         by_manager[manager]['sales'] += sales
         by_manager[manager]['count'] += 1
+        if client not in by_manager[manager]['clients']:
+            by_manager[manager]['clients'][client] = {'sales': 0, 'count': 0}
+        by_manager[manager]['clients'][client]['sales'] += sales
+        by_manager[manager]['clients'][client]['count'] += 1
 
         # 지사별
         branch = MANAGER_TO_BRANCH.get(manager, '기타')
@@ -96,6 +101,7 @@ def process_data(data):
         by_branch[branch]['managers'].add(manager)
 
         # 월별
+        month = 0
         if date:
             if hasattr(date, 'month'):
                 month = date.month
@@ -105,11 +111,43 @@ def process_data(data):
                 except:
                     month = 0
 
+        if month > 0:
+            if month not in by_month:
+                by_month[month] = {'sales': 0, 'count': 0}
+            by_month[month]['sales'] += sales
+            by_month[month]['count'] += 1
+
+        # 거래처별
+        if client not in by_client:
+            by_client[client] = {'sales': 0, 'count': 0, 'purposes': {}}
+        by_client[client]['sales'] += sales
+        by_client[client]['count'] += 1
+        if purpose:
+            if purpose not in by_client[client]['purposes']:
+                by_client[client]['purposes'][purpose] = {'sales': 0, 'count': 0}
+            by_client[client]['purposes'][purpose]['sales'] += sales
+            by_client[client]['purposes'][purpose]['count'] += 1
+
+        # 검사목적별
+        if purpose:
+            if purpose not in by_purpose:
+                by_purpose[purpose] = {'sales': 0, 'count': 0}
+            by_purpose[purpose]['sales'] += sales
+            by_purpose[purpose]['count'] += 1
+
+        # 부적합항목별
+        if defect:
+            if defect not in by_defect:
+                by_defect[defect] = {'count': 0}
+            by_defect[defect]['count'] += 1
+
+            # 부적합항목 월별
             if month > 0:
-                if month not in by_month:
-                    by_month[month] = {'sales': 0, 'count': 0}
-                by_month[month]['sales'] += sales
-                by_month[month]['count'] += 1
+                if defect not in by_defect_month:
+                    by_defect_month[defect] = {}
+                if month not in by_defect_month[defect]:
+                    by_defect_month[defect][month] = 0
+                by_defect_month[defect][month] += 1
 
         total_sales += sales
         total_count += 1
@@ -117,12 +155,39 @@ def process_data(data):
     # 정렬
     sorted_managers = sorted(by_manager.items(), key=lambda x: x[1]['sales'], reverse=True)
     sorted_branches = sorted(by_branch.items(), key=lambda x: x[1]['sales'], reverse=True)
+    sorted_clients = sorted(by_client.items(), key=lambda x: x[1]['sales'], reverse=True)
+    sorted_purposes = sorted(by_purpose.items(), key=lambda x: x[1]['sales'], reverse=True)
+    sorted_defects = sorted(by_defect.items(), key=lambda x: x[1]['count'], reverse=True)
+
+    # 매니저별 TOP 10 거래처
+    manager_top_clients = {}
+    for mgr, data in sorted_managers:
+        clients = sorted(data['clients'].items(), key=lambda x: x[1]['sales'], reverse=True)[:10]
+        manager_top_clients[mgr] = clients
+
+    # 고효율 업체 (높은 단가)
+    high_efficiency = [(c, d) for c, d in sorted_clients if d['count'] > 0]
+    high_efficiency = sorted(high_efficiency, key=lambda x: x[1]['sales'] / x[1]['count'] if x[1]['count'] > 0 else 0, reverse=True)[:20]
+
+    # 대량 업체 (많은 건수)
+    high_volume = sorted(by_client.items(), key=lambda x: x[1]['count'], reverse=True)[:20]
 
     return {
-        'by_manager': sorted_managers,
+        'by_manager': [(m, {'sales': d['sales'], 'count': d['count']}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
                       for k, v in sorted_branches],
         'by_month': sorted(by_month.items()),
+        'by_client': [(c, {'sales': d['sales'], 'count': d['count'], 'avg': d['sales']/d['count'] if d['count'] > 0 else 0})
+                      for c, d in sorted_clients[:50]],
+        'by_purpose': sorted_purposes,
+        'by_defect': sorted_defects[:30],
+        'by_defect_month': {d: sorted(months.items()) for d, months in by_defect_month.items()},
+        'manager_top_clients': manager_top_clients,
+        'high_efficiency': [(c, {'sales': d['sales'], 'count': d['count'], 'avg': d['sales']/d['count'] if d['count'] > 0 else 0})
+                           for c, d in high_efficiency],
+        'high_volume': [(c, {'sales': d['sales'], 'count': d['count'], 'avg': d['sales']/d['count'] if d['count'] > 0 else 0})
+                       for c, d in high_volume],
+        'purposes': sorted(list(purposes)),
         'total_sales': total_sales,
         'total_count': total_count
     }
@@ -137,158 +202,61 @@ HTML_TEMPLATE = '''
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Malgun Gothic', sans-serif;
-            background: #f5f7fa;
-            padding: 20px;
-        }
+        body { font-family: 'Malgun Gothic', sans-serif; background: #f5f7fa; padding: 20px; }
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;
         }
         .header h1 { font-size: 24px; }
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin: 15px 0;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .controls select, .controls label {
-            padding: 8px 15px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            font-size: 14px;
-        }
+        .controls { display: flex; gap: 10px; margin: 15px 0; flex-wrap: wrap; align-items: center; }
+        .controls select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ddd; font-size: 14px; }
         .compare-box {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255,255,255,0.2);
-            padding: 8px 15px;
-            border-radius: 5px;
-            margin-left: 10px;
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 5px;
         }
-        .compare-box input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-        .compare-box label {
-            color: white;
-            cursor: pointer;
-            padding: 0;
-            border: none;
-            background: none;
-        }
-        .compare-box select {
-            padding: 5px 10px;
-        }
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        .compare-box input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        .compare-box label { color: white; cursor: pointer; }
+        .compare-box select { padding: 5px 10px; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .card h3 { color: #666; font-size: 14px; margin-bottom: 10px; }
         .card .value { font-size: 28px; font-weight: bold; color: #333; }
-        .card .sub { color: #888; font-size: 12px; margin-top: 5px; }
-        .card .compare-value {
-            font-size: 14px;
-            color: #764ba2;
-            margin-top: 5px;
-            padding-top: 5px;
-            border-top: 1px dashed #ddd;
-        }
+        .card .compare-value { font-size: 14px; color: #764ba2; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #ddd; }
         .card .diff { font-size: 12px; margin-top: 3px; }
         .card .diff.positive { color: #2ecc71; }
         .card .diff.negative { color: #e74c3c; }
-        .charts {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-        }
-        .chart-container {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .chart-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .chart-container h3 { margin-bottom: 15px; color: #333; }
+        .chart-container.full { grid-column: 1 / -1; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
         th { background: #f8f9fa; font-weight: 600; }
         tr:hover { background: #f8f9fa; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab {
-            padding: 10px 20px;
-            background: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab { padding: 10px 20px; background: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
         .tab.active { background: #667eea; color: white; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .loading { text-align: center; padding: 50px; color: #666; }
         .btn-search {
-            padding: 8px 20px;
-            background: #fff;
-            color: #667eea;
-            border: 2px solid #fff;
-            border-radius: 5px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
+            padding: 8px 20px; background: #fff; color: #667eea;
+            border: 2px solid #fff; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer;
         }
         .btn-search:hover { background: rgba(255,255,255,0.9); }
         .btn-search:disabled { opacity: 0.6; cursor: not-allowed; }
         .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 25px;
-            background: #2ecc71;
-            color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 1000;
-            display: none;
-            animation: slideIn 0.3s ease;
+            position: fixed; top: 20px; right: 20px; padding: 15px 25px;
+            background: #2ecc71; color: white; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000; display: none;
         }
         .toast.error { background: #e74c3c; }
         .toast.loading { background: #3498db; }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        .legend-custom {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-        }
+        .legend-custom { display: flex; gap: 20px; margin-bottom: 10px; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+        .sub-select { margin-bottom: 15px; }
+        .sub-select select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ddd; }
+        .scroll-table { max-height: 400px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -308,6 +276,9 @@ HTML_TEMPLATE = '''
                     <option value="2025">2025년</option>
                 </select>
             </div>
+            <select id="purposeSelect">
+                <option value="전체">검사목적: 전체</option>
+            </select>
             <button id="btnSearch" class="btn-search" onclick="loadData()">조회하기</button>
         </div>
     </div>
@@ -334,11 +305,14 @@ HTML_TEMPLATE = '''
     </div>
 
     <div class="tabs">
-        <button class="tab active" onclick="showTab('personal')">👤 개인별 실적</button>
-        <button class="tab" onclick="showTab('team')">🏢 팀별 실적</button>
-        <button class="tab" onclick="showTab('monthly')">📅 월별 추이</button>
+        <button class="tab active" onclick="showTab('personal')">👤 개인별</button>
+        <button class="tab" onclick="showTab('team')">🏢 팀별</button>
+        <button class="tab" onclick="showTab('monthly')">📅 월별</button>
+        <button class="tab" onclick="showTab('client')">🏭 업체별</button>
+        <button class="tab" onclick="showTab('defect')">⚠️ 부적합</button>
     </div>
 
+    <!-- 개인별 탭 -->
     <div id="personal" class="tab-content active">
         <div class="charts">
             <div class="chart-container">
@@ -348,14 +322,17 @@ HTML_TEMPLATE = '''
             </div>
             <div class="chart-container">
                 <h3>영업담당별 상세</h3>
-                <table id="managerTable">
-                    <thead id="managerTableHead"><tr><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr></thead>
-                    <tbody></tbody>
-                </table>
+                <div class="scroll-table">
+                    <table id="managerTable">
+                        <thead id="managerTableHead"><tr><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- 팀별 탭 -->
     <div id="team" class="tab-content">
         <div class="charts">
             <div class="chart-container">
@@ -373,14 +350,88 @@ HTML_TEMPLATE = '''
         </div>
     </div>
 
+    <!-- 월별 탭 -->
     <div id="monthly" class="tab-content">
         <div class="charts">
-            <div class="chart-container" style="grid-column: 1/-1;">
+            <div class="chart-container full">
                 <h3>월별 매출 추이</h3>
                 <div id="monthlyLegend" class="legend-custom" style="display:none;"></div>
-                <div style="height: 300px;">
-                    <canvas id="monthlyChart"></canvas>
+                <div style="height: 300px;"><canvas id="monthlyChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 업체별 탭 -->
+    <div id="client" class="tab-content">
+        <div class="charts">
+            <div class="chart-container">
+                <h3>🏆 매출 TOP 20 업체</h3>
+                <div class="scroll-table">
+                    <table id="clientTopTable">
+                        <thead><tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
+            </div>
+            <div class="chart-container">
+                <h3>💎 고효율 업체 (높은 단가)</h3>
+                <div class="scroll-table">
+                    <table id="clientEffTable">
+                        <thead><tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>📦 대량 업체 (많은 건수)</h3>
+                <div class="scroll-table">
+                    <table id="clientVolTable">
+                        <thead><tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>👤 영업담당별 TOP 10 업체</h3>
+                <div class="sub-select">
+                    <select id="managerSelect" onchange="updateManagerClients()">
+                        <option value="">담당자 선택</option>
+                    </select>
+                </div>
+                <div class="scroll-table">
+                    <table id="managerClientTable">
+                        <thead><tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 부적합 탭 -->
+    <div id="defect" class="tab-content">
+        <div class="charts">
+            <div class="chart-container">
+                <h3>⚠️ 부적합항목 TOP 20</h3>
+                <canvas id="defectChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>부적합항목 상세</h3>
+                <div class="scroll-table">
+                    <table id="defectTable">
+                        <thead><tr><th>순위</th><th>부적합항목</th><th>건수</th><th>비중</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container full">
+                <h3>부적합항목 월별 추이</h3>
+                <div class="sub-select">
+                    <select id="defectSelect" onchange="updateDefectMonthly()">
+                        <option value="">항목 선택</option>
+                    </select>
+                </div>
+                <div style="height: 250px;"><canvas id="defectMonthlyChart"></canvas></div>
             </div>
         </div>
     </div>
@@ -409,18 +460,13 @@ HTML_TEMPLATE = '''
             toast.textContent = message;
             toast.className = 'toast ' + type;
             toast.style.display = 'block';
-            if (type !== 'loading') {
-                setTimeout(() => { toast.style.display = 'none'; }, duration);
-            }
+            if (type !== 'loading') setTimeout(() => { toast.style.display = 'none'; }, duration);
         }
 
-        function hideToast() {
-            document.getElementById('toast').style.display = 'none';
-        }
+        function hideToast() { document.getElementById('toast').style.display = 'none'; }
 
         function toggleCompare() {
-            const checked = document.getElementById('compareCheck').checked;
-            document.getElementById('compareYearSelect').disabled = !checked;
+            document.getElementById('compareYearSelect').disabled = !document.getElementById('compareCheck').checked;
         }
 
         function showTab(tabId) {
@@ -434,6 +480,7 @@ HTML_TEMPLATE = '''
             const year = document.getElementById('yearSelect').value;
             const compareEnabled = document.getElementById('compareCheck').checked;
             const compareYear = document.getElementById('compareYearSelect').value;
+            const purpose = document.getElementById('purposeSelect').value;
             const btn = document.getElementById('btnSearch');
 
             btn.disabled = true;
@@ -441,38 +488,57 @@ HTML_TEMPLATE = '''
             showToast('데이터를 불러오는 중입니다...', 'loading');
 
             try {
-                const response = await fetch(`/api/data?year=${year}`);
+                const response = await fetch(`/api/data?year=${year}&purpose=${encodeURIComponent(purpose)}`);
                 currentData = await response.json();
                 currentData.year = year;
 
+                // 검사목적 드롭다운 업데이트
+                updatePurposeSelect(currentData.purposes);
+
                 if (compareEnabled && compareYear !== year) {
-                    const compareResponse = await fetch(`/api/data?year=${compareYear}`);
+                    const compareResponse = await fetch(`/api/data?year=${compareYear}&purpose=${encodeURIComponent(purpose)}`);
                     compareData = await compareResponse.json();
                     compareData.year = compareYear;
                 } else {
                     compareData = null;
                 }
 
-                updateSummary();
-                updateManagerChart();
-                updateBranchChart();
-                updateMonthlyChart();
-                updateManagerTable();
-                updateBranchTable();
+                updateAll();
 
-                let msg = `${year}년 데이터 로드가 완료되었습니다. (${currentData.total_count.toLocaleString()}건)`;
-                if (compareData) {
-                    msg = `${year}년 vs ${compareYear}년 비교 데이터 로드 완료`;
-                }
+                let msg = `${year}년 데이터 로드 완료 (${currentData.total_count.toLocaleString()}건)`;
+                if (compareData) msg = `${year}년 vs ${compareYear}년 비교 로드 완료`;
                 showToast(msg, 'success');
 
             } catch (error) {
-                console.error('Error loading data:', error);
+                console.error('Error:', error);
                 showToast('데이터 로드 중 오류가 발생했습니다.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '조회하기';
             }
+        }
+
+        function updatePurposeSelect(purposes) {
+            const select = document.getElementById('purposeSelect');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="전체">검사목적: 전체</option>';
+            purposes.forEach(p => {
+                if (p) select.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+            if (purposes.includes(currentValue)) select.value = currentValue;
+        }
+
+        function updateAll() {
+            updateSummary();
+            updateManagerChart();
+            updateBranchChart();
+            updateMonthlyChart();
+            updateManagerTable();
+            updateBranchTable();
+            updateClientTables();
+            updateDefectChart();
+            updateDefectTable();
+            updateDefectSelect();
         }
 
         function updateSummary() {
@@ -483,7 +549,6 @@ HTML_TEMPLATE = '''
 
             if (compareData) {
                 const compAvg = compareData.total_count > 0 ? compareData.total_sales / compareData.total_count : 0;
-
                 document.getElementById('compareTotalSales').textContent = `${compareData.year}년: ${formatCurrency(compareData.total_sales)}`;
                 document.getElementById('compareTotalSales').style.display = 'block';
                 const salesDiff = formatDiff(currentData.total_sales, compareData.total_sales);
@@ -502,38 +567,26 @@ HTML_TEMPLATE = '''
                 document.getElementById('diffAvgPrice').textContent = avgDiff.text;
                 document.getElementById('diffAvgPrice').className = 'diff ' + (avgDiff.diff >= 0 ? 'positive' : 'negative');
             } else {
-                document.getElementById('compareTotalSales').style.display = 'none';
-                document.getElementById('compareTotalCount').style.display = 'none';
-                document.getElementById('compareAvgPrice').style.display = 'none';
-                document.getElementById('diffTotalSales').textContent = '';
-                document.getElementById('diffTotalCount').textContent = '';
-                document.getElementById('diffAvgPrice').textContent = '';
+                ['compareTotalSales', 'compareTotalCount', 'compareAvgPrice'].forEach(id => {
+                    document.getElementById(id).style.display = 'none';
+                });
+                ['diffTotalSales', 'diffTotalCount', 'diffAvgPrice'].forEach(id => {
+                    document.getElementById(id).textContent = '';
+                });
             }
         }
 
         function updateManagerChart() {
             const top15 = currentData.by_manager.slice(0, 15);
             const ctx = document.getElementById('managerChart').getContext('2d');
-
             if (charts.manager) charts.manager.destroy();
 
-            const datasets = [{
-                label: currentData.year + '년',
-                data: top15.map(d => d[1].sales),
-                backgroundColor: 'rgba(102, 126, 234, 0.8)',
-            }];
+            const datasets = [{ label: currentData.year + '년', data: top15.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' }];
 
             if (compareData) {
                 const compareMap = Object.fromEntries(compareData.by_manager);
-                datasets.push({
-                    label: compareData.year + '년',
-                    data: top15.map(d => compareMap[d[0]]?.sales || 0),
-                    backgroundColor: 'rgba(118, 75, 162, 0.6)',
-                });
-                document.getElementById('managerLegend').innerHTML = `
-                    <div class="legend-item"><div class="legend-color" style="background:rgba(102,126,234,0.8)"></div>${currentData.year}년</div>
-                    <div class="legend-item"><div class="legend-color" style="background:rgba(118,75,162,0.6)"></div>${compareData.year}년</div>
-                `;
+                datasets.push({ label: compareData.year + '년', data: top15.map(d => compareMap[d[0]]?.sales || 0), backgroundColor: 'rgba(118, 75, 162, 0.6)' });
+                document.getElementById('managerLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background:rgba(102,126,234,0.8)"></div>${currentData.year}년</div><div class="legend-item"><div class="legend-color" style="background:rgba(118,75,162,0.6)"></div>${compareData.year}년</div>`;
                 document.getElementById('managerLegend').style.display = 'flex';
             } else {
                 document.getElementById('managerLegend').style.display = 'none';
@@ -542,64 +595,39 @@ HTML_TEMPLATE = '''
             charts.manager = new Chart(ctx, {
                 type: 'bar',
                 data: { labels: top15.map(d => d[0]), datasets },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { ticks: { callback: value => formatCurrency(value) } } }
-                }
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } }
+            });
+
+            // 담당자 선택 드롭다운 업데이트
+            const managerSelect = document.getElementById('managerSelect');
+            managerSelect.innerHTML = '<option value="">담당자 선택</option>';
+            currentData.by_manager.forEach(m => {
+                managerSelect.innerHTML += `<option value="${m[0]}">${m[0]}</option>`;
             });
         }
 
         function updateBranchChart() {
             const ctx = document.getElementById('branchChart').getContext('2d');
-
             if (charts.branch) charts.branch.destroy();
 
             if (compareData) {
-                // 비교 모드: 막대 차트로 변경
                 const labels = currentData.by_branch.map(d => d[0]);
                 const compareMap = Object.fromEntries(compareData.by_branch);
-
-                document.getElementById('branchLegend').innerHTML = `
-                    <div class="legend-item"><div class="legend-color" style="background:rgba(102,126,234,0.8)"></div>${currentData.year}년</div>
-                    <div class="legend-item"><div class="legend-color" style="background:rgba(118,75,162,0.6)"></div>${compareData.year}년</div>
-                `;
+                document.getElementById('branchLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background:rgba(102,126,234,0.8)"></div>${currentData.year}년</div><div class="legend-item"><div class="legend-color" style="background:rgba(118,75,162,0.6)"></div>${compareData.year}년</div>`;
                 document.getElementById('branchLegend').style.display = 'flex';
-
                 charts.branch = new Chart(ctx, {
                     type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: currentData.year + '년',
-                                data: currentData.by_branch.map(d => d[1].sales),
-                                backgroundColor: 'rgba(102, 126, 234, 0.8)',
-                            },
-                            {
-                                label: compareData.year + '년',
-                                data: labels.map(l => compareMap[l]?.sales || 0),
-                                backgroundColor: 'rgba(118, 75, 162, 0.6)',
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { ticks: { callback: value => formatCurrency(value) } } }
-                    }
+                    data: { labels, datasets: [
+                        { label: currentData.year + '년', data: currentData.by_branch.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' },
+                        { label: compareData.year + '년', data: labels.map(l => compareMap[l]?.sales || 0), backgroundColor: 'rgba(118, 75, 162, 0.6)' }
+                    ]},
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } }
                 });
             } else {
                 document.getElementById('branchLegend').style.display = 'none';
                 charts.branch = new Chart(ctx, {
                     type: 'pie',
-                    data: {
-                        labels: currentData.by_branch.map(d => d[0]),
-                        datasets: [{
-                            data: currentData.by_branch.map(d => d[1].sales),
-                            backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b', '#fa709a', '#fee140']
-                        }]
-                    },
+                    data: { labels: currentData.by_branch.map(d => d[0]), datasets: [{ data: currentData.by_branch.map(d => d[1].sales), backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b', '#fa709a', '#fee140'] }] },
                     options: { responsive: true, plugins: { legend: { position: 'right' } } }
                 });
             }
@@ -607,52 +635,24 @@ HTML_TEMPLATE = '''
 
         function updateMonthlyChart() {
             const ctx = document.getElementById('monthlyChart').getContext('2d');
-
             if (charts.monthly) charts.monthly.destroy();
 
-            const labels = [];
-            for (let i = 1; i <= 12; i++) labels.push(i + '월');
-
+            const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
             const currentMap = Object.fromEntries(currentData.by_month);
-            const currentValues = labels.map((_, i) => currentMap[i+1]?.sales || 0);
-
-            const datasets = [{
-                label: currentData.year + '년',
-                data: currentValues,
-                borderColor: '#667eea',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                fill: true,
-                tension: 0.4
-            }];
+            const datasets = [{ label: currentData.year + '년', data: labels.map((_, i) => currentMap[i+1]?.sales || 0), borderColor: '#667eea', backgroundColor: 'rgba(102, 126, 234, 0.1)', fill: true, tension: 0.4 }];
 
             if (compareData) {
                 const compareMap = Object.fromEntries(compareData.by_month);
-                datasets.push({
-                    label: compareData.year + '년',
-                    data: labels.map((_, i) => compareMap[i+1]?.sales || 0),
-                    borderColor: '#764ba2',
-                    backgroundColor: 'rgba(118, 75, 162, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                });
-                document.getElementById('monthlyLegend').innerHTML = `
-                    <div class="legend-item"><div class="legend-color" style="background:#667eea"></div>${currentData.year}년</div>
-                    <div class="legend-item"><div class="legend-color" style="background:#764ba2"></div>${compareData.year}년</div>
-                `;
+                datasets.push({ label: compareData.year + '년', data: labels.map((_, i) => compareMap[i+1]?.sales || 0), borderColor: '#764ba2', backgroundColor: 'rgba(118, 75, 162, 0.1)', fill: true, tension: 0.4 });
+                document.getElementById('monthlyLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background:#667eea"></div>${currentData.year}년</div><div class="legend-item"><div class="legend-color" style="background:#764ba2"></div>${compareData.year}년</div>`;
                 document.getElementById('monthlyLegend').style.display = 'flex';
             } else {
                 document.getElementById('monthlyLegend').style.display = 'none';
             }
 
             charts.monthly = new Chart(ctx, {
-                type: 'line',
-                data: { labels, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { ticks: { callback: value => formatCurrency(value) } } }
-                }
+                type: 'line', data: { labels, datasets },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } }
             });
         }
 
@@ -666,25 +666,11 @@ HTML_TEMPLATE = '''
                 tbody.innerHTML = currentData.by_manager.map(d => {
                     const compSales = compareMap[d[0]]?.sales || 0;
                     const diff = d[1].sales - compSales;
-                    const diffClass = diff >= 0 ? 'positive' : 'negative';
-                    return `<tr>
-                        <td>${d[0]}</td>
-                        <td>${formatCurrency(d[1].sales)}</td>
-                        <td>${formatCurrency(compSales)}</td>
-                        <td class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td>
-                        <td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td>
-                    </tr>`;
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td></tr>`;
                 }).join('');
             } else {
                 thead.innerHTML = `<tr><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr>`;
-                tbody.innerHTML = currentData.by_manager.map(d => `
-                    <tr>
-                        <td>${d[0]}</td>
-                        <td>${formatCurrency(d[1].sales)}</td>
-                        <td>${d[1].count}</td>
-                        <td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = currentData.by_manager.map(d => `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td></tr>`).join('');
             }
         }
 
@@ -698,28 +684,103 @@ HTML_TEMPLATE = '''
                 tbody.innerHTML = currentData.by_branch.map(d => {
                     const compSales = compareMap[d[0]]?.sales || 0;
                     const diff = d[1].sales - compSales;
-                    const diffClass = diff >= 0 ? 'positive' : 'negative';
-                    return `<tr>
-                        <td>${d[0]}</td>
-                        <td>${formatCurrency(d[1].sales)}</td>
-                        <td>${formatCurrency(compSales)}</td>
-                        <td class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td>
-                    </tr>`;
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td></tr>`;
                 }).join('');
             } else {
                 thead.innerHTML = `<tr><th>지사/센터</th><th>매출액</th><th>건수</th><th>담당자수</th></tr>`;
-                tbody.innerHTML = currentData.by_branch.map(d => `
-                    <tr>
-                        <td>${d[0]}</td>
-                        <td>${formatCurrency(d[1].sales)}</td>
-                        <td>${d[1].count}</td>
-                        <td>${d[1].managers}명</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = currentData.by_branch.map(d => `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${d[1].managers}명</td></tr>`).join('');
             }
         }
 
-        // 페이지 로드 시 안내 메시지
+        function updateClientTables() {
+            // TOP 20 업체
+            const topTbody = document.querySelector('#clientTopTable tbody');
+            topTbody.innerHTML = currentData.by_client.slice(0, 20).map((d, i) =>
+                `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
+            ).join('');
+
+            // 고효율 업체
+            const effTbody = document.querySelector('#clientEffTable tbody');
+            effTbody.innerHTML = currentData.high_efficiency.map(d =>
+                `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td></tr>`
+            ).join('');
+
+            // 대량 업체
+            const volTbody = document.querySelector('#clientVolTable tbody');
+            volTbody.innerHTML = currentData.high_volume.map(d =>
+                `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
+            ).join('');
+        }
+
+        function updateManagerClients() {
+            const manager = document.getElementById('managerSelect').value;
+            const tbody = document.querySelector('#managerClientTable tbody');
+
+            if (!manager || !currentData.manager_top_clients[manager]) {
+                tbody.innerHTML = '<tr><td colspan="4">담당자를 선택하세요</td></tr>';
+                return;
+            }
+
+            const clients = currentData.manager_top_clients[manager];
+            tbody.innerHTML = clients.map((c, i) =>
+                `<tr><td>${i+1}</td><td>${c[0]}</td><td>${formatCurrency(c[1].sales)}</td><td>${c[1].count}</td></tr>`
+            ).join('');
+        }
+
+        function updateDefectChart() {
+            const ctx = document.getElementById('defectChart').getContext('2d');
+            if (charts.defect) charts.defect.destroy();
+
+            const top20 = currentData.by_defect.slice(0, 20);
+            charts.defect = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top20.map(d => d[0].length > 15 ? d[0].substring(0, 15) + '...' : d[0]),
+                    datasets: [{ label: '건수', data: top20.map(d => d[1].count), backgroundColor: 'rgba(231, 76, 60, 0.7)' }]
+                },
+                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function updateDefectTable() {
+            const tbody = document.querySelector('#defectTable tbody');
+            const totalDefects = currentData.by_defect.reduce((sum, d) => sum + d[1].count, 0);
+            tbody.innerHTML = currentData.by_defect.map((d, i) =>
+                `<tr><td>${i+1}</td><td>${d[0]}</td><td>${d[1].count}</td><td>${(d[1].count / totalDefects * 100).toFixed(1)}%</td></tr>`
+            ).join('');
+        }
+
+        function updateDefectSelect() {
+            const select = document.getElementById('defectSelect');
+            select.innerHTML = '<option value="">항목 선택</option>';
+            currentData.by_defect.slice(0, 20).forEach(d => {
+                select.innerHTML += `<option value="${d[0]}">${d[0]}</option>`;
+            });
+        }
+
+        function updateDefectMonthly() {
+            const defect = document.getElementById('defectSelect').value;
+            const ctx = document.getElementById('defectMonthlyChart').getContext('2d');
+            if (charts.defectMonthly) charts.defectMonthly.destroy();
+
+            if (!defect || !currentData.by_defect_month[defect]) {
+                return;
+            }
+
+            const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
+            const monthData = Object.fromEntries(currentData.by_defect_month[defect] || []);
+            const values = labels.map((_, i) => monthData[i+1] || 0);
+
+            charts.defectMonthly = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{ label: defect, data: values, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } }
+            });
+        }
+
         showToast('연도를 선택하고 [조회하기] 버튼을 클릭하세요.', 'loading', 5000);
         setTimeout(() => hideToast(), 5000);
     </script>
@@ -734,8 +795,9 @@ def index():
 @app.route('/api/data')
 def get_data():
     year = request.args.get('year', '2025')
+    purpose = request.args.get('purpose', '전체')
     data = load_excel_data(year)
-    processed = process_data(data)
+    processed = process_data(data, purpose)
     return jsonify(processed)
 
 if __name__ == '__main__':

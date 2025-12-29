@@ -1181,7 +1181,7 @@ HTML_TEMPLATE = '''
                 }
             }
 
-            const thead = document.querySelector('#regionTable thead tr');
+            const thead = document.querySelector('#regionTable thead');
             const tbody = document.querySelector('#regionTable tbody');
 
             // 비교 모드일 때 테이블 헤더 및 데이터 변경

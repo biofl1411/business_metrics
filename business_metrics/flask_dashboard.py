@@ -10,6 +10,10 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# 경로 설정 - 절대 경로 사용
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+
 # 설정
 MANAGER_TO_BRANCH = {
     "장동욱": "충청지사", "지병훈": "충청지사", "박은태": "충청지사",
@@ -25,26 +29,39 @@ def load_excel_data(year):
     """openpyxl로 직접 엑셀 로드 (pandas 없이)"""
     from openpyxl import load_workbook
 
-    data_path = Path(f"data/{year}")
+    data_path = DATA_DIR / str(year)
+    print(f"[DEBUG] Looking for data in: {data_path}")
+    print(f"[DEBUG] Path exists: {data_path.exists()}")
+
     if not data_path.exists():
+        print(f"[DEBUG] Data path does not exist!")
         return []
 
     all_data = []
-    for f in sorted(data_path.glob("*.xlsx")):
+    files = sorted(data_path.glob("*.xlsx"))
+    print(f"[DEBUG] Found {len(files)} Excel files")
+
+    for f in files:
         try:
+            print(f"[DEBUG] Loading: {f.name}")
             wb = load_workbook(f, read_only=True, data_only=True)
             ws = wb.active
 
             headers = [cell.value for cell in ws[1]]
+            print(f"[DEBUG] Headers: {headers[:5]}...")  # 첫 5개 컬럼만
 
+            row_count = 0
             for row in ws.iter_rows(min_row=2, values_only=True):
                 row_dict = dict(zip(headers, row))
                 all_data.append(row_dict)
+                row_count += 1
 
+            print(f"[DEBUG] Loaded {row_count} rows from {f.name}")
             wb.close()
         except Exception as e:
-            print(f"Error loading {f}: {e}")
+            print(f"[ERROR] Loading {f}: {e}")
 
+    print(f"[DEBUG] Total loaded: {len(all_data)} records")
     return all_data
 
 def process_data(data):

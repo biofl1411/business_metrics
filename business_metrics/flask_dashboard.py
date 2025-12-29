@@ -378,7 +378,9 @@ HTML_TEMPLATE = '''
             <div class="chart-container" style="grid-column: 1/-1;">
                 <h3>월별 매출 추이</h3>
                 <div id="monthlyLegend" class="legend-custom" style="display:none;"></div>
-                <canvas id="monthlyChart"></canvas>
+                <div style="height: 300px;">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -647,6 +649,7 @@ HTML_TEMPLATE = '''
                 data: { labels, datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: { y: { ticks: { callback: value => formatCurrency(value) } } }
                 }

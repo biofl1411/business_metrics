@@ -1159,12 +1159,33 @@ HTML_TEMPLATE = '''
             const yearLabel = document.getElementById('regionYearLabel');
             yearLabel.textContent = `📅 ${currentData.year}년`;
 
+            // 담당자 필터 확인
+            const selectedManager = document.getElementById('regionManagerFilter').value;
+            let regionData = currentData.by_region;
+
+            // 담당자가 선택된 경우 해당 담당자의 지역 데이터만 표시
+            if (selectedManager && currentData.manager_regions && currentData.manager_regions[selectedManager]) {
+                const managerRegions = currentData.manager_regions[selectedManager];
+                regionData = managerRegions.map(r => [r.region, {sales: r.sales, count: r.count}]);
+            }
+
             const tbody = document.querySelector('#regionTable tbody');
-            const totalSales = currentData.by_region.reduce((sum, d) => sum + d[1].sales, 0);
-            tbody.innerHTML = currentData.by_region.map((d, i) => {
+            tbody.innerHTML = regionData.map((d, i) => {
                 const avg = d[1].count > 0 ? d[1].sales / d[1].count : 0;
                 return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(avg)}</td></tr>`;
             }).join('') || '<tr><td colspan="5">지역 데이터 없음</td></tr>';
+
+            // 차트도 업데이트
+            updateRegionChart(regionData);
+        }
+
+        function updateRegionChart(regionData) {
+            const top20 = regionData.slice(0, 20);
+            if (regionChart) {
+                regionChart.data.labels = top20.map(d => d[0]);
+                regionChart.data.datasets[0].data = top20.map(d => d[1].sales);
+                regionChart.update();
+            }
         }
 
         function updateRegionSelects() {

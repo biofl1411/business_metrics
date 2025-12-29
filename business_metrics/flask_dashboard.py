@@ -796,8 +796,11 @@ def index():
 def get_data():
     year = request.args.get('year', '2025')
     purpose = request.args.get('purpose', '전체')
+    print(f"[API] 요청: year={year}, purpose={purpose}")
     data = load_excel_data(year)
+    print(f"[API] 로드된 데이터: {len(data)}건")
     processed = process_data(data, purpose)
+    print(f"[API] 처리 완료: total_count={processed['total_count']}")
     return jsonify(processed)
 
 if __name__ == '__main__':

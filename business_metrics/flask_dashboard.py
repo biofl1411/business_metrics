@@ -1157,33 +1157,75 @@ HTML_TEMPLATE = '''
 
             // 연도 라벨 업데이트
             const yearLabel = document.getElementById('regionYearLabel');
-            yearLabel.textContent = `📅 ${currentData.year}년`;
+            if (compareData) {
+                yearLabel.textContent = `📅 ${currentData.year}년 vs ${compareData.year}년`;
+            } else {
+                yearLabel.textContent = `📅 ${currentData.year}년`;
+            }
 
             // 담당자 필터 확인
             const selectedManager = document.getElementById('regionManagerFilter').value;
             let regionData = currentData.by_region;
+            let compareRegionData = compareData ? compareData.by_region : null;
 
             // 담당자가 선택된 경우 해당 담당자의 지역 데이터만 표시
             if (selectedManager && currentData.manager_regions && currentData.manager_regions[selectedManager]) {
                 const managerRegions = currentData.manager_regions[selectedManager];
                 regionData = managerRegions.map(r => [r.region, {sales: r.sales, count: r.count}]);
+                // 비교 데이터도 담당자 필터 적용
+                if (compareData && compareData.manager_regions && compareData.manager_regions[selectedManager]) {
+                    const compareManagerRegions = compareData.manager_regions[selectedManager];
+                    compareRegionData = compareManagerRegions.map(r => [r.region, {sales: r.sales, count: r.count}]);
+                } else {
+                    compareRegionData = null;
+                }
             }
 
+            const thead = document.querySelector('#regionTable thead tr');
             const tbody = document.querySelector('#regionTable tbody');
-            tbody.innerHTML = regionData.map((d, i) => {
-                const avg = d[1].count > 0 ? d[1].sales / d[1].count : 0;
-                return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(avg)}</td></tr>`;
-            }).join('') || '<tr><td colspan="5">지역 데이터 없음</td></tr>';
+
+            // 비교 모드일 때 테이블 헤더 및 데이터 변경
+            if (compareData && compareRegionData) {
+                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                const compareMap = Object.fromEntries(compareRegionData);
+
+                tbody.innerHTML = regionData.map((d, i) => {
+                    const compData = compareMap[d[0]] || {sales: 0, count: 0};
+                    const diff = formatDiff(d[1].sales, compData.sales);
+                    const diffClass = diff.diff >= 0 ? 'positive' : 'negative';
+                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text}</span>` : '-';
+                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${d[1].count}</td></tr>`;
+                }).join('') || '<tr><td colspan="6">지역 데이터 없음</td></tr>';
+            } else {
+                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
+                tbody.innerHTML = regionData.map((d, i) => {
+                    const avg = d[1].count > 0 ? d[1].sales / d[1].count : 0;
+                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(avg)}</td></tr>`;
+                }).join('') || '<tr><td colspan="5">지역 데이터 없음</td></tr>';
+            }
 
             // 차트도 업데이트
-            updateRegionChart(regionData);
+            updateRegionChart(regionData, compareRegionData);
         }
 
-        function updateRegionChart(regionData) {
+        function updateRegionChart(regionData, compareRegionData) {
             const top20 = regionData.slice(0, 20);
             if (regionChart) {
                 regionChart.data.labels = top20.map(d => d[0]);
-                regionChart.data.datasets[0].data = top20.map(d => d[1].sales);
+
+                if (compareData && compareRegionData) {
+                    const compareMap = Object.fromEntries(compareRegionData);
+                    regionChart.data.datasets = [
+                        { label: currentData.year + '년', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' },
+                        { label: compareData.year + '년', data: top20.map(d => (compareMap[d[0]]?.sales || 0)), backgroundColor: 'rgba(118, 75, 162, 0.6)' }
+                    ];
+                    regionChart.options.plugins.legend = { display: true };
+                } else {
+                    regionChart.data.datasets = [
+                        { label: '매출액', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' }
+                    ];
+                    regionChart.options.plugins.legend = { display: false };
+                }
                 regionChart.update();
             }
         }

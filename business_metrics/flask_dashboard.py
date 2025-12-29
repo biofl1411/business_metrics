@@ -205,16 +205,50 @@ HTML_TEMPLATE = '''
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .loading { text-align: center; padding: 50px; color: #666; }
+        .btn-search {
+            padding: 8px 20px;
+            background: #fff;
+            color: #667eea;
+            border: 2px solid #fff;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-search:hover { background: rgba(255,255,255,0.9); }
+        .btn-search:disabled { opacity: 0.6; cursor: not-allowed; }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #2ecc71;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.error { background: #e74c3c; }
+        .toast.loading { background: #3498db; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <div id="toast" class="toast"></div>
     <div class="header">
         <h1>📊 경영지표 대시보드</h1>
         <div class="controls">
-            <select id="yearSelect" onchange="loadData()">
+            <select id="yearSelect">
                 <option value="2025">2025년</option>
                 <option value="2024">2024년</option>
             </select>
+            <button id="btnSearch" class="btn-search" onclick="loadData()">조회하기</button>
         </div>
     </div>
 
@@ -289,6 +323,20 @@ HTML_TEMPLATE = '''
             return value.toLocaleString();
         }
 
+        function showToast(message, type = 'success', duration = 3000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.style.display = 'block';
+            if (type !== 'loading') {
+                setTimeout(() => { toast.style.display = 'none'; }, duration);
+            }
+        }
+
+        function hideToast() {
+            document.getElementById('toast').style.display = 'none';
+        }
+
         function showTab(tabId) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -298,6 +346,12 @@ HTML_TEMPLATE = '''
 
         async function loadData() {
             const year = document.getElementById('yearSelect').value;
+            const btn = document.getElementById('btnSearch');
+
+            // 로딩 시작
+            btn.disabled = true;
+            btn.textContent = '로딩중...';
+            showToast('데이터를 불러오는 중입니다...', 'loading');
 
             try {
                 const response = await fetch(`/api/data?year=${year}`);
@@ -317,8 +371,16 @@ HTML_TEMPLATE = '''
                 updateManagerTable(data.by_manager, data.total_sales);
                 updateBranchTable(data.by_branch);
 
+                // 완료 메시지
+                showToast(`${year}년 데이터 로드가 완료되었습니다. (${data.total_count.toLocaleString()}건)`, 'success');
+
             } catch (error) {
                 console.error('Error loading data:', error);
+                showToast('데이터 로드 중 오류가 발생했습니다.', 'error');
+            } finally {
+                // 버튼 복원
+                btn.disabled = false;
+                btn.textContent = '조회하기';
             }
         }
 
@@ -435,8 +497,9 @@ HTML_TEMPLATE = '''
             `).join('');
         }
 
-        // 초기 로드
-        loadData();
+        // 페이지 로드 시 안내 메시지
+        showToast('연도를 선택하고 [조회하기] 버튼을 클릭하세요.', 'loading', 5000);
+        setTimeout(() => hideToast(), 5000);
     </script>
 </body>
 </html>

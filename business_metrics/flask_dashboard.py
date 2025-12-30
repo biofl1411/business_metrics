@@ -125,6 +125,7 @@ def process_data(data, purpose_filter=None):
     by_purpose = {}
     by_defect = {}
     by_defect_month = {}
+    by_purpose_month = {}  # 목적별-월별 데이터
     by_region = {}  # 지역별 데이터
     by_region_manager = {}  # 지역-담당자별 데이터
     by_purpose_manager = {}  # 목적별-담당자 데이터
@@ -213,6 +214,15 @@ def process_data(data, purpose_filter=None):
                 by_purpose_manager[purpose][manager] = {'sales': 0, 'count': 0}
             by_purpose_manager[purpose][manager]['sales'] += sales
             by_purpose_manager[purpose][manager]['count'] += 1
+
+            # 목적별-월별 데이터
+            if month > 0:
+                if purpose not in by_purpose_month:
+                    by_purpose_month[purpose] = {}
+                if month not in by_purpose_month[purpose]:
+                    by_purpose_month[purpose][month] = {'sales': 0, 'count': 0}
+                by_purpose_month[purpose][month]['sales'] += sales
+                by_purpose_month[purpose][month]['count'] += 1
 
         # 부적합항목별
         if defect:
@@ -343,6 +353,7 @@ def process_data(data, purpose_filter=None):
         'by_purpose': sorted_purposes,
         'by_defect': sorted_defects[:30],
         'by_defect_month': {d: sorted(months.items()) for d, months in by_defect_month.items()},
+        'by_purpose_month': {p: {m: {'sales': d['sales'], 'count': d['count']} for m, d in months.items()} for p, months in by_purpose_month.items()},
         'manager_top_clients': manager_top_clients,
         'high_efficiency': [(c, {'sales': d['sales'], 'count': d['count'], 'avg': d['sales']/d['count'] if d['count'] > 0 else 0})
                            for c, d in high_efficiency],
@@ -1963,23 +1974,13 @@ HTML_TEMPLATE = '''
             const labels = [];
             for (let i = 1; i <= 12; i++) labels.push(i + '월');
 
-            // 현재 데이터에서 해당 목적의 월별 매출 계산
-            const monthlyData = {};
-            for (let i = 1; i <= 12; i++) monthlyData[i] = { sales: 0, count: 0 };
-
-            // by_month 데이터에서 해당 목적 필터링 (목적별 월별 데이터가 없으면 전체 월별 사용)
-            if (currentData.by_month) {
-                currentData.by_month.forEach(([month, data]) => {
-                    if (monthlyData[month]) {
-                        monthlyData[month].sales = data.sales;
-                        monthlyData[month].count = data.count;
-                    }
-                });
-            }
+            // 현재 데이터에서 해당 목적의 월별 매출 가져오기
+            const purposeMonthData = currentData.by_purpose_month && currentData.by_purpose_month[purpose]
+                ? currentData.by_purpose_month[purpose] : {};
 
             const datasets = [{
                 label: (currentData.dateLabel || currentData.year + '년') + ' - ' + purpose,
-                data: labels.map((_, i) => monthlyData[i + 1]?.sales || 0),
+                data: labels.map((_, i) => purposeMonthData[i + 1]?.sales || 0),
                 borderColor: '#667eea',
                 backgroundColor: 'rgba(102, 126, 234, 0.1)',
                 fill: true,
@@ -1987,18 +1988,12 @@ HTML_TEMPLATE = '''
             }];
 
             // 비교 데이터
-            if (compareData && compareData.by_month) {
-                const compareMonthlyData = {};
-                for (let i = 1; i <= 12; i++) compareMonthlyData[i] = { sales: 0, count: 0 };
-                compareData.by_month.forEach(([month, data]) => {
-                    if (compareMonthlyData[month]) {
-                        compareMonthlyData[month].sales = data.sales;
-                    }
-                });
+            if (compareData && compareData.by_purpose_month && compareData.by_purpose_month[purpose]) {
+                const comparePurposeMonthData = compareData.by_purpose_month[purpose];
 
                 datasets.push({
                     label: (compareData.dateLabel || compareData.year + '년') + ' - ' + purpose,
-                    data: labels.map((_, i) => compareMonthlyData[i + 1]?.sales || 0),
+                    data: labels.map((_, i) => comparePurposeMonthData[i + 1]?.sales || 0),
                     borderColor: '#764ba2',
                     backgroundColor: 'rgba(118, 75, 162, 0.1)',
                     fill: true,

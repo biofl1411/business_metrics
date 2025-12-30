@@ -220,9 +220,14 @@ def process_data(data, purpose_filter=None):
                 if purpose not in by_purpose_month:
                     by_purpose_month[purpose] = {}
                 if month not in by_purpose_month[purpose]:
-                    by_purpose_month[purpose][month] = {'sales': 0, 'count': 0}
+                    by_purpose_month[purpose][month] = {'sales': 0, 'count': 0, 'by_manager': {}}
                 by_purpose_month[purpose][month]['sales'] += sales
                 by_purpose_month[purpose][month]['count'] += 1
+                # 담당자별 월별 목적 데이터
+                if manager not in by_purpose_month[purpose][month]['by_manager']:
+                    by_purpose_month[purpose][month]['by_manager'][manager] = {'sales': 0, 'count': 0}
+                by_purpose_month[purpose][month]['by_manager'][manager]['sales'] += sales
+                by_purpose_month[purpose][month]['by_manager'][manager]['count'] += 1
 
         # 부적합항목별
         if defect:
@@ -353,7 +358,7 @@ def process_data(data, purpose_filter=None):
         'by_purpose': sorted_purposes,
         'by_defect': sorted_defects[:30],
         'by_defect_month': {d: sorted(months.items()) for d, months in by_defect_month.items()},
-        'by_purpose_month': {p: {m: {'sales': d['sales'], 'count': d['count']} for m, d in months.items()} for p, months in by_purpose_month.items()},
+        'by_purpose_month': {p: {m: {'sales': d['sales'], 'count': d['count'], 'by_manager': d.get('by_manager', {})} for m, d in months.items()} for p, months in by_purpose_month.items()},
         'manager_top_clients': manager_top_clients,
         'high_efficiency': [(c, {'sales': d['sales'], 'count': d['count'], 'avg': d['sales']/d['count'] if d['count'] > 0 else 0})
                            for c, d in high_efficiency],
@@ -707,7 +712,7 @@ HTML_TEMPLATE = '''
                 <span id="purposeYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <label style="font-weight: bold;">👤 담당자:</label>
-                    <select id="purposeManagerFilter" onchange="updatePurposeTab()" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #ddd;">
+                    <select id="purposeManagerFilter" onchange="updatePurposeTab(); updatePurposeMonthlyChart();" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #ddd;">
                         <option value="">전체</option>
                     </select>
                 </div>
@@ -752,8 +757,8 @@ HTML_TEMPLATE = '''
         </div>
         <div class="charts" style="margin-top: 20px;">
             <div class="chart-container full">
-                <h3>📈 목적별 월별 추이</h3>
-                <div style="font-size: 11px; color: #888; margin-bottom: 5px;">📌 적용: 아래 드롭다운에서 선택한 검사목적</div>
+                <h3>📈 목적별 월별 추이 <span id="purposeMonthlyFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 5px;">📌 적용: 아래 드롭다운에서 선택한 검사목적 + 담당자 필터</div>
                 <div class="sub-select" style="margin-bottom: 10px;">
                     <select id="purposeMonthlySelect" onchange="updatePurposeMonthlyChart()" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #ddd;">
                         <option value="">목적 선택</option>
@@ -1977,8 +1982,12 @@ HTML_TEMPLATE = '''
 
         function updatePurposeMonthlyChart() {
             const purpose = document.getElementById('purposeMonthlySelect').value;
+            const selectedManager = document.getElementById('purposeManagerFilter').value;
             const ctx = document.getElementById('purposeMonthlyChart').getContext('2d');
             if (charts.purposeMonthly) charts.purposeMonthly.destroy();
+
+            // 필터 라벨 업데이트
+            document.getElementById('purposeMonthlyFilterLabel').textContent = selectedManager ? `[${selectedManager}]` : '';
 
             if (!purpose) {
                 ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -1993,9 +2002,21 @@ HTML_TEMPLATE = '''
             const purposeMonthData = currentData.by_purpose_month && currentData.by_purpose_month[purpose]
                 ? currentData.by_purpose_month[purpose] : {};
 
+            // 담당자 필터가 있으면 해당 담당자의 데이터만 사용
+            function getMonthlyValue(monthData, month) {
+                if (!monthData || !monthData[month]) return 0;
+                if (selectedManager && monthData[month].by_manager) {
+                    return monthData[month].by_manager[selectedManager]?.sales || 0;
+                }
+                return monthData[month].sales || 0;
+            }
+
+            let chartLabel = (currentData.dateLabel || currentData.year + '년') + ' - ' + purpose;
+            if (selectedManager) chartLabel += ` (${selectedManager})`;
+
             const datasets = [{
-                label: (currentData.dateLabel || currentData.year + '년') + ' - ' + purpose,
-                data: labels.map((_, i) => purposeMonthData[i + 1]?.sales || 0),
+                label: chartLabel,
+                data: labels.map((_, i) => getMonthlyValue(purposeMonthData, i + 1)),
                 borderColor: '#667eea',
                 backgroundColor: 'rgba(102, 126, 234, 0.1)',
                 fill: true,
@@ -2006,9 +2027,12 @@ HTML_TEMPLATE = '''
             if (compareData && compareData.by_purpose_month && compareData.by_purpose_month[purpose]) {
                 const comparePurposeMonthData = compareData.by_purpose_month[purpose];
 
+                let compareChartLabel = (compareData.dateLabel || compareData.year + '년') + ' - ' + purpose;
+                if (selectedManager) compareChartLabel += ` (${selectedManager})`;
+
                 datasets.push({
-                    label: (compareData.dateLabel || compareData.year + '년') + ' - ' + purpose,
-                    data: labels.map((_, i) => comparePurposeMonthData[i + 1]?.sales || 0),
+                    label: compareChartLabel,
+                    data: labels.map((_, i) => getMonthlyValue(comparePurposeMonthData, i + 1)),
                     borderColor: '#764ba2',
                     backgroundColor: 'rgba(118, 75, 162, 0.1)',
                     fill: true,

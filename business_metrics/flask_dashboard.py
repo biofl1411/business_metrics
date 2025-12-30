@@ -392,6 +392,8 @@ HTML_TEMPLATE = '''
         .card .diff { font-size: 12px; margin-top: 3px; }
         .card .diff.positive { color: #2ecc71; }
         .card .diff.negative { color: #e74c3c; }
+        .positive { color: #2ecc71; font-weight: bold; }
+        .negative { color: #e74c3c; font-weight: bold; }
         .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
         .chart-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .chart-container h3 { margin-bottom: 15px; color: #333; }
@@ -1093,11 +1095,11 @@ HTML_TEMPLATE = '''
             if (charts.defect) charts.defect.destroy();
 
             const top15 = currentData.by_defect.slice(0, 15);
-            const datasets = [{ label: currentData.year + '년', data: top15.map(d => d[1].count), backgroundColor: 'rgba(231, 76, 60, 0.7)' }];
+            const datasets = [{ label: currentData.year + '년', data: top15.map(d => d[1].count), backgroundColor: 'rgba(231, 76, 60, 0.8)' }];
 
             if (compareData && compareData.by_defect) {
                 const compareMap = Object.fromEntries(compareData.by_defect);
-                datasets.push({ label: compareData.year + '년', data: top15.map(d => compareMap[d[0]]?.count || 0), backgroundColor: 'rgba(192, 57, 43, 0.5)' });
+                datasets.push({ label: compareData.year + '년', data: top15.map(d => compareMap[d[0]]?.count || 0), backgroundColor: 'rgba(155, 89, 182, 0.6)' });
             }
 
             charts.defect = new Chart(ctx, {

@@ -552,6 +552,11 @@ HTML_TEMPLATE = '''
         .sub-select { margin-bottom: 15px; }
         .sub-select select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ddd; }
         .scroll-table { max-height: 400px; overflow-y: auto; }
+        th.sortable { cursor: pointer; user-select: none; position: relative; padding-right: 20px; }
+        th.sortable:hover { background: #e9ecef; }
+        th.sortable::after { content: '⇅'; position: absolute; right: 5px; opacity: 0.3; font-size: 11px; }
+        th.sortable.asc::after { content: '▲'; opacity: 1; color: #667eea; }
+        th.sortable.desc::after { content: '▼'; opacity: 1; color: #667eea; }
     </style>
 </head>
 <body>
@@ -1046,6 +1051,89 @@ HTML_TEMPLATE = '''
 
         function hideToast() { document.getElementById('toast').style.display = 'none'; }
 
+        // 테이블 정렬 함수
+        function sortTable(tableId, colIndex, type = 'string') {
+            const table = document.getElementById(tableId);
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const th = thead.querySelectorAll('th')[colIndex];
+
+            // 현재 정렬 상태 확인
+            const isAsc = th.classList.contains('asc');
+
+            // 모든 헤더에서 정렬 클래스 제거
+            thead.querySelectorAll('th').forEach(h => h.classList.remove('asc', 'desc'));
+
+            // 새로운 정렬 방향 설정
+            th.classList.add(isAsc ? 'desc' : 'asc');
+
+            // 정렬
+            rows.sort((a, b) => {
+                let aVal = a.cells[colIndex]?.textContent?.trim() || '';
+                let bVal = b.cells[colIndex]?.textContent?.trim() || '';
+
+                // 숫자 파싱 (억, 만, %, +, - 등 처리)
+                if (type === 'number' || type === 'currency') {
+                    aVal = parseTableNumber(aVal);
+                    bVal = parseTableNumber(bVal);
+                }
+
+                if (type === 'number' || type === 'currency') {
+                    return isAsc ? bVal - aVal : aVal - bVal;
+                } else {
+                    return isAsc ? bVal.localeCompare(aVal, 'ko') : aVal.localeCompare(bVal, 'ko');
+                }
+            });
+
+            // 정렬된 행 다시 삽입
+            rows.forEach(row => tbody.appendChild(row));
+
+            // 순위 컬럼 업데이트 (첫 번째 컬럼이 순위인 경우)
+            const firstHeader = thead.querySelector('th')?.textContent?.trim();
+            if (firstHeader === '순위') {
+                rows.forEach((row, i) => {
+                    if (row.cells[0]) row.cells[0].textContent = i + 1;
+                });
+            }
+        }
+
+        // 테이블 숫자 파싱 (억, 만, %, 콤마 등 처리)
+        function parseTableNumber(str) {
+            if (!str) return 0;
+            str = str.replace(/[,\s]/g, '').replace(/\(.*\)/g, ''); // 콤마, 공백, 괄호 제거
+
+            // 억 단위
+            if (str.includes('억')) {
+                const match = str.match(/([-+]?\d+\.?\d*)억/);
+                if (match) return parseFloat(match[1]) * 100000000;
+            }
+            // 만 단위
+            if (str.includes('만')) {
+                const match = str.match(/([-+]?\d+\.?\d*)만/);
+                if (match) return parseFloat(match[1]) * 10000;
+            }
+            // % 제거
+            str = str.replace(/%/g, '');
+            // +/- 기호 처리
+            const num = parseFloat(str.replace(/[^-\d.]/g, ''));
+            return isNaN(num) ? 0 : num;
+        }
+
+        // 테이블에 정렬 기능 적용
+        function makeSortable(tableId, columnTypes) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const headers = table.querySelectorAll('thead th');
+            headers.forEach((th, index) => {
+                if (columnTypes[index] !== 'none') {
+                    th.classList.add('sortable');
+                    th.onclick = () => sortTable(tableId, index, columnTypes[index] || 'string');
+                }
+            });
+        }
+
         // 날짜 선택기 초기화 및 관련 함수들
         function initDateSelectors() {
             // 월 선택기 초기화
@@ -1268,7 +1356,8 @@ HTML_TEMPLATE = '''
                 ['updateSampleTypeFilters', updateSampleTypeFilters],
                 ['updateSampleTypeTab', updateSampleTypeTab],
                 ['updateDefectPurposeFilter', updateDefectPurposeFilter],
-                ['updateDefectTab', updateDefectTab]
+                ['updateDefectTab', updateDefectTab],
+                ['applyAllSortable', applyAllSortable]
             ];
 
             for (const [name, fn] of steps) {
@@ -1282,6 +1371,76 @@ HTML_TEMPLATE = '''
                 }
             }
             console.log('[UPDATE] 모든 업데이트 완료');
+        }
+
+        // 모든 테이블에 정렬 기능 적용
+        function applyAllSortable() {
+            // 비교 모드 여부에 따라 컬럼 타입 결정
+            const hasCompare = !!compareData;
+
+            // 업체별 탭 테이블 (비교 모드)
+            if (hasCompare) {
+                // 순위, 거래처, 2025년, 2024년, 증감, 2025건수, 2024건수
+                makeSortable('clientTopTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number']);
+                // 거래처, 평균단가, 2025년, 2024년, 증감, 2025건수, 2024건수
+                makeSortable('clientEffTable', ['string', 'currency', 'currency', 'currency', 'currency', 'number', 'number']);
+                // 거래처, 2025건수, 2024건수, 증감, 2025매출, 2024매출
+                makeSortable('clientVolTable', ['string', 'number', 'number', 'number', 'currency', 'currency']);
+            } else {
+                makeSortable('clientTopTable', ['number', 'string', 'currency', 'number', 'currency']);
+                makeSortable('clientEffTable', ['string', 'currency', 'currency', 'number']);
+                makeSortable('clientVolTable', ['string', 'number', 'currency', 'currency']);
+            }
+
+            // 지역별 테이블
+            if (hasCompare) {
+                makeSortable('regionTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number']);
+            } else {
+                makeSortable('regionTable', ['number', 'string', 'currency', 'number', 'currency']);
+            }
+
+            // 담당자 테이블 (개인별 탭)
+            if (hasCompare) {
+                makeSortable('managerTable', ['string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+            } else {
+                makeSortable('managerTable', ['string', 'currency', 'number', 'number']);
+            }
+
+            // 지사/센터 테이블
+            if (hasCompare) {
+                makeSortable('branchTable', ['string', 'currency', 'currency', 'currency', 'number', 'number']);
+            } else {
+                makeSortable('branchTable', ['string', 'currency', 'number', 'number']);
+            }
+
+            // 목적별 탭 테이블
+            if (hasCompare) {
+                makeSortable('purposeTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+                makeSortable('purposeManagerTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+                makeSortable('purposeRegionTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+            } else {
+                makeSortable('purposeTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+                makeSortable('purposeManagerTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+                makeSortable('purposeRegionTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+            }
+
+            // 검체유형 탭 테이블
+            if (hasCompare) {
+                makeSortable('sampleTypeTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+                makeSortable('sampleTypeManagerTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+                makeSortable('sampleTypePurposeTable', ['number', 'string', 'currency', 'currency', 'currency', 'number', 'number', 'number']);
+            } else {
+                makeSortable('sampleTypeTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+                makeSortable('sampleTypeManagerTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+                makeSortable('sampleTypePurposeTable', ['number', 'string', 'currency', 'number', 'currency', 'number']);
+            }
+
+            // 부적합 탭 테이블
+            if (hasCompare) {
+                makeSortable('defectTable', ['number', 'string', 'number', 'number', 'number', 'number']);
+            } else {
+                makeSortable('defectTable', ['number', 'string', 'number', 'number']);
+            }
         }
 
         function updateSummary() {

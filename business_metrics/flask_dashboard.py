@@ -1139,7 +1139,7 @@ HTML_TEMPLATE = '''
         }
 
         // 지역별 함수들
-        function updateRegionChart() {
+        function initRegionChart() {
             if (!currentData.by_region || currentData.by_region.length === 0) {
                 // 지역 데이터가 없으면 안내 메시지 표시
                 const ctx = document.getElementById('regionChart').getContext('2d');
@@ -1217,30 +1217,33 @@ HTML_TEMPLATE = '''
                 }).join('') || '<tr><td colspan="5">지역 데이터 없음</td></tr>';
             }
 
-            // 차트도 업데이트
+            // 차트 초기화 및 업데이트
+            if (!charts.region) {
+                initRegionChart();
+            }
             updateRegionChart(regionData, compareRegionData);
         }
 
         function updateRegionChart(regionData, compareRegionData) {
             const top20 = regionData.slice(0, 20);
-            if (charts.region) {
-                charts.region.data.labels = top20.map(d => d[0]);
+            if (!charts.region) return;
 
-                if (compareData && compareRegionData) {
-                    const compareMap = Object.fromEntries(compareRegionData);
-                    charts.region.data.datasets = [
-                        { label: currentData.year + '년', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' },
-                        { label: compareData.year + '년', data: top20.map(d => (compareMap[d[0]]?.sales || 0)), backgroundColor: 'rgba(118, 75, 162, 0.6)' }
-                    ];
-                    charts.region.options.plugins.legend = { display: true };
-                } else {
-                    charts.region.data.datasets = [
-                        { label: '매출액', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' }
-                    ];
-                    charts.region.options.plugins.legend = { display: false };
-                }
-                charts.region.update();
+            charts.region.data.labels = top20.map(d => d[0]);
+
+            if (compareData && compareRegionData) {
+                const compareMap = Object.fromEntries(compareRegionData);
+                charts.region.data.datasets = [
+                    { label: currentData.year + '년', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' },
+                    { label: compareData.year + '년', data: top20.map(d => (compareMap[d[0]]?.sales || 0)), backgroundColor: 'rgba(118, 75, 162, 0.6)' }
+                ];
+                charts.region.options.plugins.legend = { display: true };
+            } else {
+                charts.region.data.datasets = [
+                    { label: '매출액', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(102, 126, 234, 0.8)' }
+                ];
+                charts.region.options.plugins.legend = { display: false };
             }
+            charts.region.update();
         }
 
         function updateRegionSelects() {

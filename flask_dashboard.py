@@ -1378,12 +1378,14 @@ HTML_TEMPLATE = '''
             const tbody = document.querySelector('#managerTable tbody');
 
             if (compareData) {
-                thead.innerHTML = `<tr><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>비중</th></tr>`;
                 const compareMap = Object.fromEntries(compareData.by_manager);
                 tbody.innerHTML = currentData.by_manager.map(d => {
                     const compSales = compareMap[d[0]]?.sales || 0;
+                    const compCount = compareMap[d[0]]?.count || 0;
                     const diff = d[1].sales - compSales;
-                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td></tr>`;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${(d[1].sales / currentData.total_sales * 100).toFixed(1)}%</td></tr>`;
                 }).join('');
             } else {
                 thead.innerHTML = `<tr><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr>`;
@@ -1396,12 +1398,14 @@ HTML_TEMPLATE = '''
             const tbody = document.querySelector('#branchTable tbody');
 
             if (compareData) {
-                thead.innerHTML = `<tr><th>지사/센터</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th></tr>`;
+                thead.innerHTML = `<tr><th>지사/센터</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 const compareMap = Object.fromEntries(compareData.by_branch);
                 tbody.innerHTML = currentData.by_branch.map(d => {
                     const compSales = compareMap[d[0]]?.sales || 0;
+                    const compCount = compareMap[d[0]]?.count || 0;
                     const diff = d[1].sales - compSales;
-                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td></tr>`;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td></tr>`;
                 }).join('');
             } else {
                 thead.innerHTML = `<tr><th>지사/센터</th><th>매출액</th><th>건수</th><th>담당자수</th></tr>`;
@@ -1462,12 +1466,14 @@ HTML_TEMPLATE = '''
             const topTbody = document.querySelector('#clientTopTable tbody');
 
             if (compareData) {
-                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 topTbody.innerHTML = clientData.map((d, i) => {
                     const compSales = compareClientMap[d[0]]?.sales || 0;
+                    const compCount = compareClientMap[d[0]]?.count || 0;
                     const diff = d[1].sales - compSales;
-                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${d[1].count}</td></tr>`;
-                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
+                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td></tr>`;
+                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
             } else {
                 topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
                 topTbody.innerHTML = clientData.map((d, i) =>
@@ -1480,12 +1486,14 @@ HTML_TEMPLATE = '''
             const effTbody = document.querySelector('#clientEffTable tbody');
 
             if (compareData) {
-                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th></tr>`;
+                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 effTbody.innerHTML = effData.map(d => {
                     const compSales = compareClientMap[d[0]]?.sales || 0;
+                    const compCount = compareClientMap[d[0]]?.count || 0;
                     const diff = d[1].sales - compSales;
-                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td></tr>`;
-                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
+                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td></tr>`;
+                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
             } else {
                 effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr>`;
                 effTbody.innerHTML = effData.map(d =>
@@ -1498,12 +1506,14 @@ HTML_TEMPLATE = '''
             const volTbody = document.querySelector('#clientVolTable tbody');
 
             if (compareData) {
-                volThead.innerHTML = `<tr><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>매출액</th></tr>`;
+                volThead.innerHTML = `<tr><th>거래처</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>증감</th><th>${currentData.year}년 매출</th><th>${compareData.year}년 매출</th></tr>`;
                 volTbody.innerHTML = volData.map(d => {
                     const compCount = compareClientMap[d[0]]?.count || 0;
+                    const compSales = compareClientMap[d[0]]?.sales || 0;
                     const diff = d[1].count - compCount;
-                    return `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${compCount}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diff}</td><td>${formatCurrency(d[1].sales)}</td></tr>`;
-                }).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+                    const diffRate = compCount > 0 ? ((diff / compCount) * 100).toFixed(1) : (d[1].count > 0 ? 100 : 0);
+                    return `<tr><td>${d[0]}</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diff.toLocaleString()} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td></tr>`;
+                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
             } else {
                 volThead.innerHTML = `<tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr>`;
                 volTbody.innerHTML = volData.map(d =>
@@ -1538,12 +1548,13 @@ HTML_TEMPLATE = '''
 
             if (compareData && compareData.by_defect) {
                 const compareMap = Object.fromEntries(compareData.by_defect);
-                thead.innerHTML = `<tr><th>순위</th><th>부적합항목</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>부적합항목</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>증감</th><th>비중</th></tr>`;
                 tbody.innerHTML = currentData.by_defect.map((d, i) => {
                     const compCount = compareMap[d[0]]?.count || 0;
                     const diff = d[1].count - compCount;
-                    const diffText = diff >= 0 ? `<span class="positive">+${diff}</span>` : `<span class="negative">${diff}</span>`;
-                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${d[1].count}</td><td>${compCount}</td><td>${diffText}</td><td>${(d[1].count / totalDefects * 100).toFixed(1)}%</td></tr>`;
+                    const diffRate = compCount > 0 ? ((diff / compCount) * 100).toFixed(1) : (d[1].count > 0 ? 100 : 0);
+                    const diffText = diff >= 0 ? `<span class="positive">+${diff.toLocaleString()} (${'+' + diffRate}%)</span>` : `<span class="negative">${diff.toLocaleString()} (${diffRate}%)</span>`;
+                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${diffText}</td><td>${(d[1].count / totalDefects * 100).toFixed(1)}%</td></tr>`;
                 }).join('');
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>부적합항목</th><th>건수</th><th>비중</th></tr>`;
@@ -1647,16 +1658,17 @@ HTML_TEMPLATE = '''
 
             // 비교 모드일 때 테이블 헤더 및 데이터 변경
             if (compareData && compareRegionData) {
-                thead.innerHTML = `<tr><th>순위</th><th style="white-space:nowrap">지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th style="white-space:nowrap">지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 const compareMap = Object.fromEntries(compareRegionData);
 
                 tbody.innerHTML = regionData.map((d, i) => {
                     const compData = compareMap[d[0]] || {sales: 0, count: 0};
                     const diff = formatDiff(d[1].sales, compData.sales);
+                    const diffRate = compData.sales > 0 ? ((diff.diff / compData.sales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
                     const diffClass = diff.diff >= 0 ? 'positive' : 'negative';
-                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text}</span>` : '-';
-                    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${d[1].count}</td></tr>`;
-                }).join('') || '<tr><td colspan="6">지역 데이터 없음</td></tr>';
+                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text} (${diff.diff >= 0 ? '+' : ''}${diffRate}%)</span>` : '-';
+                    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${d[1].count.toLocaleString()}</td><td>${compData.count.toLocaleString()}</td></tr>`;
+                }).join('') || '<tr><td colspan="7">지역 데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th style="white-space:nowrap">지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
                 tbody.innerHTML = regionData.map((d, i) => {
@@ -1740,14 +1752,15 @@ HTML_TEMPLATE = '''
                 const compareMap = {};
                 compareManagers.forEach(m => { compareMap[m.name] = m; });
 
-                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 tbody.innerHTML = managers.map((m, i) => {
                     const compData = compareMap[m.name] || {sales: 0, count: 0};
                     const diff = formatDiff(m.sales, compData.sales);
+                    const diffRate = compData.sales > 0 ? ((diff.diff / compData.sales) * 100).toFixed(1) : (m.sales > 0 ? 100 : 0);
                     const diffClass = diff.diff >= 0 ? 'positive' : 'negative';
-                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text}</span>` : '-';
-                    return `<tr><td>${i+1}</td><td>${m.name}</td><td>${formatCurrency(m.sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${m.count}</td></tr>`;
-                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text} (${diff.diff >= 0 ? '+' : ''}${diffRate}%)</span>` : '-';
+                    return `<tr><td>${i+1}</td><td>${m.name}</td><td>${formatCurrency(m.sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${m.count.toLocaleString()}</td><td>${compData.count.toLocaleString()}</td></tr>`;
+                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = '<tr><th>순위</th><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr>';
                 tbody.innerHTML = managers.map((m, i) =>
@@ -1775,14 +1788,15 @@ HTML_TEMPLATE = '''
                 const compareMap = {};
                 compareRegions.forEach(r => { compareMap[r.region] = r; });
 
-                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th></tr>`;
                 tbody.innerHTML = regions.map((r, i) => {
                     const compData = compareMap[r.region] || {sales: 0, count: 0};
                     const diff = formatDiff(r.sales, compData.sales);
+                    const diffRate = compData.sales > 0 ? ((diff.diff / compData.sales) * 100).toFixed(1) : (r.sales > 0 ? 100 : 0);
                     const diffClass = diff.diff >= 0 ? 'positive' : 'negative';
-                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text}</span>` : '-';
-                    return `<tr><td>${i+1}</td><td>${r.region}</td><td>${formatCurrency(r.sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${r.count}</td></tr>`;
-                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+                    const diffText = diff.text ? `<span class="${diffClass}">${diff.text} (${diff.diff >= 0 ? '+' : ''}${diffRate}%)</span>` : '-';
+                    return `<tr><td>${i+1}</td><td>${r.region}</td><td>${formatCurrency(r.sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${r.count.toLocaleString()}</td><td>${compData.count.toLocaleString()}</td></tr>`;
+                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = '<tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>비중</th></tr>';
                 tbody.innerHTML = regions.map((r, i) =>
@@ -2007,15 +2021,17 @@ HTML_TEMPLATE = '''
             const tbody = document.querySelector('#purposeTable tbody');
 
             if (compareData && Object.keys(comparePurposeData).length > 0) {
-                thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>${currLabel}</th><th>${compareData.dateLabel || compareData.year + '년'}</th><th>증감</th><th>건수</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>${currLabel}</th><th>${compareData.dateLabel || compareData.year + '년'}</th><th>증감</th><th>${currLabel} 건수</th><th>${compareData.dateLabel || compareData.year + '년'} 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedPurposes.map((p, i) => {
                     const compSales = comparePurposeData[p[0]]?.sales || 0;
+                    const compCount = comparePurposeData[p[0]]?.count || 0;
                     const diff = p[1].sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (p[1].sales > 0 ? 100 : 0);
                     const diffClass = diff >= 0 ? 'positive' : 'negative';
-                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</span>`;
+                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</span>`;
                     const ratio = totalSales > 0 ? (p[1].sales / totalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${p[0]}</td><td>${formatCurrency(p[1].sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${p[1].count}</td><td>${ratio}%</td></tr>`;
-                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${p[0]}</td><td>${formatCurrency(p[1].sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${p[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${ratio}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedPurposes.map((p, i) => {
@@ -2071,15 +2087,17 @@ HTML_TEMPLATE = '''
             if (compareData && Object.keys(compareManagerData).length > 0) {
                 const compLabel = compareData.dateLabel || compareData.year + '년';
                 const currLabel = currentData.dateLabel || currentData.year + '년';
-                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currLabel}</th><th>${compLabel}</th><th>증감</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currLabel}</th><th>${compLabel}</th><th>증감</th><th>${currLabel} 건수</th><th>${compLabel} 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedManagers.map(([name, data], i) => {
                     const compSales = compareManagerData[name]?.sales || 0;
+                    const compCount = compareManagerData[name]?.count || 0;
                     const diff = data.sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (data.sales > 0 ? 100 : 0);
                     const diffClass = diff >= 0 ? 'positive' : 'negative';
-                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</span>`;
+                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</span>`;
                     const ratio = managerTotalSales > 0 ? (data.sales / managerTotalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(data.sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${ratio}%</td></tr>`;
-                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(data.sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${data.count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${ratio}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedManagers.map(([name, data], i) => {
@@ -2129,15 +2147,17 @@ HTML_TEMPLATE = '''
             if (compareData && Object.keys(compareRegionData).length > 0) {
                 const compLabel = compareData.dateLabel || compareData.year + '년';
                 const currLabel = currentData.dateLabel || currentData.year + '년';
-                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currLabel}</th><th>${compLabel}</th><th>증감</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currLabel}</th><th>${compLabel}</th><th>증감</th><th>${currLabel} 건수</th><th>${compLabel} 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedRegions.map(([region, data], i) => {
                     const compSales = compareRegionData[region]?.sales || 0;
+                    const compCount = compareRegionData[region]?.count || 0;
                     const diff = data.sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (data.sales > 0 ? 100 : 0);
                     const diffClass = diff >= 0 ? 'positive' : 'negative';
-                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</span>`;
+                    const diffText = `<span class="${diffClass}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</span>`;
                     const ratio = regionTotalSales > 0 ? (data.sales / regionTotalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${region}</td><td>${formatCurrency(data.sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${ratio}%</td></tr>`;
-                }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${region}</td><td>${formatCurrency(data.sales)}</td><td>${formatCurrency(compSales)}</td><td>${diffText}</td><td>${data.count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${ratio}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedRegions.map(([region, data], i) => {
@@ -2395,13 +2415,15 @@ HTML_TEMPLATE = '''
             const tbody = document.querySelector('#sampleTypeTable tbody');
 
             if (compareData && Object.keys(compareSampleTypeData).length > 0) {
-                thead.innerHTML = `<tr><th>순위</th><th>검체유형</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>검체유형</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedData.map(([st, d], i) => {
                     const compSales = compareSampleTypeData[st]?.sales || 0;
+                    const compCount = compareSampleTypeData[st]?.count || 0;
                     const diff = d.sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d.sales > 0 ? 100 : 0);
                     const percent = totalSales > 0 ? (d.sales / totalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${st}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${d.count}</td><td>${percent}%</td></tr>`;
-                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${st}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d.count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${percent}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>검체유형</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedData.map(([st, d], i) => {
@@ -2495,13 +2517,15 @@ HTML_TEMPLATE = '''
             }
 
             if (compareData && Object.keys(compareManagerData).length > 0) {
-                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedManagers.map(([name, d], i) => {
                     const compSales = compareManagerData[name]?.sales || 0;
+                    const compCount = compareManagerData[name]?.count || 0;
                     const diff = d.sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d.sales > 0 ? 100 : 0);
                     const percent = managerTotalSales > 0 ? (d.sales / managerTotalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${d.count}</td><td>${percent}%</td></tr>`;
-                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d.count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${percent}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>담당자</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedManagers.map(([name, d], i) => {
@@ -2554,13 +2578,15 @@ HTML_TEMPLATE = '''
             }
 
             if (compareData && Object.keys(comparePurposeData).length > 0) {
-                thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th><th>비중</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedPurposes.map(([name, d], i) => {
                     const compSales = comparePurposeData[name]?.sales || 0;
+                    const compCount = comparePurposeData[name]?.count || 0;
                     const diff = d.sales - compSales;
+                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d.sales > 0 ? 100 : 0);
                     const percent = purposeTotalSales > 0 ? (d.sales / purposeTotalSales * 100).toFixed(1) : 0;
-                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td><td>${d.count}</td><td>${percent}%</td></tr>`;
-                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
+                    return `<tr><td>${i+1}</td><td>${name}</td><td>${formatCurrency(d.sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d.count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td>${percent}%</td></tr>`;
+                }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
             } else {
                 thead.innerHTML = `<tr><th>순위</th><th>검사목적</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr>`;
                 tbody.innerHTML = sortedPurposes.map(([name, d], i) => {

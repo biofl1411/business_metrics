@@ -377,6 +377,10 @@ HTML_TEMPLATE = '''
         .header h1 { font-size: 24px; }
         .controls { display: flex; gap: 10px; margin: 15px 0; flex-wrap: wrap; align-items: center; }
         .controls select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ddd; font-size: 14px; }
+        .date-group { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 5px; }
+        .date-group label { color: white; font-size: 13px; margin-right: 5px; }
+        .date-group select { padding: 5px 8px; font-size: 13px; }
+        .range-separator { color: white; font-weight: bold; padding: 0 10px; }
         .compare-box {
             display: flex; align-items: center; gap: 8px;
             background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 5px;
@@ -433,17 +437,66 @@ HTML_TEMPLATE = '''
     <div class="header">
         <h1>📊 경영지표 대시보드</h1>
         <div class="controls">
-            <select id="yearSelect">
-                <option value="2025">2025년</option>
-                <option value="2024">2024년</option>
-            </select>
+            <div class="date-group">
+                <label>📅 조회기간:</label>
+                <select id="yearSelect" onchange="updateDateSelectors()">
+                    <option value="2025">2025년</option>
+                    <option value="2024">2024년</option>
+                </select>
+                <select id="monthSelect" onchange="updateDaySelector()">
+                    <option value="">전체</option>
+                </select>
+                <select id="daySelect">
+                    <option value="">전체</option>
+                </select>
+            </div>
+            <div class="compare-box">
+                <input type="checkbox" id="rangeCheck" onchange="toggleRangeMode()">
+                <label for="rangeCheck">기간범위</label>
+            </div>
+            <div id="rangeDateGroup" class="date-group" style="display:none;">
+                <span class="range-separator">~</span>
+                <select id="endYearSelect" onchange="updateEndDateSelectors()">
+                    <option value="2025">2025년</option>
+                    <option value="2024">2024년</option>
+                </select>
+                <select id="endMonthSelect" onchange="updateEndDaySelector()">
+                    <option value="">전체</option>
+                </select>
+                <select id="endDaySelect">
+                    <option value="">전체</option>
+                </select>
+            </div>
             <div class="compare-box">
                 <input type="checkbox" id="compareCheck" onchange="toggleCompare()">
                 <label for="compareCheck">비교</label>
-                <select id="compareYearSelect" disabled>
+            </div>
+            <div id="compareDateGroup" class="date-group" style="display:none;">
+                <select id="compareYearSelect">
                     <option value="2024">2024년</option>
                     <option value="2025">2025년</option>
                 </select>
+                <select id="compareMonthSelect">
+                    <option value="">전체</option>
+                </select>
+                <select id="compareDaySelect">
+                    <option value="">전체</option>
+                </select>
+            </div>
+            <div id="compareRangeDateGroup" style="display:none;">
+                <span class="range-separator">~</span>
+                <div class="date-group">
+                    <select id="compareEndYearSelect">
+                        <option value="2024">2024년</option>
+                        <option value="2025">2025년</option>
+                    </select>
+                    <select id="compareEndMonthSelect">
+                        <option value="">전체</option>
+                    </select>
+                    <select id="compareEndDaySelect">
+                        <option value="">전체</option>
+                    </select>
+                </div>
             </div>
             <select id="purposeSelect">
                 <option value="전체">검사목적: 전체</option>
@@ -742,8 +795,88 @@ HTML_TEMPLATE = '''
 
         function hideToast() { document.getElementById('toast').style.display = 'none'; }
 
+        // 날짜 선택기 초기화 및 관련 함수들
+        function initDateSelectors() {
+            // 월 선택기 초기화
+            const months = ['monthSelect', 'endMonthSelect', 'compareMonthSelect', 'compareEndMonthSelect'];
+            months.forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = '<option value="">전체</option>';
+                for (let i = 1; i <= 12; i++) {
+                    select.innerHTML += `<option value="${i}">${i}월</option>`;
+                }
+            });
+        }
+
+        function updateDaySelector() {
+            const year = parseInt(document.getElementById('yearSelect').value);
+            const month = parseInt(document.getElementById('monthSelect').value);
+            updateDayOptions('daySelect', year, month);
+        }
+
+        function updateEndDaySelector() {
+            const year = parseInt(document.getElementById('endYearSelect').value);
+            const month = parseInt(document.getElementById('endMonthSelect').value);
+            updateDayOptions('endDaySelect', year, month);
+        }
+
+        function updateCompareDaySelector() {
+            const year = parseInt(document.getElementById('compareYearSelect').value);
+            const month = parseInt(document.getElementById('compareMonthSelect').value);
+            updateDayOptions('compareDaySelect', year, month);
+        }
+
+        function updateCompareEndDaySelector() {
+            const year = parseInt(document.getElementById('compareEndYearSelect').value);
+            const month = parseInt(document.getElementById('compareEndMonthSelect').value);
+            updateDayOptions('compareEndDaySelect', year, month);
+        }
+
+        function updateDayOptions(selectId, year, month) {
+            const select = document.getElementById(selectId);
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">전체</option>';
+
+            if (!month) return;
+
+            const daysInMonth = new Date(year, month, 0).getDate();
+            for (let i = 1; i <= daysInMonth; i++) {
+                select.innerHTML += `<option value="${i}">${i}일</option>`;
+            }
+
+            // 이전 값 복원 (유효한 경우)
+            if (currentValue && parseInt(currentValue) <= daysInMonth) {
+                select.value = currentValue;
+            }
+        }
+
+        function updateDateSelectors() {
+            updateDaySelector();
+        }
+
+        function updateEndDateSelectors() {
+            updateEndDaySelector();
+        }
+
+        function toggleRangeMode() {
+            const rangeMode = document.getElementById('rangeCheck').checked;
+            document.getElementById('rangeDateGroup').style.display = rangeMode ? 'flex' : 'none';
+
+            // 범위 모드일 때 일 선택기 숨김 (시작)
+            document.getElementById('daySelect').style.display = rangeMode ? 'inline-block' : 'inline-block';
+
+            // 비교 모드가 활성화되어 있으면 비교 범위도 표시
+            if (document.getElementById('compareCheck').checked) {
+                document.getElementById('compareRangeDateGroup').style.display = rangeMode ? 'flex' : 'none';
+            }
+        }
+
         function toggleCompare() {
-            document.getElementById('compareYearSelect').disabled = !document.getElementById('compareCheck').checked;
+            const compareEnabled = document.getElementById('compareCheck').checked;
+            const rangeMode = document.getElementById('rangeCheck').checked;
+
+            document.getElementById('compareDateGroup').style.display = compareEnabled ? 'flex' : 'none';
+            document.getElementById('compareRangeDateGroup').style.display = (compareEnabled && rangeMode) ? 'flex' : 'none';
         }
 
         function showTab(tabId) {
@@ -753,37 +886,100 @@ HTML_TEMPLATE = '''
             document.getElementById(tabId).classList.add('active');
         }
 
+        function getDateParams(prefix = '') {
+            const year = document.getElementById(prefix + 'yearSelect').value;
+            const month = document.getElementById(prefix + 'monthSelect').value;
+            const day = document.getElementById(prefix + 'daySelect').value;
+            return { year, month, day };
+        }
+
+        function getEndDateParams(prefix = '') {
+            const year = document.getElementById(prefix + 'endYearSelect').value;
+            const month = document.getElementById(prefix + 'endMonthSelect').value;
+            const day = document.getElementById(prefix + 'endDaySelect').value;
+            return { year, month, day };
+        }
+
+        function buildDateQuery(start, end = null) {
+            let query = `year=${start.year}`;
+            if (start.month) query += `&month=${start.month}`;
+            if (start.day) query += `&day=${start.day}`;
+            if (end) {
+                query += `&end_year=${end.year}`;
+                if (end.month) query += `&end_month=${end.month}`;
+                if (end.day) query += `&end_day=${end.day}`;
+            }
+            return query;
+        }
+
+        function formatDateLabel(start, end = null) {
+            let label = `${start.year}년`;
+            if (start.month) label += ` ${start.month}월`;
+            if (start.day) label += ` ${start.day}일`;
+            if (end) {
+                let endLabel = `${end.year}년`;
+                if (end.month) endLabel += ` ${end.month}월`;
+                if (end.day) endLabel += ` ${end.day}일`;
+                label += ` ~ ${endLabel}`;
+            }
+            return label;
+        }
+
         async function loadData() {
-            const year = document.getElementById('yearSelect').value;
+            const rangeMode = document.getElementById('rangeCheck').checked;
             const compareEnabled = document.getElementById('compareCheck').checked;
-            const compareYear = document.getElementById('compareYearSelect').value;
             const purpose = document.getElementById('purposeSelect').value;
             const btn = document.getElementById('btnSearch');
+
+            // 시작 날짜
+            const startDate = getDateParams('');
+            let endDate = null;
+            if (rangeMode) {
+                endDate = getEndDateParams('');
+            }
 
             btn.disabled = true;
             btn.textContent = '로딩중...';
             showToast('데이터를 불러오는 중입니다...', 'loading');
 
             try {
-                const response = await fetch(`/api/data?year=${year}&purpose=${encodeURIComponent(purpose)}`);
+                const dateQuery = buildDateQuery(startDate, endDate);
+                const response = await fetch(`/api/data?${dateQuery}&purpose=${encodeURIComponent(purpose)}`);
                 currentData = await response.json();
-                currentData.year = year;
+                currentData.dateLabel = formatDateLabel(startDate, endDate);
+                currentData.year = startDate.year;  // 호환성 유지
 
                 // 검사목적 드롭다운 업데이트
                 updatePurposeSelect(currentData.purposes);
 
-                if (compareEnabled && compareYear !== year) {
-                    const compareResponse = await fetch(`/api/data?year=${compareYear}&purpose=${encodeURIComponent(purpose)}`);
+                if (compareEnabled) {
+                    const compareStartDate = {
+                        year: document.getElementById('compareYearSelect').value,
+                        month: document.getElementById('compareMonthSelect').value,
+                        day: document.getElementById('compareDaySelect').value
+                    };
+                    let compareEndDate = null;
+                    if (rangeMode) {
+                        compareEndDate = {
+                            year: document.getElementById('compareEndYearSelect').value,
+                            month: document.getElementById('compareEndMonthSelect').value,
+                            day: document.getElementById('compareEndDaySelect').value
+                        };
+                    }
+
+                    const compareDateQuery = buildDateQuery(compareStartDate, compareEndDate);
+                    const compareResponse = await fetch(`/api/data?${compareDateQuery}&purpose=${encodeURIComponent(purpose)}`);
                     compareData = await compareResponse.json();
-                    compareData.year = compareYear;
+                    compareData.dateLabel = formatDateLabel(compareStartDate, compareEndDate);
+                    compareData.year = compareStartDate.year;  // 호환성 유지
                 } else {
                     compareData = null;
                 }
 
                 updateAll();
 
-                let msg = `${year}년 데이터 로드 완료 (${currentData.total_count.toLocaleString()}건)`;
-                if (compareData) msg = `${year}년 vs ${compareYear}년 비교 로드 완료`;
+                let msg = `${currentData.dateLabel} 데이터 로드 완료 (${currentData.total_count.toLocaleString()}건)`;
+                if (compareData) msg = `${currentData.dateLabel} vs ${compareData.dateLabel} 비교 로드 완료`;
                 showToast(msg, 'success');
 
             } catch (error) {
@@ -844,19 +1040,20 @@ HTML_TEMPLATE = '''
 
             if (compareData) {
                 const compAvg = compareData.total_count > 0 ? compareData.total_sales / compareData.total_count : 0;
-                document.getElementById('compareTotalSales').textContent = `${compareData.year}년: ${formatCurrency(compareData.total_sales)}`;
+                const compLabel = compareData.dateLabel || compareData.year + '년';
+                document.getElementById('compareTotalSales').textContent = `${compLabel}: ${formatCurrency(compareData.total_sales)}`;
                 document.getElementById('compareTotalSales').style.display = 'block';
                 const salesDiff = formatDiff(currentData.total_sales, compareData.total_sales);
                 document.getElementById('diffTotalSales').textContent = salesDiff.text;
                 document.getElementById('diffTotalSales').className = 'diff ' + (salesDiff.diff >= 0 ? 'positive' : 'negative');
 
-                document.getElementById('compareTotalCount').textContent = `${compareData.year}년: ${compareData.total_count.toLocaleString()}건`;
+                document.getElementById('compareTotalCount').textContent = `${compLabel}: ${compareData.total_count.toLocaleString()}건`;
                 document.getElementById('compareTotalCount').style.display = 'block';
                 const countDiff = formatDiff(currentData.total_count, compareData.total_count);
                 document.getElementById('diffTotalCount').textContent = countDiff.text;
                 document.getElementById('diffTotalCount').className = 'diff ' + (countDiff.diff >= 0 ? 'positive' : 'negative');
 
-                document.getElementById('compareAvgPrice').textContent = `${compareData.year}년: ${formatCurrency(compAvg)}`;
+                document.getElementById('compareAvgPrice').textContent = `${compLabel}: ${formatCurrency(compAvg)}`;
                 document.getElementById('compareAvgPrice').style.display = 'block';
                 const avgDiff = formatDiff(avgPrice, compAvg);
                 document.getElementById('diffAvgPrice').textContent = avgDiff.text;
@@ -994,10 +1191,12 @@ HTML_TEMPLATE = '''
 
             // 연도 라벨 업데이트
             const yearLabel = document.getElementById('clientYearLabel');
+            const currLabel = currentData.dateLabel || currentData.year + '년';
             if (compareData) {
-                yearLabel.textContent = `📅 ${currentData.year}년 vs ${compareData.year}년`;
+                const compLabel = compareData.dateLabel || compareData.year + '년';
+                yearLabel.textContent = `📅 ${currLabel} vs ${compLabel}`;
             } else {
-                yearLabel.textContent = `📅 ${currentData.year}년`;
+                yearLabel.textContent = `📅 ${currLabel}`;
             }
 
             let clientData, effData, volData;
@@ -1194,10 +1393,12 @@ HTML_TEMPLATE = '''
 
             // 연도 라벨 업데이트
             const yearLabel = document.getElementById('regionYearLabel');
+            const currLabel = currentData.dateLabel || currentData.year + '년';
             if (compareData) {
-                yearLabel.textContent = `📅 ${currentData.year}년 vs ${compareData.year}년`;
+                const compLabel = compareData.dateLabel || compareData.year + '년';
+                yearLabel.textContent = `📅 ${currLabel} vs ${compLabel}`;
             } else {
-                yearLabel.textContent = `📅 ${currentData.year}년`;
+                yearLabel.textContent = `📅 ${currLabel}`;
             }
 
             // 담당자 필터 확인
@@ -1401,7 +1602,8 @@ HTML_TEMPLATE = '''
         function updatePurposeTab() {
             // 연도 라벨 업데이트
             const yearLabel = document.getElementById('purposeYearLabel');
-            yearLabel.textContent = `📅 ${currentData.year}년`;
+            const currLabel = currentData.dateLabel || currentData.year + '년';
+            yearLabel.textContent = `📅 ${currLabel}`;
 
             const selectedPurposes = getSelectedPurposes();
 
@@ -1492,7 +1694,9 @@ HTML_TEMPLATE = '''
             }
         }
 
-        showToast('연도를 선택하고 [조회하기] 버튼을 클릭하세요.', 'loading', 5000);
+        // 페이지 로드 시 초기화
+        initDateSelectors();
+        showToast('조회 조건을 선택하고 [조회하기] 버튼을 클릭하세요.', 'loading', 5000);
         setTimeout(() => hideToast(), 5000);
     </script>
 </body>
@@ -1503,14 +1707,127 @@ HTML_TEMPLATE = '''
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+def filter_data_by_date(data, year, month=None, day=None, end_year=None, end_month=None, end_day=None):
+    """날짜 조건으로 데이터 필터링"""
+    from datetime import datetime, date
+
+    filtered = []
+    year = int(year)
+    month = int(month) if month else None
+    day = int(day) if day else None
+    end_year = int(end_year) if end_year else None
+    end_month = int(end_month) if end_month else None
+    end_day = int(end_day) if end_day else None
+
+    # 범위 모드인 경우
+    if end_year:
+        # 시작 날짜 결정
+        if month and day:
+            start_date = date(year, month, day)
+        elif month:
+            start_date = date(year, month, 1)
+        else:
+            start_date = date(year, 1, 1)
+
+        # 종료 날짜 결정
+        if end_month and end_day:
+            end_date = date(end_year, end_month, end_day)
+        elif end_month:
+            # 해당 월의 마지막 날
+            import calendar
+            last_day = calendar.monthrange(end_year, end_month)[1]
+            end_date = date(end_year, end_month, last_day)
+        else:
+            end_date = date(end_year, 12, 31)
+
+        for row in data:
+            row_date = row.get('접수일자')
+            if not row_date:
+                continue
+
+            # datetime 또는 date 객체로 변환
+            if hasattr(row_date, 'date'):
+                row_date = row_date.date()
+            elif hasattr(row_date, 'year'):
+                row_date = date(row_date.year, row_date.month, row_date.day)
+            else:
+                try:
+                    parts = str(row_date).split('-')
+                    row_date = date(int(parts[0]), int(parts[1]), int(parts[2][:2]))
+                except:
+                    continue
+
+            if start_date <= row_date <= end_date:
+                filtered.append(row)
+    else:
+        # 단일 날짜 모드
+        for row in data:
+            row_date = row.get('접수일자')
+            if not row_date:
+                continue
+
+            # 연도 확인
+            if hasattr(row_date, 'year'):
+                row_year = row_date.year
+                row_month = row_date.month
+                row_day = row_date.day
+            else:
+                try:
+                    parts = str(row_date).split('-')
+                    row_year = int(parts[0])
+                    row_month = int(parts[1])
+                    row_day = int(parts[2][:2])
+                except:
+                    continue
+
+            if row_year != year:
+                continue
+
+            if month and row_month != month:
+                continue
+
+            if day and row_day != day:
+                continue
+
+            filtered.append(row)
+
+    return filtered
+
 @app.route('/api/data')
 def get_data():
     year = request.args.get('year', '2025')
+    month = request.args.get('month', '')
+    day = request.args.get('day', '')
+    end_year = request.args.get('end_year', '')
+    end_month = request.args.get('end_month', '')
+    end_day = request.args.get('end_day', '')
     purpose = request.args.get('purpose', '전체')
-    print(f"[API] 요청: year={year}, purpose={purpose}")
-    data = load_excel_data(year)
-    print(f"[API] 로드된 데이터: {len(data)}건")
-    processed = process_data(data, purpose)
+
+    # 로그 출력
+    date_info = f"year={year}"
+    if month: date_info += f", month={month}"
+    if day: date_info += f", day={day}"
+    if end_year: date_info += f" ~ end_year={end_year}"
+    if end_month: date_info += f", end_month={end_month}"
+    if end_day: date_info += f", end_day={end_day}"
+    print(f"[API] 요청: {date_info}, purpose={purpose}")
+
+    # 기본 데이터 로드 (연도별)
+    years_to_load = {year}
+    if end_year and end_year != year:
+        years_to_load.add(end_year)
+
+    all_data = []
+    for y in years_to_load:
+        all_data.extend(load_excel_data(y))
+
+    print(f"[API] 로드된 원본 데이터: {len(all_data)}건")
+
+    # 날짜 필터링 적용
+    filtered_data = filter_data_by_date(all_data, year, month, day, end_year, end_month, end_day)
+    print(f"[API] 날짜 필터링 후 데이터: {len(filtered_data)}건")
+
+    processed = process_data(filtered_data, purpose)
     print(f"[API] 처리 완료: total_count={processed['total_count']}")
     return jsonify(processed)
 

@@ -735,11 +735,13 @@ HTML_TEMPLATE = '''
         </div>
         <div class="charts">
             <div class="chart-container">
-                <h3>🎯 목적별 매출 TOP <span id="purposeChartTopN">15</span></h3>
+                <h3>🎯 목적별 매출 TOP <span id="purposeChartTopN">15</span> <span id="purposeChartFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 10px;">📌 적용: 검사목적 체크박스, TOP 필터, 담당자 필터, 지역 필터</div>
                 <canvas id="purposeChart"></canvas>
             </div>
             <div class="chart-container">
-                <h3>📊 목적별 상세</h3>
+                <h3>📊 목적별 상세 <span id="purposeTableFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 10px;">📌 적용: 검사목적 체크박스, TOP 필터, 담당자 필터, 지역 필터</div>
                 <div class="scroll-table" style="max-height: 450px;">
                     <table id="purposeTable">
                         <thead id="purposeTableHead"><tr><th>순위</th><th>검사목적</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
@@ -751,6 +753,7 @@ HTML_TEMPLATE = '''
         <div class="charts" style="margin-top: 20px;">
             <div class="chart-container full">
                 <h3>📈 목적별 월별 추이</h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 5px;">📌 적용: 아래 드롭다운에서 선택한 검사목적</div>
                 <div class="sub-select" style="margin-bottom: 10px;">
                     <select id="purposeMonthlySelect" onchange="updatePurposeMonthlyChart()" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #ddd;">
                         <option value="">목적 선택</option>
@@ -761,7 +764,8 @@ HTML_TEMPLATE = '''
         </div>
         <div class="charts" style="margin-top: 20px;">
             <div class="chart-container">
-                <h3>👤 목적별 담당자 실적</h3>
+                <h3>👤 목적별 담당자 실적 <span id="purposeManagerFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 10px;">📌 적용: 검사목적 체크박스, TOP 필터, 담당자 필터</div>
                 <div class="scroll-table" style="max-height: 400px;">
                     <table id="purposeManagerTable">
                         <thead id="purposeManagerTableHead"><tr><th>순위</th><th>담당자</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
@@ -770,7 +774,8 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
             <div class="chart-container">
-                <h3>📍 목적별 지역 실적</h3>
+                <h3>📍 목적별 지역 실적 <span id="purposeRegionFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
+                <div style="font-size: 11px; color: #888; margin-bottom: 10px;">📌 적용: 검사목적 체크박스, TOP 필터, 지역 필터</div>
                 <div class="scroll-table" style="max-height: 400px;">
                     <table id="purposeRegionTable">
                         <thead id="purposeRegionTableHead"><tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th><th>비중</th></tr></thead>
@@ -1785,6 +1790,16 @@ HTML_TEMPLATE = '''
             const sortedPurposes = Object.entries(purposeData).sort((a, b) => b[1].sales - a[1].sales);
             const topPurposes = sortedPurposes.slice(0, topN);
             const totalSales = sortedPurposes.reduce((sum, p) => sum + p[1].sales, 0);
+
+            // 현재 적용된 필터 라벨 표시
+            let filterInfo = [];
+            if (selectedManager) filterInfo.push(`담당자: ${selectedManager}`);
+            if (selectedRegion) filterInfo.push(`지역: ${selectedRegion}`);
+            const filterLabel = filterInfo.length > 0 ? `[${filterInfo.join(', ')}]` : '';
+            document.getElementById('purposeChartFilterLabel').textContent = filterLabel;
+            document.getElementById('purposeTableFilterLabel').textContent = filterLabel;
+            document.getElementById('purposeManagerFilterLabel').textContent = selectedManager ? `[${selectedManager}]` : '';
+            document.getElementById('purposeRegionFilterLabel').textContent = selectedRegion ? `[${selectedRegion}]` : '';
 
             // 목적별 차트 (막대 차트, 연도 비교 지원)
             const ctx = document.getElementById('purposeChart').getContext('2d');

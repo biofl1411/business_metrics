@@ -588,17 +588,19 @@ HTML_TEMPLATE = '''
             </div>
         </div>
         <div class="charts">
-            <div class="chart-container full" style="height: 400px;">
-                <h3>📍 지역별 매출 TOP 20</h3>
-                <canvas id="regionChart"></canvas>
-            </div>
-            <div class="chart-container full">
-                <h3>지역별 상세 (시/도, 시/군/구)</h3>
-                <div class="scroll-table">
-                    <table id="regionTable">
-                        <thead><tr><th>순위</th><th style="white-space: nowrap;">지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                <div class="chart-container" style="flex: 7; min-width: 500px; height: 400px;">
+                    <h3>📍 지역별 매출 TOP 20</h3>
+                    <canvas id="regionChart"></canvas>
+                </div>
+                <div class="chart-container" style="flex: 3; min-width: 300px; max-height: 400px; overflow-y: auto;">
+                    <h3>지역별 상세 (시/도, 시/군/구)</h3>
+                    <div class="scroll-table">
+                        <table id="regionTable">
+                            <thead><tr><th>순위</th><th style="white-space: nowrap;">지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="chart-container full">

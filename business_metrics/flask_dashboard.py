@@ -588,15 +588,15 @@ HTML_TEMPLATE = '''
             </div>
         </div>
         <div class="charts">
-            <div class="chart-container">
+            <div class="chart-container full" style="height: 400px;">
                 <h3>📍 지역별 매출 TOP 20</h3>
                 <canvas id="regionChart"></canvas>
             </div>
-            <div class="chart-container">
+            <div class="chart-container full">
                 <h3>지역별 상세 (시/도, 시/군/구)</h3>
                 <div class="scroll-table">
                     <table id="regionTable">
-                        <thead><tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
+                        <thead><tr><th>순위</th><th style="white-space: nowrap;">지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -1158,10 +1158,18 @@ HTML_TEMPLATE = '''
             charts.region = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: top20.map(d => d[0].length > 12 ? d[0].substring(0, 12) + '...' : d[0]),
+                    labels: top20.map(d => d[0].length > 8 ? d[0].substring(0, 8) + '..' : d[0]),
                     datasets: [{ label: '매출', data: top20.map(d => d[1].sales), backgroundColor: 'rgba(52, 152, 219, 0.7)' }]
                 },
-                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => formatCurrency(v) } } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { ticks: { callback: v => formatCurrency(v) } },
+                        x: { ticks: { maxRotation: 45, minRotation: 45 } }
+                    }
+                }
             });
         }
 
@@ -1199,7 +1207,7 @@ HTML_TEMPLATE = '''
 
             // 비교 모드일 때 테이블 헤더 및 데이터 변경
             if (compareData && compareRegionData) {
-                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th style="white-space:nowrap">지역</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>건수</th></tr>`;
                 const compareMap = Object.fromEntries(compareRegionData);
 
                 tbody.innerHTML = regionData.map((d, i) => {
@@ -1207,13 +1215,13 @@ HTML_TEMPLATE = '''
                     const diff = formatDiff(d[1].sales, compData.sales);
                     const diffClass = diff.diff >= 0 ? 'positive' : 'negative';
                     const diffText = diff.text ? `<span class="${diffClass}">${diff.text}</span>` : '-';
-                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${d[1].count}</td></tr>`;
+                    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compData.sales)}</td><td>${diffText}</td><td>${d[1].count}</td></tr>`;
                 }).join('') || '<tr><td colspan="6">지역 데이터 없음</td></tr>';
             } else {
-                thead.innerHTML = `<tr><th>순위</th><th>지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
+                thead.innerHTML = `<tr><th>순위</th><th style="white-space:nowrap">지역</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
                 tbody.innerHTML = regionData.map((d, i) => {
                     const avg = d[1].count > 0 ? d[1].sales / d[1].count : 0;
-                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(avg)}</td></tr>`;
+                    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(avg)}</td></tr>`;
                 }).join('') || '<tr><td colspan="5">지역 데이터 없음</td></tr>';
             }
 
@@ -1228,7 +1236,7 @@ HTML_TEMPLATE = '''
             const top20 = regionData.slice(0, 20);
             if (!charts.region) return;
 
-            charts.region.data.labels = top20.map(d => d[0]);
+            charts.region.data.labels = top20.map(d => d[0].length > 8 ? d[0].substring(0, 8) + '..' : d[0]);
 
             if (compareData && compareRegionData) {
                 const compareMap = Object.fromEntries(compareRegionData);

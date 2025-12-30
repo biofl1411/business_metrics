@@ -262,9 +262,15 @@ def process_data(data, purpose_filter=None):
             if sample_type not in by_sample_type_manager:
                 by_sample_type_manager[sample_type] = {}
             if manager not in by_sample_type_manager[sample_type]:
-                by_sample_type_manager[sample_type][manager] = {'sales': 0, 'count': 0}
+                by_sample_type_manager[sample_type][manager] = {'sales': 0, 'count': 0, 'by_purpose': {}}
             by_sample_type_manager[sample_type][manager]['sales'] += sales
             by_sample_type_manager[sample_type][manager]['count'] += 1
+            # 담당자별 목적 데이터 추가
+            if purpose:
+                if purpose not in by_sample_type_manager[sample_type][manager]['by_purpose']:
+                    by_sample_type_manager[sample_type][manager]['by_purpose'][purpose] = {'sales': 0, 'count': 0}
+                by_sample_type_manager[sample_type][manager]['by_purpose'][purpose]['sales'] += sales
+                by_sample_type_manager[sample_type][manager]['by_purpose'][purpose]['count'] += 1
 
             # 검체유형별-목적 데이터
             if purpose:
@@ -408,7 +414,7 @@ def process_data(data, purpose_filter=None):
     for st, managers in by_sample_type_manager.items():
         sorted_stm = sorted(managers.items(), key=lambda x: x[1]['sales'], reverse=True)
         sample_type_managers[st] = [
-            {'name': m, 'sales': d['sales'], 'count': d['count']}
+            {'name': m, 'sales': d['sales'], 'count': d['count'], 'by_purpose': d.get('by_purpose', {})}
             for m, d in sorted_stm[:20]
         ]
 
@@ -2387,20 +2393,14 @@ HTML_TEMPLATE = '''
                 }).join('') || '<tr><td colspan="6">데이터 없음</td></tr>';
             }
 
-            // 필터된 검체유형 목록 (목적 필터 적용시 해당 목적이 있는 검체유형만)
-            const filteredSampleTypes = selectedPurpose
-                ? Object.keys(currentData.sample_type_purposes || {}).filter(st =>
-                    currentData.sample_type_purposes[st].some(p => p.name === selectedPurpose))
-                : null;
-
             // 검체유형별 담당자 테이블
-            updateSampleTypeManagerTable(selectedManager, selectedPurpose, filteredSampleTypes, topN, totalSales);
+            updateSampleTypeManagerTable(selectedManager, selectedPurpose, topN, totalSales);
 
             // 검체유형별 목적 테이블
             updateSampleTypePurposeTable(selectedPurpose, topN, totalSales);
         }
 
-        function updateSampleTypeManagerTable(selectedManager, selectedPurpose, filteredSampleTypes, topN, totalSales) {
+        function updateSampleTypeManagerTable(selectedManager, selectedPurpose, topN, totalSales) {
             const thead = document.getElementById('sampleTypeManagerTableHead');
             const tbody = document.querySelector('#sampleTypeManagerTable tbody');
 
@@ -2414,16 +2414,28 @@ HTML_TEMPLATE = '''
             let managerData = {};
             if (currentData.sample_type_managers) {
                 Object.entries(currentData.sample_type_managers).forEach(([st, managers]) => {
-                    // 목적 필터가 있으면 해당 목적이 있는 검체유형만 포함
-                    if (filteredSampleTypes && !filteredSampleTypes.includes(st)) return;
-
                     managers.forEach(m => {
                         if (!selectedManager || m.name === selectedManager) {
-                            if (!managerData[m.name]) {
-                                managerData[m.name] = { sales: 0, count: 0 };
+                            // 목적 필터가 있으면 해당 목적의 매출만 집계
+                            let sales = 0, count = 0;
+                            if (selectedPurpose && m.by_purpose) {
+                                const purposeData = m.by_purpose[selectedPurpose];
+                                if (purposeData) {
+                                    sales = purposeData.sales;
+                                    count = purposeData.count;
+                                }
+                            } else {
+                                sales = m.sales;
+                                count = m.count;
                             }
-                            managerData[m.name].sales += m.sales;
-                            managerData[m.name].count += m.count;
+
+                            if (sales > 0) {
+                                if (!managerData[m.name]) {
+                                    managerData[m.name] = { sales: 0, count: 0 };
+                                }
+                                managerData[m.name].sales += sales;
+                                managerData[m.name].count += count;
+                            }
                         }
                     });
                 });
@@ -2435,24 +2447,30 @@ HTML_TEMPLATE = '''
 
             const managerTotalSales = sortedManagers.reduce((sum, [_, d]) => sum + d.sales, 0);
 
-            // 비교 데이터용 필터된 검체유형 목록
-            const compareFilteredSampleTypes = selectedPurpose && compareData && compareData.sample_type_purposes
-                ? Object.keys(compareData.sample_type_purposes).filter(st =>
-                    compareData.sample_type_purposes[st].some(p => p.name === selectedPurpose))
-                : null;
-
             let compareManagerData = {};
             if (compareData && compareData.sample_type_managers) {
                 Object.entries(compareData.sample_type_managers).forEach(([st, managers]) => {
-                    if (compareFilteredSampleTypes && !compareFilteredSampleTypes.includes(st)) return;
-
                     managers.forEach(m => {
                         if (!selectedManager || m.name === selectedManager) {
-                            if (!compareManagerData[m.name]) {
-                                compareManagerData[m.name] = { sales: 0, count: 0 };
+                            let sales = 0, count = 0;
+                            if (selectedPurpose && m.by_purpose) {
+                                const purposeData = m.by_purpose[selectedPurpose];
+                                if (purposeData) {
+                                    sales = purposeData.sales;
+                                    count = purposeData.count;
+                                }
+                            } else {
+                                sales = m.sales;
+                                count = m.count;
                             }
-                            compareManagerData[m.name].sales += m.sales;
-                            compareManagerData[m.name].count += m.count;
+
+                            if (sales > 0) {
+                                if (!compareManagerData[m.name]) {
+                                    compareManagerData[m.name] = { sales: 0, count: 0 };
+                                }
+                                compareManagerData[m.name].sales += sales;
+                                compareManagerData[m.name].count += count;
+                            }
                         }
                     });
                 });

@@ -5851,7 +5851,7 @@ JSON 형식만 응답:
 
     while keys_tried < total_keys:
         api_key = GEMINI_API_KEYS[current_api_key_index]
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
 
         print(f"[AI] API 키 {current_api_key_index + 1}/{total_keys} 사용: {api_key[:15]}...")
 

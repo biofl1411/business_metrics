@@ -10,8 +10,15 @@ import os
 from pathlib import Path
 from datetime import datetime
 import json
+import subprocess
+import secrets
+import hashlib
 
 app = Flask(__name__)
+
+# 터미널 인증 설정
+TERMINAL_PASSWORD = "biofl2024"  # 터미널 접속 비밀번호
+terminal_sessions = {}  # 세션 토큰 저장
 
 # Gemini API 설정 (여러 키로 429 에러 대응)
 GEMINI_API_KEYS = [
@@ -1484,6 +1491,7 @@ HTML_TEMPLATE = '''
         <button class="tab" onclick="showTab('foodItem')">🔬 검사항목</button>
         <button class="tab" onclick="showTab('aiAnalysis')" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">🤖 AI 분석</button>
         <button class="tab" onclick="showTab('companyInfo')" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">🏢 기업 정보</button>
+        <button class="tab" onclick="showTab('webTerminal')" style="background: linear-gradient(135deg, #232526 0%, #414345 100%); color: #0f0;">💻 터미널</button>
     </div>
 
     <!-- 개인별 탭 -->
@@ -2335,6 +2343,87 @@ HTML_TEMPLATE = '''
             </div>
         </div>
     </div>
+
+    <!-- 웹 터미널 탭 -->
+    <div id="webTerminal" class="tab-content">
+        <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+            <div style="background: #1e1e1e; border-radius: 10px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="margin: 0; color: #0f0; font-family: monospace;">💻 웹 터미널</h2>
+                    <div id="terminalAuth" style="display: flex; gap: 10px; align-items: center;">
+                        <input type="password" id="terminalPassword" placeholder="비밀번호"
+                               style="padding: 8px 12px; border: 1px solid #444; border-radius: 5px; background: #2d2d2d; color: #fff;">
+                        <button onclick="authenticateTerminal()"
+                                style="padding: 8px 15px; background: #0f0; color: #000; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            인증
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 터미널 출력 영역 -->
+                <div id="terminalOutput"
+                     style="background: #0d0d0d; border-radius: 5px; padding: 15px; height: 400px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; color: #0f0; white-space: pre-wrap; margin-bottom: 15px;">
+<span style="color: #888;">웹 터미널에 오신 것을 환영합니다.
+비밀번호를 입력하여 인증하세요.
+기본 비밀번호: biofl2024 (보안을 위해 변경 권장)
+</span>
+                </div>
+
+                <!-- 명령어 입력 영역 -->
+                <div style="display: flex; gap: 10px;">
+                    <span style="color: #0f0; font-family: monospace; padding: 10px 0;">$</span>
+                    <input type="text" id="terminalInput" placeholder="명령어 입력 (인증 필요)" disabled
+                           style="flex: 1; padding: 10px 15px; border: 1px solid #444; border-radius: 5px; background: #2d2d2d; color: #0f0; font-family: monospace; font-size: 14px;"
+                           onkeypress="if(event.key === 'Enter') executeCommand()">
+                    <button onclick="executeCommand()" id="terminalExecBtn" disabled
+                            style="padding: 10px 20px; background: #333; color: #666; border: none; border-radius: 5px; cursor: not-allowed; font-family: monospace;">
+                        실행
+                    </button>
+                </div>
+
+                <!-- 빠른 명령어 버튼 -->
+                <div id="quickCommands" style="margin-top: 15px; display: none;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 10px;">빠른 명령어:</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <button onclick="quickCommand('ps aux | grep flask')" class="quick-cmd">프로세스 확인</button>
+                        <button onclick="quickCommand('tail -20 flask.log')" class="quick-cmd">로그 보기</button>
+                        <button onclick="quickCommand('df -h')" class="quick-cmd">디스크 용량</button>
+                        <button onclick="quickCommand('free -h')" class="quick-cmd">메모리</button>
+                        <button onclick="quickCommand('uptime')" class="quick-cmd">업타임</button>
+                        <button onclick="quickCommand('ls -la')" class="quick-cmd">파일 목록</button>
+                        <button onclick="quickCommand('pwd')" class="quick-cmd">현재 경로</button>
+                        <button onclick="quickCommand('cat /etc/os-release')" class="quick-cmd">OS 정보</button>
+                    </div>
+                </div>
+
+                <!-- 주의사항 -->
+                <div style="margin-top: 20px; padding: 15px; background: #2d2d2d; border-radius: 5px; border-left: 4px solid #f39c12;">
+                    <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;">⚠️ 주의사항</div>
+                    <div style="color: #aaa; font-size: 13px;">
+                        • 이 터미널은 서버에서 직접 명령어를 실행합니다.<br>
+                        • 잘못된 명령어는 시스템에 영향을 줄 수 있습니다.<br>
+                        • rm, shutdown 등 위험한 명령어는 주의하세요.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .quick-cmd {
+            padding: 6px 12px;
+            background: #333;
+            color: #0f0;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .quick-cmd:hover {
+            background: #444;
+        }
+    </style>
 
     <style>
         @keyframes spin {
@@ -5484,6 +5573,138 @@ HTML_TEMPLATE = '''
                 console.log('[CompanyInfo] 저장된 기업 정보 없음');
             }
         });
+
+        // ========== 웹 터미널 함수 ==========
+        let terminalAuthenticated = false;
+        let terminalToken = '';
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        function appendToTerminal(text, type = 'output') {
+            const output = document.getElementById('terminalOutput');
+            const colors = {
+                'output': '#0f0',
+                'error': '#f44',
+                'command': '#0ff',
+                'info': '#888'
+            };
+            output.innerHTML += `<span style="color: ${colors[type] || '#0f0'}">${escapeHtml(text)}</span>\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function authenticateTerminal() {
+            const password = document.getElementById('terminalPassword').value;
+            if (!password) {
+                alert('비밀번호를 입력하세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/terminal/auth', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password})
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    terminalAuthenticated = true;
+                    terminalToken = result.token;
+                    document.getElementById('terminalInput').disabled = false;
+                    document.getElementById('terminalInput').placeholder = '명령어를 입력하세요...';
+                    document.getElementById('terminalExecBtn').disabled = false;
+                    document.getElementById('terminalExecBtn').style.background = '#0f0';
+                    document.getElementById('terminalExecBtn').style.color = '#000';
+                    document.getElementById('terminalExecBtn').style.cursor = 'pointer';
+                    document.getElementById('terminalAuth').style.display = 'none';
+                    document.getElementById('quickCommands').style.display = 'block';
+                    appendToTerminal('✓ 인증 성공! 명령어를 입력할 수 있습니다.', 'info');
+                    appendToTerminal('작업 디렉토리: /home/biofl/business_metrics', 'info');
+                    document.getElementById('terminalInput').focus();
+                } else {
+                    appendToTerminal('✗ 인증 실패: ' + (result.error || '잘못된 비밀번호'), 'error');
+                }
+            } catch (error) {
+                appendToTerminal('✗ 인증 오류: ' + error.message, 'error');
+            }
+        }
+
+        async function executeCommand() {
+            if (!terminalAuthenticated) {
+                alert('먼저 인증하세요.');
+                return;
+            }
+
+            const input = document.getElementById('terminalInput');
+            const command = input.value.trim();
+            if (!command) return;
+
+            // 히스토리 저장
+            commandHistory.push(command);
+            historyIndex = commandHistory.length;
+
+            appendToTerminal('$ ' + command, 'command');
+            input.value = '';
+
+            try {
+                const response = await fetch('/api/terminal/exec', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({command: command, token: terminalToken})
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.stdout) {
+                        appendToTerminal(result.stdout, 'output');
+                    }
+                    if (result.stderr) {
+                        appendToTerminal(result.stderr, 'error');
+                    }
+                    if (!result.stdout && !result.stderr) {
+                        appendToTerminal('(명령 실행 완료)', 'info');
+                    }
+                } else {
+                    appendToTerminal('오류: ' + (result.error || '명령 실행 실패'), 'error');
+                }
+            } catch (error) {
+                appendToTerminal('실행 오류: ' + error.message, 'error');
+            }
+        }
+
+        function quickCommand(cmd) {
+            document.getElementById('terminalInput').value = cmd;
+            executeCommand();
+        }
+
+        // 터미널 입력창 방향키로 히스토리 탐색
+        document.addEventListener('DOMContentLoaded', function() {
+            const terminalInput = document.getElementById('terminalInput');
+            if (terminalInput) {
+                terminalInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'ArrowUp' && commandHistory.length > 0) {
+                        e.preventDefault();
+                        if (historyIndex > 0) historyIndex--;
+                        terminalInput.value = commandHistory[historyIndex] || '';
+                    } else if (e.key === 'ArrowDown' && commandHistory.length > 0) {
+                        e.preventDefault();
+                        if (historyIndex < commandHistory.length - 1) {
+                            historyIndex++;
+                            terminalInput.value = commandHistory[historyIndex] || '';
+                        } else {
+                            historyIndex = commandHistory.length;
+                            terminalInput.value = '';
+                        }
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>
@@ -6597,6 +6818,79 @@ def preload_data():
 
     elapsed = time.time() - start_time
     print(f"[PRELOAD] 완료! ({elapsed:.1f}초)")
+
+
+# ========== 웹 터미널 API ==========
+@app.route('/api/terminal/auth', methods=['POST'])
+def terminal_auth():
+    """터미널 인증 API"""
+    try:
+        password = request.json.get('password', '')
+
+        if password == TERMINAL_PASSWORD:
+            # 세션 토큰 생성
+            token = secrets.token_hex(32)
+            terminal_sessions[token] = {
+                'created': datetime.now(),
+                'ip': request.remote_addr
+            }
+            return jsonify({'success': True, 'token': token})
+        else:
+            return jsonify({'success': False, 'error': '비밀번호가 틀렸습니다'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/terminal/exec', methods=['POST'])
+def terminal_exec():
+    """터미널 명령어 실행 API"""
+    try:
+        token = request.json.get('token', '')
+        command = request.json.get('command', '')
+
+        # 토큰 검증
+        if token not in terminal_sessions:
+            return jsonify({'success': False, 'error': '인증이 필요합니다'})
+
+        # 세션 만료 확인 (1시간)
+        session = terminal_sessions[token]
+        if (datetime.now() - session['created']).seconds > 3600:
+            del terminal_sessions[token]
+            return jsonify({'success': False, 'error': '세션이 만료되었습니다. 다시 인증해주세요.'})
+
+        if not command.strip():
+            return jsonify({'success': False, 'error': '명령어를 입력하세요'})
+
+        # 위험한 명령어 차단
+        dangerous_commands = ['rm -rf /', 'mkfs', 'dd if=', ':(){:|:&};:', '> /dev/sda']
+        for dangerous in dangerous_commands:
+            if dangerous in command:
+                return jsonify({'success': False, 'error': f'위험한 명령어가 차단되었습니다: {dangerous}'})
+
+        # 명령어 실행
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60,  # 60초 타임아웃
+            cwd='/home/biofl/business_metrics'  # 작업 디렉토리
+        )
+
+        output = result.stdout
+        if result.stderr:
+            output += '\n[STDERR]\n' + result.stderr
+
+        return jsonify({
+            'success': True,
+            'output': output if output else '(출력 없음)',
+            'returncode': result.returncode
+        })
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': '명령어 실행 시간 초과 (60초)'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 if __name__ == '__main__':

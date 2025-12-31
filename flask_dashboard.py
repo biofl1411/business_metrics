@@ -119,6 +119,9 @@ MANAGER_TO_BRANCH = {
     "본사접수": "본사접수",
 }
 
+# 개인별 분석에서 제외할 영업담당 (외부 기관 등)
+EXCLUDED_MANAGERS = {"ISA", "IBK", "미지정"}
+
 def load_excel_data(year, use_cache=True):
     """openpyxl로 직접 엑셀 로드 (캐시 사용)"""
     import time
@@ -337,7 +340,8 @@ def get_ai_data_summary(force_refresh=False):
     summary['filter_values']['purposes'] = sorted(summary['filter_values']['purposes'])
     summary['filter_values']['sample_types'] = sorted(summary['filter_values']['sample_types'])
     summary['filter_values']['items'] = sorted(summary['filter_values']['items'])[:100]  # 상위 100개만
-    summary['filter_values']['managers'] = sorted(summary['filter_values']['managers'])
+    # ISA, IBK 등 제외 대상은 필터 목록에서 제외
+    summary['filter_values']['managers'] = sorted([m for m in summary['filter_values']['managers'] if m not in EXCLUDED_MANAGERS])
 
     # 항목별 데이터 정렬 (상위 50개만 유지)
     for year in ['2024', '2025']:
@@ -5291,9 +5295,12 @@ def goal_analysis():
             by_manager[manager]['revenue_2024'] += revenue
             by_manager[manager]['count_2024'] += 1
 
-        # 영업담당별 성장률 계산
+        # 영업담당별 성장률 계산 (ISA, IBK 등 제외)
         manager_analysis = []
         for manager, data in by_manager.items():
+            # 제외 대상 확인
+            if manager in EXCLUDED_MANAGERS:
+                continue
             if data['revenue_2024'] > 0:
                 mgr_growth = ((data['revenue_2025'] - data['revenue_2024']) / data['revenue_2024'] * 100)
             else:
@@ -5310,8 +5317,8 @@ def goal_analysis():
         manager_analysis.sort(key=lambda x: x['revenue_2025'], reverse=True)
         result['analysis']['by_manager'] = manager_analysis[:15]
 
-        # 성장률 낮은 영업담당 (개선 필요)
-        underperforming_managers = [m for m in manager_analysis if m['growth'] < growth_rate and m['revenue_2024'] > 10000000]
+        # 성장률 낮은 영업담당 (개선 필요) - 제외 대상 빼고
+        underperforming_managers = [m for m in manager_analysis if m['growth'] < growth_rate and m['revenue_2024'] > 10000000 and m['name'] not in EXCLUDED_MANAGERS]
         underperforming_managers.sort(key=lambda x: x['growth'])
 
         # 2. 검사목적별 분석
@@ -5607,7 +5614,7 @@ def goal_analysis():
         teams = set(MANAGER_TO_BRANCH.values())
 
         result['filter_options'] = {
-            'managers': sorted(all_managers),
+            'managers': sorted([m for m in all_managers if m not in EXCLUDED_MANAGERS]),  # ISA, IBK 등 제외
             'teams': sorted(teams),
             'months': list(range(1, 13)),
             'purposes': sorted(all_purposes),

@@ -29,6 +29,11 @@ GEMINI_API_KEYS = [
 GEMINI_API_KEYS = [k for k in GEMINI_API_KEYS if k]  # 빈 키 제거
 current_api_key_index = 0  # 현재 사용 중인 키 인덱스
 
+# Claude API 설정
+CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY', '')  # 환경변수에서 로드
+CLAUDE_MODEL = "claude-opus-4-20250514"  # Opus 4 - 최고 성능 모델
+USE_CLAUDE = bool(CLAUDE_API_KEY)  # API 키가 있으면 Claude 사용
+
 # 경로 설정 - 절대 경로 사용
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path("/home/biofl/business_metrics/data")
@@ -144,8 +149,69 @@ TOKEN_COSTS = {
     'claude-3-haiku': {'input': 0.80, 'output': 4.00},
     'claude-3-sonnet': {'input': 3.00, 'output': 15.00},
     'claude-3-opus': {'input': 15.00, 'output': 75.00},
+    'claude-sonnet-4-20250514': {'input': 3.00, 'output': 15.00},  # Claude Sonnet 4
+    'claude-opus-4-20250514': {'input': 15.00, 'output': 75.00},  # Claude Opus 4
+    'claude-3-5-haiku-20241022': {'input': 0.80, 'output': 4.00},  # Claude 3.5 Haiku
 }
 USD_TO_KRW = 1450  # 환율
+
+
+def call_claude_api(prompt, system_prompt=None, max_tokens=1024):
+    """Claude API 호출 함수"""
+    import urllib.request
+    import json
+
+    url = "https://api.anthropic.com/v1/messages"
+
+    messages = [{"role": "user", "content": prompt}]
+
+    payload = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "messages": messages
+    }
+
+    if system_prompt:
+        payload["system"] = system_prompt
+
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode('utf-8'))
+
+        # 토큰 사용량 기록
+        usage = result.get('usage', {})
+        input_tokens = usage.get('input_tokens', 0)
+        output_tokens = usage.get('output_tokens', 0)
+        record_token_usage(CLAUDE_MODEL, input_tokens, output_tokens)
+        print(f"[Claude] 토큰 사용: 입력={input_tokens}, 출력={output_tokens}")
+
+        # 응답 텍스트 추출
+        content = result.get('content', [])
+        if content and len(content) > 0:
+            return {'success': True, 'text': content[0].get('text', ''), 'usage': usage}
+        else:
+            return {'success': False, 'error': '응답 없음'}
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8') if e.fp else str(e)
+        print(f"[Claude] HTTP 오류: {e.code} - {error_body}")
+        return {'success': False, 'error': f'API 오류 {e.code}: {error_body}'}
+    except Exception as e:
+        print(f"[Claude] 오류: {e}")
+        return {'success': False, 'error': str(e)}
 
 
 def record_token_usage(model, input_tokens, output_tokens):
@@ -5558,6 +5624,33 @@ HTML_TEMPLATE = '''
             });
             document.getElementById('goalRecommendations').innerHTML = recsHtml;
 
+            // AI 인사이트 표시
+            if (data.ai_insight && data.ai_insight.content) {
+                let aiHtml = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin-top: 20px; color: white;">
+                        <h3 style="margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                            🤖 AI 전략 인사이트
+                            <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: normal;">Claude Opus 4</span>
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6;">
+                            ${data.ai_insight.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}
+                        </div>
+                        <div style="margin-top: 10px; font-size: 11px; opacity: 0.7; text-align: right;">
+                            ${data.ai_insight.generated_at ? '생성: ' + new Date(data.ai_insight.generated_at).toLocaleString('ko-KR') : ''}
+                            ${data.ai_insight.tokens ? ' | 토큰: ' + (data.ai_insight.tokens.input + data.ai_insight.tokens.output) : ''}
+                        </div>
+                    </div>
+                `;
+                document.getElementById('goalRecommendations').innerHTML += aiHtml;
+            } else if (data.ai_insight && data.ai_insight.error) {
+                document.getElementById('goalRecommendations').innerHTML += `
+                    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #ff9800;">
+                        <div style="font-weight: bold;">⚠️ AI 인사이트 생성 실패</div>
+                        <div style="color: #666; font-size: 13px; margin-top: 5px;">${data.ai_insight.error}</div>
+                    </div>
+                `;
+            }
+
             // 영업담당별 테이블
             const managerTbody = document.querySelector('#goalManagerTable tbody');
             managerTbody.innerHTML = data.analysis.by_manager.map(m => `
@@ -6325,7 +6418,7 @@ def get_company_context():
 
 @app.route('/api/ai/analyze', methods=['POST'])
 def ai_analyze():
-    """AI 분석 API - Gemini로 자연어 질문 분석"""
+    """AI 분석 API - Claude 또는 Gemini로 자연어 질문 분석"""
     import urllib.request
     import urllib.error
     import time
@@ -6333,24 +6426,18 @@ def ai_analyze():
     query = request.json.get('query', '')
     print(f"[AI] === 분석 요청 시작 ===")
     print(f"[AI] 질문: {query}")
+    print(f"[AI] 사용 API: {'Claude' if USE_CLAUDE else 'Gemini'}")
 
     if not query:
         print(f"[AI] 오류: 질문 없음")
         return jsonify({'error': '질문을 입력해주세요.'})
-
-    global current_api_key_index
-    if not GEMINI_API_KEYS:
-        print(f"[AI] 오류: API 키 없음")
-        return jsonify({'error': 'GEMINI_API_KEY가 설정되지 않았습니다.'})
-
-    print(f"[AI] 사용 가능한 API 키: {len(GEMINI_API_KEYS)}개")
 
     # 캐시된 데이터 요약 사용 (변경 감지 포함)
     data_summary = get_ai_data_summary()
     filter_values = data_summary['filter_values']
     print(f"[AI] 캐시된 요약 사용: 목적 {len(filter_values['purposes'])}개, 유형 {len(filter_values['sample_types'])}개")
 
-    # 2025년 주요 통계 요약 (Gemini에 컨텍스트 제공)
+    # 2025년 주요 통계 요약
     stats_2025 = data_summary['2025']
     top_purposes = sorted(stats_2025['by_purpose'].items(), key=lambda x: x[1]['fee'], reverse=True)[:5]
     top_managers = sorted(stats_2025['by_manager'].items(), key=lambda x: x[1]['fee'], reverse=True)[:5]
@@ -6366,6 +6453,91 @@ def ai_analyze():
     if company_context:
         stats_text = company_context + "\n\n" + stats_text
         print(f"[AI] 기업 정보 컨텍스트 추가됨")
+
+    # Claude API 사용
+    if USE_CLAUDE and CLAUDE_API_KEY:
+        print(f"[AI] Claude API 사용 (모델: {CLAUDE_MODEL})")
+
+        system_prompt = f"""당신은 경영 데이터 분석 전문가입니다. 사용자의 질문을 분석하여 JSON 형식으로 응답하세요.
+
+{stats_text}
+
+사용 가능한 필터 값:
+- 연도: 2024, 2025
+- 검사목적: {', '.join(filter_values['purposes'][:10])}
+- 검체유형: {', '.join(filter_values['sample_types'][:10])}
+- 항목명: {', '.join(filter_values['items'][:15])}
+- 영업담당: {', '.join(filter_values['managers'][:10])}
+
+분석 유형:
+- monthly_trend: 월별 추이 분석
+- comparison: 비교 분석
+- top_items: TOP N 항목 분석
+- summary: 요약 통계
+- direct_answer: 직접 답변 (계산 없이 바로 답변 가능한 경우)
+
+반드시 JSON 형식만 응답하세요:
+{{"analysis_type":"타입","year":"2024|2025","purpose":null,"sample_type":null,"item":null,"manager":null,"top_n":10,"description":"분석 설명","direct_answer":"직접 답변 가능시 여기에 작성"}}"""
+
+        claude_result = call_claude_api(f"질문: {query}", system_prompt=system_prompt, max_tokens=800)
+
+        if claude_result['success']:
+            ai_response = claude_result['text']
+            print(f"[AI] Claude 응답: {ai_response[:300]}...")
+
+            # JSON 파싱
+            try:
+                json_str = ai_response.strip()
+                if '```json' in json_str:
+                    json_str = json_str.split('```json')[1].split('```')[0]
+                elif '```' in json_str:
+                    json_str = json_str.split('```')[1].split('```')[0]
+
+                parsed = json.loads(json_str.strip())
+                print(f"[AI] 파싱 성공: {parsed}")
+
+                # direct_answer 타입이면 바로 응답 반환
+                if parsed.get('analysis_type') == 'direct_answer' and parsed.get('direct_answer'):
+                    return jsonify({
+                        'success': True,
+                        'analysis_type': 'direct_answer',
+                        'description': parsed.get('description', ''),
+                        'direct_answer': parsed.get('direct_answer'),
+                        'parsed_query': parsed,
+                        'ai_model': 'Claude Sonnet 4'
+                    })
+
+                # 데이터 조회 및 분석 실행
+                food_2024 = load_food_item_data('2024')
+                food_2025 = load_food_item_data('2025')
+                data_2024 = load_excel_data('2024')
+                data_2025 = load_excel_data('2025')
+
+                analysis_result = execute_analysis(parsed, food_2024, food_2025, data_2024, data_2025)
+                analysis_result['parsed_query'] = parsed
+                analysis_result['ai_model'] = 'Claude Sonnet 4'
+
+                print(f"[AI] 분석 완료: {analysis_result.get('analysis_type')}")
+                return jsonify(analysis_result)
+
+            except json.JSONDecodeError as e:
+                print(f"[AI] Claude JSON 파싱 오류: {e}")
+                return jsonify({
+                    'error': 'Claude 응답 파싱 실패',
+                    'raw_response': ai_response[:500]
+                })
+        else:
+            print(f"[AI] Claude API 실패: {claude_result.get('error')}")
+            # Claude 실패 시 Gemini로 폴백
+            print(f"[AI] Gemini로 폴백...")
+
+    # Gemini API 사용 (폴백 또는 기본)
+    global current_api_key_index
+    if not GEMINI_API_KEYS:
+        print(f"[AI] 오류: API 키 없음")
+        return jsonify({'error': 'API 키가 설정되지 않았습니다.'})
+
+    print(f"[AI] 사용 가능한 Gemini API 키: {len(GEMINI_API_KEYS)}개")
 
     # 간소화된 Gemini 프롬프트 (토큰 절약)
     system_prompt = f"""데이터 분석 도우미입니다. 질문을 JSON으로 변환하세요.
@@ -7041,6 +7213,65 @@ def goal_analysis():
         })
 
         result['recommendations'] = recommendations
+
+        # ===== Claude AI 인사이트 생성 =====
+        if USE_CLAUDE and CLAUDE_API_KEY:
+            try:
+                # 분석 데이터 요약
+                analysis_summary = f"""
+## 사업 성과 분석 데이터
+
+### 기본 현황
+- 2024년 매출: {revenue_2024/100000000:.2f}억원
+- 2025년 매출: {revenue_2025/100000000:.2f}억원
+- 전년 대비 성장률: {growth_rate:+.1f}%
+- {target_year}년 목표: {target_revenue/100000000:.0f}억원
+- 목표 달성 격차: {gap/100000000:.2f}억원 (추가 {required_growth:.1f}% 성장 필요)
+
+### 영업담당별 현황 (상위 5명)
+{chr(10).join([f"- {m['name']}: {m['revenue_2025']/10000:.0f}만원 (성장률 {m['growth']:+.1f}%)" for m in manager_analysis[:5]])}
+
+### 성장률 부진 담당자
+{chr(10).join([f"- {m['name']}: 성장률 {m['growth']:+.1f}% (전체 평균 {growth_rate:.1f}% 미달)" for m in underperforming_managers[:3]]) if underperforming_managers else '- 없음'}
+
+### 검사목적별 현황 (상위 5개)
+{chr(10).join([f"- {p['name']}: {p['revenue_2025']/10000:.0f}만원 (비중 {p['share']:.1f}%, 성장률 {p['growth']:+.1f}%)" for p in purpose_analysis[:5]])}
+
+### 지역별 현황 (상위 5개)
+{chr(10).join([f"- {r['name']}: {r['revenue_2025']/10000:.0f}만원 (성장률 {r['growth']:+.1f}%)" for r in region_analysis[:5]])}
+
+### 매출 감소 항목
+{chr(10).join([f"- {i['name']}: {i['growth']:.1f}% 감소" for i in declining_items[:5]]) if declining_items else '- 없음'}
+"""
+
+                ai_prompt = f"""당신은 사업 분석 전문가입니다. 아래 데이터를 분석하여 목표 달성을 위한 구체적인 전략적 인사이트를 제공해주세요.
+
+{analysis_summary}
+
+다음 형식으로 분석해주세요:
+
+1. **핵심 진단** (3줄 이내): 현재 상황의 핵심 문제점 또는 기회
+2. **우선순위 전략** (3개): 가장 효과적인 매출 증대 전략
+3. **위험 요소** (2개): 주의해야 할 리스크
+4. **실행 제안** (3개): 구체적인 실행 방안
+
+한국어로 간결하고 실행 가능한 조언을 제공해주세요."""
+
+                ai_result = call_claude_api(ai_prompt, max_tokens=1024)
+
+                if ai_result and 'response' in ai_result:
+                    result['ai_insight'] = {
+                        'content': ai_result['response'],
+                        'model': 'Claude Opus 4',
+                        'generated_at': datetime.now().isoformat()
+                    }
+                    if 'tokens' in ai_result:
+                        result['ai_insight']['tokens'] = ai_result['tokens']
+            except Exception as ai_error:
+                result['ai_insight'] = {
+                    'error': str(ai_error),
+                    'content': None
+                }
 
         # 필터 옵션 추가 (선택 가능한 값들)
         all_managers = set()

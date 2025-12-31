@@ -1557,6 +1557,75 @@ HTML_TEMPLATE = '''
         th.sortable::after { content: '⇅'; position: absolute; right: 5px; opacity: 0.3; font-size: 11px; }
         th.sortable.asc::after { content: '▲'; opacity: 1; color: #667eea; }
         th.sortable.desc::after { content: '▼'; opacity: 1; color: #667eea; }
+
+        /* 업체별 탭 카드 스타일 */
+        .client-cards-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 24px; }
+        .client-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; }
+        .client-card-full { grid-column: 1 / -1; }
+        .client-card-header { padding: 20px 24px; border-bottom: 1px solid #eee; }
+        .client-card-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .client-card-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .client-card-icon.gold { background: #FFF8E1; }
+        .client-card-icon.blue { background: #E3F2FD; }
+        .client-card-icon.green { background: #E8F5E9; }
+        .client-card-icon.purple { background: #F3E8FF; }
+        .client-card-title { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+        .client-card-period { font-size: 13px; color: #64748b; margin-bottom: 12px; padding-left: 42px; }
+        .client-card-summary { display: flex; gap: 24px; flex-wrap: wrap; }
+        .client-summary-item { display: flex; flex-direction: column; }
+        .client-summary-label { font-size: 12px; color: #888; margin-bottom: 2px; }
+        .client-summary-value { font-size: 20px; font-weight: 700; color: #2563eb; }
+        .client-summary-value.highlight { color: #16a34a; }
+        .client-card-body { padding: 0; overflow-x: auto; }
+
+        /* 인원별 카드 레이아웃 */
+        .client-staff-body { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0; }
+        .client-chart-section { padding: 24px; border-right: 1px solid #eee; }
+        .client-chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .client-chart-title { font-size: 14px; font-weight: 600; color: #475569; }
+        .client-staff-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #fff; cursor: pointer; min-width: 140px; }
+        .client-chart-container { position: relative; height: 280px; }
+        .client-table-section { padding: 0; overflow-x: auto; }
+
+        /* 컬럼 그룹 헤더 */
+        .column-group { background: #e2e8f0; text-align: center; font-size: 12px; font-weight: 700; color: #475569; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; }
+        .column-group.sales-group { background: #dbeafe; color: #1e40af; }
+        .column-group.count-group { background: #dcfce7; color: #166534; }
+        .column-group.visit-group { background: #f3e8ff; color: #7c3aed; }
+        .column-group.avg-group { background: #fef3c7; color: #d97706; }
+
+        /* 업체별 테이블 */
+        .client-table { width: 100%; border-collapse: collapse; min-width: 500px; }
+        .client-table thead { background: #f8fafc; }
+        .client-table th { padding: 12px 10px; text-align: left; font-size: 12px; font-weight: 600; color: #64748b; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
+        .client-table td { padding: 12px 10px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+        .client-table tbody tr:hover { background: #f8fafc; }
+
+        /* 순위 뱃지 */
+        .rank-badge { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; }
+        .rank-badge.rank-1 { background: #FEF3C7; color: #D97706; }
+        .rank-badge.rank-2 { background: #E5E7EB; color: #6B7280; }
+        .rank-badge.rank-3 { background: #FED7AA; color: #C2410C; }
+        .rank-badge.rank-default { background: #F1F5F9; color: #64748B; }
+
+        /* 데이터 셀 */
+        .client-company { font-weight: 600; color: #1e293b; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .client-amount { font-weight: 600; color: #1e293b; }
+        .client-amount-sub { color: #94a3b8; font-weight: 400; }
+        .col-2025 { background: rgba(219, 234, 254, 0.3); }
+        .col-2024 { background: rgba(241, 245, 249, 0.5); }
+        .col-avg { background: rgba(254, 243, 199, 0.3); }
+
+        /* 증감 뱃지 */
+        .change-badge { padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
+        .change-badge.positive { background: #DCFCE7; color: #166534; }
+        .change-badge.negative { background: #FEE2E2; color: #DC2626; }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+
+        @media (max-width: 1400px) { .client-cards-container { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .client-staff-body { grid-template-columns: 1fr; } .client-chart-section { border-right: none; border-bottom: 1px solid #eee; } }
     </style>
 </head>
 <body>
@@ -1724,45 +1793,218 @@ HTML_TEMPLATE = '''
 
     <!-- 업체별 탭 -->
     <div id="client" class="tab-content">
-        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
-            <div>
-                <span id="clientYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
-            </div>
-            <div>
-                <label style="margin-right: 10px; font-weight: bold;">👤 담당자 필터:</label>
-                <select id="clientManagerFilter" onchange="updateClientTables()">
-                    <option value="">전체 담당자</option>
-                </select>
-            </div>
-        </div>
-        <div class="charts">
-            <div class="chart-container">
-                <h3>🏆 매출 TOP 20 업체</h3>
-                <div class="scroll-table">
-                    <table id="clientTopTable">
-                        <thead id="clientTopTableHead"><tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+        <div class="client-cards-container">
+
+            <!-- 인원별 거래처 현황 카드 (전체 너비) -->
+            <div class="client-card client-card-full">
+                <div class="client-card-header">
+                    <div class="client-card-header-top">
+                        <div class="client-card-icon purple">👥</div>
+                        <h2 class="client-card-title">인원별 거래처 현황</h2>
+                    </div>
+                    <div class="client-card-period" id="clientStaffPeriod">📅 2025년 vs 2024년 비교</div>
+                    <div class="client-card-summary">
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">총 인원</span>
+                            <span class="client-summary-value" id="clientStaffCount">0명</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 거래처/월 (2025)</span>
+                            <span class="client-summary-value" id="clientAvgMonthly">0개</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 매출 (2025)</span>
+                            <span class="client-summary-value" id="clientAvgSales">0</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 증감률</span>
+                            <span class="client-summary-value highlight" id="clientAvgGrowth">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="client-card-body client-staff-body">
+                    <!-- 왼쪽: 그래프 -->
+                    <div class="client-chart-section">
+                        <div class="client-chart-header">
+                            <span class="client-chart-title">월별 거래처 추이</span>
+                            <select class="client-staff-select" id="clientStaffSelect" onchange="updateClientStaffChart()">
+                                <option value="">전체 평균</option>
+                            </select>
+                        </div>
+                        <div class="client-chart-container">
+                            <canvas id="clientStaffChart"></canvas>
+                        </div>
+                    </div>
+                    <!-- 오른쪽: 테이블 -->
+                    <div class="client-table-section">
+                        <table class="client-table" id="clientStaffTable">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2">담당자</th>
+                                    <th colspan="3" class="column-group visit-group">거래처 수</th>
+                                    <th colspan="2" class="column-group avg-group">평균 (2025)</th>
+                                    <th rowspan="2" class="text-right">증감률</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                    <th class="text-right col-avg">월</th>
+                                    <th class="text-right col-avg">매출</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clientStaffTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <div class="chart-container">
-                <h3>💎 고효율 업체 (높은 단가)</h3>
-                <div class="scroll-table">
-                    <table id="clientEffTable">
-                        <thead id="clientEffTableHead"><tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+
+            <!-- 매출 TOP 업체 카드 -->
+            <div class="client-card">
+                <div class="client-card-header">
+                    <div class="client-card-header-top">
+                        <div class="client-card-icon gold">👑</div>
+                        <h2 class="client-card-title">매출 TOP 업체</h2>
+                    </div>
+                    <div class="client-card-period" id="clientTopPeriod">📅 2025년 vs 2024년 비교</div>
+                    <div class="client-card-summary">
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 매출 (2025)</span>
+                            <span class="client-summary-value" id="clientTopAvgSales">0</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 증감률</span>
+                            <span class="client-summary-value highlight" id="clientTopAvgGrowth">0%</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 건수 (2025)</span>
+                            <span class="client-summary-value" id="clientTopAvgCount">0건</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="client-card-body">
+                    <div style="overflow-x: auto;">
+                        <table class="client-table" id="clientTopTable">
+                            <thead id="clientTopTableHead">
+                                <tr>
+                                    <th rowspan="2">순위</th>
+                                    <th rowspan="2">거래처</th>
+                                    <th colspan="3" class="column-group sales-group">매출</th>
+                                    <th colspan="3" class="column-group count-group">건수</th>
+                                    <th rowspan="2" class="text-right">증감률</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <div class="chart-container">
-                <h3>📦 대량 업체 (많은 건수)</h3>
-                <div class="scroll-table">
-                    <table id="clientVolTable">
-                        <thead id="clientVolTableHead"><tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+
+            <!-- 고효율 업체 카드 -->
+            <div class="client-card">
+                <div class="client-card-header">
+                    <div class="client-card-header-top">
+                        <div class="client-card-icon blue">💎</div>
+                        <h2 class="client-card-title">고효율 업체 (높은 단가)</h2>
+                    </div>
+                    <div class="client-card-period" id="clientEffPeriod">📅 2025년 vs 2024년 비교</div>
+                    <div class="client-card-summary">
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 단가</span>
+                            <span class="client-summary-value" id="clientEffAvgPrice">0</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 매출 (2025)</span>
+                            <span class="client-summary-value" id="clientEffAvgSales">0</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 건수 (2025)</span>
+                            <span class="client-summary-value" id="clientEffAvgCount">0건</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="client-card-body">
+                    <div style="overflow-x: auto;">
+                        <table class="client-table" id="clientEffTable">
+                            <thead id="clientEffTableHead">
+                                <tr>
+                                    <th rowspan="2">거래처</th>
+                                    <th rowspan="2" class="text-right">평균단가</th>
+                                    <th colspan="3" class="column-group sales-group">매출</th>
+                                    <th colspan="3" class="column-group count-group">건수</th>
+                                    <th rowspan="2" class="text-right">증감률</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+
+            <!-- 대량 업체 카드 -->
+            <div class="client-card">
+                <div class="client-card-header">
+                    <div class="client-card-header-top">
+                        <div class="client-card-icon green">📦</div>
+                        <h2 class="client-card-title">대량 업체 (많은 건수)</h2>
+                    </div>
+                    <div class="client-card-period" id="clientVolPeriod">📅 2025년 vs 2024년 비교</div>
+                    <div class="client-card-summary">
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 건수 (2025)</span>
+                            <span class="client-summary-value" id="clientVolAvgCount">0건</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 매출 (2025)</span>
+                            <span class="client-summary-value" id="clientVolAvgSales">0</span>
+                        </div>
+                        <div class="client-summary-item">
+                            <span class="client-summary-label">평균 증감률</span>
+                            <span class="client-summary-value highlight" id="clientVolAvgGrowth">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="client-card-body">
+                    <div style="overflow-x: auto;">
+                        <table class="client-table" id="clientVolTable">
+                            <thead id="clientVolTableHead">
+                                <tr>
+                                    <th rowspan="2">거래처</th>
+                                    <th colspan="3" class="column-group count-group">건수</th>
+                                    <th colspan="3" class="column-group sales-group">매출</th>
+                                    <th rowspan="2" class="text-right">증감률</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                    <th class="text-right col-2025">2025년</th>
+                                    <th class="text-right col-2024">2024년</th>
+                                    <th class="text-right">증감</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -3371,117 +3613,279 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // 인원별 거래처 차트
+        let clientStaffChart = null;
+
         function updateClientTables() {
-            const selectedManager = document.getElementById('clientManagerFilter').value;
+            const currYear = currentData.year;
+            const compYear = compareData?.year;
+            const periodText = compareData ? `📅 ${currYear}년 vs ${compYear}년 비교` : `📅 ${currYear}년`;
 
-            // 연도 라벨 업데이트
-            const yearLabel = document.getElementById('clientYearLabel');
-            const currLabel = currentData.dateLabel || currentData.year + '년';
-            if (compareData) {
-                const compLabel = compareData.dateLabel || compareData.year + '년';
-                yearLabel.textContent = `📅 ${currLabel} vs ${compLabel}`;
-            } else {
-                yearLabel.textContent = `📅 ${currLabel}`;
-            }
+            // 기간 라벨 업데이트
+            ['clientStaffPeriod', 'clientTopPeriod', 'clientEffPeriod', 'clientVolPeriod'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = periodText;
+            });
 
-            let clientData, effData, volData;
+            let clientData = currentData.by_client.slice(0, 5);
+            let effData = currentData.high_efficiency?.slice(0, 5) || [];
+            let volData = currentData.high_volume?.slice(0, 5) || [];
+
             let compareClientMap = {};
+            let compareManagerMap = {};
 
             // 비교 데이터 맵 생성
             if (compareData) {
-                compareData.by_client.forEach(c => {
-                    compareClientMap[c[0]] = c[1];
+                compareData.by_client.forEach(c => { compareClientMap[c[0]] = c[1]; });
+                compareData.by_manager.forEach(m => { compareManagerMap[m[0]] = m[1]; });
+            }
+
+            // ===== 인원별 거래처 현황 =====
+            updateClientStaffSection(compareManagerMap);
+
+            // ===== 매출 TOP 업체 =====
+            const topTbody = document.querySelector('#clientTopTable tbody');
+            let totalSales = 0, totalCount = 0, totalGrowth = 0, growthCount = 0;
+
+            topTbody.innerHTML = clientData.map((d, i) => {
+                const compSales = compareClientMap[d[0]]?.sales || 0;
+                const compCount = compareClientMap[d[0]]?.count || 0;
+                const salesDiff = d[1].sales - compSales;
+                const countDiff = d[1].count - compCount;
+                const growthRate = compSales > 0 ? ((salesDiff / compSales) * 100) : (d[1].sales > 0 ? 100 : 0);
+
+                totalSales += d[1].sales;
+                totalCount += d[1].count;
+                if (compSales > 0) { totalGrowth += growthRate; growthCount++; }
+
+                const rankClass = i < 3 ? `rank-${i+1}` : 'rank-default';
+                const changeClass = growthRate >= 0 ? 'positive' : 'negative';
+
+                return `<tr>
+                    <td><span class="rank-badge ${rankClass}">${i+1}</span></td>
+                    <td class="client-company" title="${d[0]}">${d[0]}</td>
+                    <td class="text-right client-amount col-2025">${formatCompact(d[1].sales)}</td>
+                    <td class="text-right client-amount-sub col-2024">${formatCompact(compSales)}</td>
+                    <td class="text-right">${salesDiff >= 0 ? '+' : ''}${formatCompact(salesDiff)}</td>
+                    <td class="text-right client-amount col-2025">${d[1].count.toLocaleString()}</td>
+                    <td class="text-right client-amount-sub col-2024">${compCount.toLocaleString()}</td>
+                    <td class="text-right">${countDiff >= 0 ? '+' : ''}${countDiff.toLocaleString()}</td>
+                    <td class="text-right"><span class="change-badge ${changeClass}">${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(1)}%</span></td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="9">데이터 없음</td></tr>';
+
+            // 요약 통계 업데이트
+            const avgSales = clientData.length > 0 ? totalSales / clientData.length : 0;
+            const avgCount = clientData.length > 0 ? totalCount / clientData.length : 0;
+            const avgGrowth = growthCount > 0 ? totalGrowth / growthCount : 0;
+            document.getElementById('clientTopAvgSales').textContent = formatCompact(avgSales);
+            document.getElementById('clientTopAvgCount').textContent = Math.round(avgCount).toLocaleString() + '건';
+            document.getElementById('clientTopAvgGrowth').textContent = (avgGrowth >= 0 ? '+' : '') + avgGrowth.toFixed(1) + '%';
+
+            // ===== 고효율 업체 =====
+            const effTbody = document.querySelector('#clientEffTable tbody');
+            let effTotalPrice = 0, effTotalSales = 0, effTotalCount = 0;
+
+            effTbody.innerHTML = effData.map(d => {
+                const compSales = compareClientMap[d[0]]?.sales || 0;
+                const compCount = compareClientMap[d[0]]?.count || 0;
+                const salesDiff = d[1].sales - compSales;
+                const countDiff = d[1].count - compCount;
+                const growthRate = compSales > 0 ? ((salesDiff / compSales) * 100) : (d[1].sales > 0 ? 100 : 0);
+
+                effTotalPrice += d[1].avg;
+                effTotalSales += d[1].sales;
+                effTotalCount += d[1].count;
+
+                const changeClass = growthRate >= 0 ? 'positive' : 'negative';
+
+                return `<tr>
+                    <td class="client-company" title="${d[0]}">${d[0]}</td>
+                    <td class="text-right client-amount">${formatCompact(d[1].avg)}</td>
+                    <td class="text-right col-2025">${formatCompact(d[1].sales)}</td>
+                    <td class="text-right client-amount-sub col-2024">${formatCompact(compSales)}</td>
+                    <td class="text-right">${salesDiff >= 0 ? '+' : ''}${formatCompact(salesDiff)}</td>
+                    <td class="text-right col-2025">${d[1].count.toLocaleString()}</td>
+                    <td class="text-right client-amount-sub col-2024">${compCount.toLocaleString()}</td>
+                    <td class="text-right">${countDiff >= 0 ? '+' : ''}${countDiff.toLocaleString()}</td>
+                    <td class="text-right"><span class="change-badge ${changeClass}">${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(1)}%</span></td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="9">데이터 없음</td></tr>';
+
+            const effAvgPrice = effData.length > 0 ? effTotalPrice / effData.length : 0;
+            const effAvgSales = effData.length > 0 ? effTotalSales / effData.length : 0;
+            const effAvgCount = effData.length > 0 ? effTotalCount / effData.length : 0;
+            document.getElementById('clientEffAvgPrice').textContent = formatCompact(effAvgPrice);
+            document.getElementById('clientEffAvgSales').textContent = formatCompact(effAvgSales);
+            document.getElementById('clientEffAvgCount').textContent = effAvgCount.toFixed(1) + '건';
+
+            // ===== 대량 업체 =====
+            const volTbody = document.querySelector('#clientVolTable tbody');
+            let volTotalCount = 0, volTotalSales = 0, volTotalGrowth = 0, volGrowthCount = 0;
+
+            volTbody.innerHTML = volData.map(d => {
+                const compSales = compareClientMap[d[0]]?.sales || 0;
+                const compCount = compareClientMap[d[0]]?.count || 0;
+                const salesDiff = d[1].sales - compSales;
+                const countDiff = d[1].count - compCount;
+                const growthRate = compCount > 0 ? ((countDiff / compCount) * 100) : (d[1].count > 0 ? 100 : 0);
+
+                volTotalCount += d[1].count;
+                volTotalSales += d[1].sales;
+                if (compCount > 0) { volTotalGrowth += growthRate; volGrowthCount++; }
+
+                const changeClass = growthRate >= 0 ? 'positive' : 'negative';
+
+                return `<tr>
+                    <td class="client-company" title="${d[0]}">${d[0]}</td>
+                    <td class="text-right client-amount col-2025">${d[1].count.toLocaleString()}</td>
+                    <td class="text-right client-amount-sub col-2024">${compCount.toLocaleString()}</td>
+                    <td class="text-right">${countDiff >= 0 ? '+' : ''}${countDiff.toLocaleString()}</td>
+                    <td class="text-right client-amount col-2025">${formatCompact(d[1].sales)}</td>
+                    <td class="text-right client-amount-sub col-2024">${formatCompact(compSales)}</td>
+                    <td class="text-right">${salesDiff >= 0 ? '+' : ''}${formatCompact(salesDiff)}</td>
+                    <td class="text-right"><span class="change-badge ${changeClass}">${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(1)}%</span></td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="8">데이터 없음</td></tr>';
+
+            const volAvgCount = volData.length > 0 ? volTotalCount / volData.length : 0;
+            const volAvgSales = volData.length > 0 ? volTotalSales / volData.length : 0;
+            const volAvgGrowth = volGrowthCount > 0 ? volTotalGrowth / volGrowthCount : 0;
+            document.getElementById('clientVolAvgCount').textContent = Math.round(volAvgCount).toLocaleString() + '건';
+            document.getElementById('clientVolAvgSales').textContent = formatCompact(volAvgSales);
+            document.getElementById('clientVolAvgGrowth').textContent = (volAvgGrowth >= 0 ? '+' : '') + volAvgGrowth.toFixed(1) + '%';
+        }
+
+        function updateClientStaffSection(compareManagerMap) {
+            const managers = currentData.by_manager || [];
+            const staffSelect = document.getElementById('clientStaffSelect');
+            const staffTbody = document.getElementById('clientStaffTableBody');
+
+            // 드롭다운 업데이트
+            staffSelect.innerHTML = '<option value="">전체 평균</option>';
+            managers.forEach(m => {
+                staffSelect.innerHTML += `<option value="${m[0]}">${m[0]}</option>`;
+            });
+
+            // 테이블 데이터 생성
+            let totalClients = 0, totalSales = 0, totalGrowth = 0, growthCount = 0;
+
+            staffTbody.innerHTML = managers.slice(0, 10).map(m => {
+                const name = m[0];
+                const currData = m[1];
+                const compData = compareManagerMap[name] || { sales: 0, count: 0 };
+
+                const currClients = currentData.manager_top_clients?.[name]?.length || 0;
+                const compClients = compareData?.manager_top_clients?.[name]?.length || 0;
+                const clientDiff = currClients - compClients;
+                const avgMonthly = (currClients / 12).toFixed(1);
+                const avgSales = formatCompact(currData.sales / 12);
+                const growthRate = compData.sales > 0 ? ((currData.sales - compData.sales) / compData.sales * 100) : (currData.sales > 0 ? 100 : 0);
+
+                totalClients += currClients;
+                totalSales += currData.sales;
+                if (compData.sales > 0) { totalGrowth += growthRate; growthCount++; }
+
+                const changeClass = growthRate >= 0 ? 'positive' : 'negative';
+
+                return `<tr>
+                    <td class="client-company">${name}</td>
+                    <td class="text-right client-amount col-2025">${currClients}</td>
+                    <td class="text-right client-amount-sub col-2024">${compClients}</td>
+                    <td class="text-right">${clientDiff >= 0 ? '+' : ''}${clientDiff}</td>
+                    <td class="text-right col-avg">${avgMonthly}</td>
+                    <td class="text-right col-avg">${avgSales}</td>
+                    <td class="text-right"><span class="change-badge ${changeClass}">${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(1)}%</span></td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
+
+            // 요약 통계 업데이트
+            const staffCount = managers.length;
+            const avgMonthly = staffCount > 0 ? (totalClients / staffCount / 12).toFixed(1) : '0';
+            const avgSales = staffCount > 0 ? formatCompact(totalSales / staffCount) : '0';
+            const avgGrowth = growthCount > 0 ? totalGrowth / growthCount : 0;
+
+            document.getElementById('clientStaffCount').textContent = staffCount + '명';
+            document.getElementById('clientAvgMonthly').textContent = avgMonthly + '개';
+            document.getElementById('clientAvgSales').textContent = avgSales;
+            document.getElementById('clientAvgGrowth').textContent = (avgGrowth >= 0 ? '+' : '') + avgGrowth.toFixed(1) + '%';
+
+            // 차트 업데이트
+            updateClientStaffChart();
+        }
+
+        function updateClientStaffChart() {
+            const ctx = document.getElementById('clientStaffChart');
+            if (!ctx) return;
+
+            const selectedManager = document.getElementById('clientStaffSelect').value;
+
+            // 월별 데이터 준비
+            const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+            let currMonthData = new Array(12).fill(0);
+            let compMonthData = new Array(12).fill(0);
+
+            if (currentData.by_month) {
+                currentData.by_month.forEach(m => {
+                    const monthIdx = m[0] - 1;
+                    if (monthIdx >= 0 && monthIdx < 12) {
+                        currMonthData[monthIdx] = m[1].count || 0;
+                    }
                 });
             }
 
-            if (selectedManager && currentData.manager_top_clients[selectedManager]) {
-                // 담당자별 데이터 사용
-                const managerClients = currentData.manager_top_clients[selectedManager];
-
-                // 매출순 정렬
-                clientData = managerClients.map(c => [c[0], {
-                    sales: c[1].sales,
-                    count: c[1].count,
-                    avg: c[1].count > 0 ? c[1].sales / c[1].count : 0
-                }]);
-
-                // 고효율 (단가순)
-                effData = [...clientData].sort((a, b) => b[1].avg - a[1].avg).slice(0, 20);
-
-                // 대량 (건수순)
-                volData = [...clientData].sort((a, b) => b[1].count - a[1].count).slice(0, 20);
-
-                clientData = clientData.slice(0, 20);
-            } else {
-                // 전체 데이터 사용
-                clientData = currentData.by_client.slice(0, 20);
-                effData = currentData.high_efficiency;
-                volData = currentData.high_volume;
+            if (compareData?.by_month) {
+                compareData.by_month.forEach(m => {
+                    const monthIdx = m[0] - 1;
+                    if (monthIdx >= 0 && monthIdx < 12) {
+                        compMonthData[monthIdx] = m[1].count || 0;
+                    }
+                });
             }
 
-            // TOP 20 업체 (비교 모드 지원)
-            const topThead = document.getElementById('clientTopTableHead');
-            const topTbody = document.querySelector('#clientTopTable tbody');
-
-            if (compareData) {
-                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>건수 증감</th><th>증감율(%)</th></tr>`;
-                topTbody.innerHTML = clientData.map((d, i) => {
-                    const compSales = compareClientMap[d[0]]?.sales || 0;
-                    const compCount = compareClientMap[d[0]]?.count || 0;
-                    const diff = d[1].sales - compSales;
-                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
-                    const countDiff = d[1].count - compCount;
-                    const countDiffRate = compCount > 0 ? ((countDiff / compCount) * 100).toFixed(1) : (d[1].count > 0 ? 100 : 0);
-                    return `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td class="${countDiff >= 0 ? 'positive' : 'negative'}">${countDiff >= 0 ? '+' : ''}${countDiff.toLocaleString()}</td><td class="${countDiff >= 0 ? 'positive' : 'negative'}">${countDiff >= 0 ? '+' : ''}${countDiffRate}%</td></tr>`;
-                }).join('') || '<tr><td colspan="9">데이터 없음</td></tr>';
-            } else {
-                topThead.innerHTML = `<tr><th>순위</th><th>거래처</th><th>매출액</th><th>건수</th><th>평균단가</th></tr>`;
-                topTbody.innerHTML = clientData.map((d, i) =>
-                    `<tr><td>${i+1}</td><td>${d[0]}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
-                ).join('') || '<tr><td colspan="5">데이터 없음</td></tr>';
+            if (clientStaffChart) {
+                clientStaffChart.destroy();
             }
 
-            // 고효율 업체 (비교 모드 지원)
-            const effThead = document.getElementById('clientEffTableHead');
-            const effTbody = document.querySelector('#clientEffTable tbody');
+            clientStaffChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: currentData.year + '년',
+                            data: currMonthData,
+                            backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                            borderRadius: 4
+                        },
+                        {
+                            label: compareData ? compareData.year + '년' : '',
+                            data: compMonthData,
+                            backgroundColor: 'rgba(148, 163, 184, 0.5)',
+                            borderRadius: 4,
+                            hidden: !compareData
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', align: 'end', labels: { boxWidth: 12, padding: 16, font: { size: 12 } } }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => v.toLocaleString() + '건' } }
+                    }
+                }
+            });
+        }
 
-            if (compareData) {
-                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>${currentData.year}년</th><th>${compareData.year}년</th><th>증감</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>건수 증감</th><th>증감율(%)</th></tr>`;
-                effTbody.innerHTML = effData.map(d => {
-                    const compSales = compareClientMap[d[0]]?.sales || 0;
-                    const compCount = compareClientMap[d[0]]?.count || 0;
-                    const diff = d[1].sales - compSales;
-                    const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : (d[1].sales > 0 ? 100 : 0);
-                    const countDiff = d[1].count - compCount;
-                    const countDiffRate = compCount > 0 ? ((countDiff / compCount) * 100).toFixed(1) : (d[1].count > 0 ? 100 : 0);
-                    return `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)} (${diff >= 0 ? '+' : ''}${diffRate}%)</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td class="${countDiff >= 0 ? 'positive' : 'negative'}">${countDiff >= 0 ? '+' : ''}${countDiff.toLocaleString()}</td><td class="${countDiff >= 0 ? 'positive' : 'negative'}">${countDiff >= 0 ? '+' : ''}${countDiffRate}%</td></tr>`;
-                }).join('') || '<tr><td colspan="9">데이터 없음</td></tr>';
-            } else {
-                effThead.innerHTML = `<tr><th>거래처</th><th>평균단가</th><th>매출액</th><th>건수</th></tr>`;
-                effTbody.innerHTML = effData.map(d =>
-                    `<tr><td>${d[0]}</td><td>${formatCurrency(d[1].avg)}</td><td>${formatCurrency(d[1].sales)}</td><td>${d[1].count}</td></tr>`
-                ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
-            }
-
-            // 대량 업체 (비교 모드 지원)
-            const volThead = document.getElementById('clientVolTableHead');
-            const volTbody = document.querySelector('#clientVolTable tbody');
-
-            if (compareData) {
-                volThead.innerHTML = `<tr><th>거래처</th><th>${currentData.year}년 건수</th><th>${compareData.year}년 건수</th><th>건수 증감</th><th>증감율(%)</th><th>${currentData.year}년 매출</th><th>${compareData.year}년 매출</th></tr>`;
-                volTbody.innerHTML = volData.map(d => {
-                    const compCount = compareClientMap[d[0]]?.count || 0;
-                    const compSales = compareClientMap[d[0]]?.sales || 0;
-                    const diff = d[1].count - compCount;
-                    const diffRate = compCount > 0 ? ((diff / compCount) * 100).toFixed(1) : (d[1].count > 0 ? 100 : 0);
-                    return `<tr><td>${d[0]}</td><td>${d[1].count.toLocaleString()}</td><td>${compCount.toLocaleString()}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</td><td class="${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(compSales)}</td></tr>`;
-                }).join('') || '<tr><td colspan="7">데이터 없음</td></tr>';
-            } else {
-                volThead.innerHTML = `<tr><th>거래처</th><th>건수</th><th>매출액</th><th>평균단가</th></tr>`;
-                volTbody.innerHTML = volData.map(d =>
-                    `<tr><td>${d[0]}</td><td>${d[1].count}</td><td>${formatCurrency(d[1].sales)}</td><td>${formatCurrency(d[1].avg)}</td></tr>`
-                ).join('') || '<tr><td colspan="4">데이터 없음</td></tr>';
-            }
+        // 금액 간략화 포맷
+        function formatCompact(value) {
+            if (value >= 100000000) return (value / 100000000).toFixed(1) + '억';
+            if (value >= 10000) return (value / 10000).toFixed(0) + '만';
+            return Math.round(value).toLocaleString();
         }
 
         function updateDefectPurposeFilter() {

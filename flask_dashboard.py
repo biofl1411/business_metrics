@@ -26,12 +26,366 @@ current_api_key_index = 0  # 현재 사용 중인 키 인덱스
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path("/home/biofl/business_metrics/data")
 CACHE_FILE = BASE_DIR / "data_cache.pkl"  # 파일 캐시 경로
+SQLITE_DB = DATA_DIR / "business_data.db"  # SQLite 데이터베이스 경로
 
 # 데이터 캐시 (메모리에 저장)
 DATA_CACHE = {}
 CACHE_TIME = {}
 FILE_MTIME = {}  # 파일 수정 시간 추적
 AI_SUMMARY_CACHE = {}  # AI용 데이터 요약 캐시
+USE_SQLITE = True  # SQLite 사용 여부
+
+
+def init_sqlite_db():
+    """SQLite 데이터베이스 초기화"""
+    import sqlite3
+
+    conn = sqlite3.connect(str(SQLITE_DB))
+    cursor = conn.cursor()
+
+    # 기본 데이터 테이블 (연도별 Excel 데이터)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS excel_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year TEXT,
+            접수번호 TEXT,
+            접수일자 TEXT,
+            발행일 TEXT,
+            검체유형 TEXT,
+            업체명 TEXT,
+            의뢰인명 TEXT,
+            업체주소 TEXT,
+            영업담당 TEXT,
+            검사목적 TEXT,
+            총금액 REAL,
+            raw_data TEXT
+        )
+    ''')
+
+    # food_item 데이터 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS food_item_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year TEXT,
+            접수일자 TEXT,
+            발행일 TEXT,
+            검체유형 TEXT,
+            업체명 TEXT,
+            의뢰인명 TEXT,
+            업체주소 TEXT,
+            항목명 TEXT,
+            규격 TEXT,
+            항목담당 TEXT,
+            결과입력자 TEXT,
+            입력일 TEXT,
+            분석일 TEXT,
+            항목단위 TEXT,
+            시험결과 TEXT,
+            시험치 TEXT,
+            성적서결과 TEXT,
+            판정 TEXT,
+            검사목적 TEXT,
+            긴급여부 TEXT,
+            항목수수료 REAL,
+            영업담당 TEXT
+        )
+    ''')
+
+    # 메타데이터 테이블 (파일 수정 시간 추적)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS file_metadata (
+            file_path TEXT PRIMARY KEY,
+            mtime REAL,
+            row_count INTEGER
+        )
+    ''')
+
+    # 인덱스 생성 (빠른 검색용)
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_year ON excel_data(year)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_manager ON excel_data(영업담당)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_purpose ON excel_data(검사목적)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_food_year ON food_item_data(year)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_food_manager ON food_item_data(영업담당)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_food_purpose ON food_item_data(검사목적)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_food_item ON food_item_data(항목명)')
+
+    conn.commit()
+    conn.close()
+    print("[SQLITE] 데이터베이스 초기화 완료")
+
+
+def check_sqlite_needs_update():
+    """SQLite DB 업데이트 필요 여부 확인"""
+    import sqlite3
+
+    if not SQLITE_DB.exists():
+        return True
+
+    try:
+        conn = sqlite3.connect(str(SQLITE_DB))
+        cursor = conn.cursor()
+
+        # 모든 Excel 파일의 현재 mtime 확인
+        for year in ['2024', '2025']:
+            # 기본 데이터
+            data_path = DATA_DIR / str(year)
+            if data_path.exists():
+                for f in sorted(data_path.glob("*.xlsx")):
+                    file_path = str(f)
+                    current_mtime = f.stat().st_mtime
+
+                    cursor.execute('SELECT mtime FROM file_metadata WHERE file_path = ?', (file_path,))
+                    row = cursor.fetchone()
+
+                    if not row or row[0] < current_mtime:
+                        conn.close()
+                        print(f"[SQLITE] 업데이트 필요: {f.name}")
+                        return True
+
+            # food_item 데이터
+            food_path = DATA_DIR / "food_item" / str(year)
+            if food_path.exists():
+                for f in sorted(food_path.glob("*.xlsx")):
+                    file_path = str(f)
+                    current_mtime = f.stat().st_mtime
+
+                    cursor.execute('SELECT mtime FROM file_metadata WHERE file_path = ?', (file_path,))
+                    row = cursor.fetchone()
+
+                    if not row or row[0] < current_mtime:
+                        conn.close()
+                        print(f"[SQLITE] 업데이트 필요: {f.name}")
+                        return True
+
+        conn.close()
+        return False
+
+    except Exception as e:
+        print(f"[SQLITE] 체크 오류: {e}")
+        return True
+
+
+def convert_excel_to_sqlite():
+    """Excel 파일을 SQLite로 변환"""
+    import sqlite3
+    import time
+    from openpyxl import load_workbook
+
+    print("[SQLITE] Excel → SQLite 변환 시작...")
+    start_time = time.time()
+
+    init_sqlite_db()
+    conn = sqlite3.connect(str(SQLITE_DB))
+    cursor = conn.cursor()
+
+    total_records = 0
+
+    for year in ['2024', '2025']:
+        # 기본 데이터 변환
+        data_path = DATA_DIR / str(year)
+        if data_path.exists():
+            for f in sorted(data_path.glob("*.xlsx")):
+                file_path = str(f)
+                current_mtime = f.stat().st_mtime
+
+                # 이미 변환된 파일인지 확인
+                cursor.execute('SELECT mtime FROM file_metadata WHERE file_path = ?', (file_path,))
+                row = cursor.fetchone()
+                if row and row[0] >= current_mtime:
+                    print(f"[SQLITE] {f.name} 스킵 (이미 최신)")
+                    continue
+
+                # 기존 데이터 삭제 후 재삽입
+                cursor.execute('DELETE FROM excel_data WHERE year = ? AND raw_data LIKE ?',
+                              (year, f'%{f.name}%'))
+
+                try:
+                    wb = load_workbook(f, read_only=True, data_only=True)
+                    ws = wb.active
+                    headers = [cell.value for cell in ws[1]]
+
+                    batch = []
+                    for row_data in ws.iter_rows(min_row=2, values_only=True):
+                        row_dict = dict(zip(headers, row_data))
+                        batch.append((
+                            year,
+                            str(row_dict.get('접수번호', '')),
+                            str(row_dict.get('접수일자', '')),
+                            str(row_dict.get('발행일', '')),
+                            str(row_dict.get('검체유형', '')),
+                            str(row_dict.get('업체명', '')),
+                            str(row_dict.get('의뢰인명', '')),
+                            str(row_dict.get('업체주소', '')),
+                            str(row_dict.get('영업담당', '')),
+                            str(row_dict.get('검사목적', '')),
+                            float(row_dict.get('총금액', 0) or 0),
+                            json.dumps(row_dict, ensure_ascii=False, default=str)
+                        ))
+
+                    cursor.executemany('''
+                        INSERT INTO excel_data
+                        (year, 접수번호, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 영업담당, 검사목적, 총금액, raw_data)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', batch)
+
+                    # 메타데이터 업데이트
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
+                        VALUES (?, ?, ?)
+                    ''', (file_path, current_mtime, len(batch)))
+
+                    wb.close()
+                    total_records += len(batch)
+                    print(f"[SQLITE] {f.name}: {len(batch)}건 변환")
+
+                except Exception as e:
+                    print(f"[SQLITE ERROR] {f.name}: {e}")
+
+        # food_item 데이터 변환
+        food_path = DATA_DIR / "food_item" / str(year)
+        if food_path.exists():
+            for f in sorted(food_path.glob("*.xlsx")):
+                file_path = str(f)
+                current_mtime = f.stat().st_mtime
+
+                cursor.execute('SELECT mtime FROM file_metadata WHERE file_path = ?', (file_path,))
+                row = cursor.fetchone()
+                if row and row[0] >= current_mtime:
+                    print(f"[SQLITE] food_item {f.name} 스킵 (이미 최신)")
+                    continue
+
+                # 파일명 기반으로 삭제 (월별 데이터)
+                month = f.stem.split('_')[-1] if '_' in f.stem else f.stem
+                cursor.execute('DELETE FROM food_item_data WHERE year = ?', (year,))
+
+                try:
+                    wb = load_workbook(f, read_only=True, data_only=True)
+                    ws = wb.active
+                    headers = [cell.value for cell in ws[1]]
+
+                    required_columns = ['접수일자', '발행일', '검체유형', '업체명', '의뢰인명', '업체주소',
+                                       '항목명', '규격', '항목담당', '결과입력자', '입력일', '분석일',
+                                       '항목단위', '시험결과', '시험치', '성적서결과', '판정', '검사목적',
+                                       '긴급여부', '항목수수료', '영업담당']
+
+                    col_indices = {}
+                    for i, h in enumerate(headers):
+                        if h in required_columns:
+                            col_indices[h] = i
+
+                    batch = []
+                    for row_data in ws.iter_rows(min_row=2, values_only=True):
+                        row_dict = {}
+                        for col_name, idx in col_indices.items():
+                            row_dict[col_name] = row_data[idx] if idx < len(row_data) else None
+
+                        batch.append((
+                            year,
+                            str(row_dict.get('접수일자', '') or ''),
+                            str(row_dict.get('발행일', '') or ''),
+                            str(row_dict.get('검체유형', '') or ''),
+                            str(row_dict.get('업체명', '') or ''),
+                            str(row_dict.get('의뢰인명', '') or ''),
+                            str(row_dict.get('업체주소', '') or ''),
+                            str(row_dict.get('항목명', '') or ''),
+                            str(row_dict.get('규격', '') or ''),
+                            str(row_dict.get('항목담당', '') or ''),
+                            str(row_dict.get('결과입력자', '') or ''),
+                            str(row_dict.get('입력일', '') or ''),
+                            str(row_dict.get('분석일', '') or ''),
+                            str(row_dict.get('항목단위', '') or ''),
+                            str(row_dict.get('시험결과', '') or ''),
+                            str(row_dict.get('시험치', '') or ''),
+                            str(row_dict.get('성적서결과', '') or ''),
+                            str(row_dict.get('판정', '') or ''),
+                            str(row_dict.get('검사목적', '') or ''),
+                            str(row_dict.get('긴급여부', '') or ''),
+                            float(row_dict.get('항목수수료', 0) or 0),
+                            str(row_dict.get('영업담당', '') or '')
+                        ))
+
+                    cursor.executemany('''
+                        INSERT INTO food_item_data
+                        (year, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 항목명, 규격,
+                         항목담당, 결과입력자, 입력일, 분석일, 항목단위, 시험결과, 시험치, 성적서결과,
+                         판정, 검사목적, 긴급여부, 항목수수료, 영업담당)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', batch)
+
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
+                        VALUES (?, ?, ?)
+                    ''', (file_path, current_mtime, len(batch)))
+
+                    wb.close()
+                    total_records += len(batch)
+                    print(f"[SQLITE] food_item {f.name}: {len(batch)}건 변환")
+
+                except Exception as e:
+                    print(f"[SQLITE ERROR] food_item {f.name}: {e}")
+
+    conn.commit()
+    conn.close()
+
+    elapsed = time.time() - start_time
+    print(f"[SQLITE] 변환 완료! 총 {total_records:,}건, {elapsed:.1f}초 소요")
+
+
+def load_excel_data_sqlite(year):
+    """SQLite에서 데이터 로드 (빠름)"""
+    import sqlite3
+    import time
+
+    start_time = time.time()
+
+    conn = sqlite3.connect(str(SQLITE_DB))
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT raw_data FROM excel_data WHERE year = ?', (str(year),))
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        try:
+            data.append(json.loads(row[0]))
+        except:
+            pass
+
+    conn.close()
+
+    elapsed = time.time() - start_time
+    print(f"[SQLITE] {year}년 데이터 로드: {len(data):,}건, {elapsed:.2f}초")
+
+    return data
+
+
+def load_food_item_data_sqlite(year):
+    """SQLite에서 food_item 데이터 로드 (빠름)"""
+    import sqlite3
+    import time
+
+    start_time = time.time()
+
+    conn = sqlite3.connect(str(SQLITE_DB))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 항목명, 규격,
+               항목담당, 결과입력자, 입력일, 분석일, 항목단위, 시험결과, 시험치,
+               성적서결과, 판정, 검사목적, 긴급여부, 항목수수료, 영업담당
+        FROM food_item_data WHERE year = ?
+    ''', (str(year),))
+
+    rows = cursor.fetchall()
+    data = [dict(row) for row in rows]
+
+    conn.close()
+
+    elapsed = time.time() - start_time
+    print(f"[SQLITE] food_item {year}년 데이터 로드: {len(data):,}건, {elapsed:.2f}초")
+
+    return data
 
 
 def get_data_files_mtime():
@@ -129,9 +483,8 @@ MANAGER_TO_BRANCH = {
 EXCLUDED_MANAGERS = {"ISA", "IBK", "미지정"}
 
 def load_excel_data(year, use_cache=True):
-    """openpyxl로 직접 엑셀 로드 (캐시 사용)"""
+    """데이터 로드 (SQLite 우선, 없으면 Excel)"""
     import time
-    from openpyxl import load_workbook
 
     # 캐시 확인 (1시간 유효)
     cache_key = str(year)
@@ -141,11 +494,21 @@ def load_excel_data(year, use_cache=True):
             print(f"[CACHE] {year}년 데이터 캐시 사용 ({len(DATA_CACHE[cache_key])}건)")
             return DATA_CACHE[cache_key]
 
+    # SQLite 사용 (DB가 존재하면)
+    if USE_SQLITE and SQLITE_DB.exists():
+        all_data = load_excel_data_sqlite(year)
+        DATA_CACHE[cache_key] = all_data
+        CACHE_TIME[cache_key] = time.time()
+        return all_data
+
+    # 기존 Excel 로드 방식 (폴백)
+    from openpyxl import load_workbook
+
     data_path = DATA_DIR / str(year)
     if not data_path.exists():
         return []
 
-    print(f"[LOAD] {year}년 데이터 로딩 시작...")
+    print(f"[LOAD] {year}년 데이터 로딩 시작 (Excel)...")
     start_time = time.time()
 
     all_data = []
@@ -175,9 +538,8 @@ def load_excel_data(year, use_cache=True):
     return all_data
 
 def load_food_item_data(year, use_cache=True):
-    """food_item 폴더에서 검사항목 데이터 로드"""
+    """food_item 데이터 로드 (SQLite 우선, 없으면 Excel)"""
     import time
-    from openpyxl import load_workbook
 
     cache_key = f"food_item_{year}"
     if use_cache and cache_key in DATA_CACHE:
@@ -186,12 +548,22 @@ def load_food_item_data(year, use_cache=True):
             print(f"[CACHE] food_item {year}년 데이터 캐시 사용 ({len(DATA_CACHE[cache_key])}건)")
             return DATA_CACHE[cache_key]
 
+    # SQLite 사용 (DB가 존재하면)
+    if USE_SQLITE and SQLITE_DB.exists():
+        all_data = load_food_item_data_sqlite(year)
+        DATA_CACHE[cache_key] = all_data
+        CACHE_TIME[cache_key] = time.time()
+        return all_data
+
+    # 기존 Excel 로드 방식 (폴백)
+    from openpyxl import load_workbook
+
     data_path = DATA_DIR / "food_item" / str(year)
     if not data_path.exists():
         print(f"[WARN] food_item {year}년 폴더 없음: {data_path}")
         return []
 
-    print(f"[LOAD] food_item {year}년 데이터 로딩 시작...")
+    print(f"[LOAD] food_item {year}년 데이터 로딩 시작 (Excel)...")
     start_time = time.time()
 
     # 필요한 컬럼만 로드
@@ -6178,26 +6550,49 @@ def extract_sido(address):
 
 
 def preload_data():
-    """서버 시작 시 데이터 미리 로드 (파일 캐시 우선)"""
+    """서버 시작 시 데이터 미리 로드 (SQLite 우선)"""
     import time
     start_time = time.time()
 
-    # 1. 파일 캐시에서 로드 시도
+    # 1. SQLite 모드인 경우
+    if USE_SQLITE:
+        print("[PRELOAD] SQLite 모드로 시작...")
+
+        # SQLite DB 업데이트 필요 여부 확인
+        if check_sqlite_needs_update():
+            print("[PRELOAD] SQLite DB 업데이트 필요 - Excel 변환 시작...")
+            convert_excel_to_sqlite()
+        else:
+            print("[PRELOAD] SQLite DB 최신 상태 유지")
+
+        # SQLite에서 빠르게 로드
+        for year in ['2024', '2025']:
+            load_excel_data(year)
+            load_food_item_data(year)
+
+        # AI 요약 캐시 생성
+        get_ai_data_summary(force_refresh=True)
+
+        elapsed = time.time() - start_time
+        print(f"[PRELOAD] SQLite 로드 완료! ({elapsed:.1f}초)")
+        return
+
+    # 2. 기존 방식: 파일 캐시에서 로드 시도
     if load_cache_from_file():
         elapsed = time.time() - start_time
         print(f"[PRELOAD] 파일 캐시에서 로드 완료! ({elapsed:.1f}초)")
         return
 
-    # 2. 파일 캐시가 없거나 무효 -> Excel에서 로드
+    # 3. 파일 캐시가 없거나 무효 -> Excel에서 로드
     print("[PRELOAD] Excel에서 데이터 로드 시작...")
     for year in ['2024', '2025']:
         load_excel_data(year)
         load_food_item_data(year)
 
-    # 3. AI 요약 캐시도 미리 생성
+    # 4. AI 요약 캐시도 미리 생성
     get_ai_data_summary(force_refresh=True)
 
-    # 4. 파일로 캐시 저장
+    # 5. 파일로 캐시 저장
     save_cache_to_file()
 
     elapsed = time.time() - start_time

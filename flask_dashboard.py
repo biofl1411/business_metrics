@@ -19,12 +19,92 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 # 경로 설정 - 절대 경로 사용
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path("/home/biofl/business_metrics/data")
+CACHE_FILE = BASE_DIR / "data_cache.pkl"  # 파일 캐시 경로
 
 # 데이터 캐시 (메모리에 저장)
 DATA_CACHE = {}
 CACHE_TIME = {}
 FILE_MTIME = {}  # 파일 수정 시간 추적
 AI_SUMMARY_CACHE = {}  # AI용 데이터 요약 캐시
+
+
+def get_data_files_mtime():
+    """모든 데이터 파일의 최신 수정 시간 반환"""
+    latest_mtime = 0
+    for year in ['2024', '2025']:
+        data_path = DATA_DIR / str(year)
+        if data_path.exists():
+            for f in data_path.glob("*.xlsx"):
+                mtime = f.stat().st_mtime
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+        food_path = DATA_DIR / "food_item" / str(year)
+        if food_path.exists():
+            for f in food_path.glob("*.xlsx"):
+                mtime = f.stat().st_mtime
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+    return latest_mtime
+
+
+def load_cache_from_file():
+    """파일에서 캐시 로드 (서버 시작 시)"""
+    global DATA_CACHE, CACHE_TIME, FILE_MTIME, AI_SUMMARY_CACHE
+    import pickle
+
+    if not CACHE_FILE.exists():
+        print("[CACHE] 캐시 파일 없음 - 새로 생성 필요")
+        return False
+
+    try:
+        # 데이터 파일 수정 시간 확인
+        current_mtime = get_data_files_mtime()
+        cache_mtime = CACHE_FILE.stat().st_mtime
+
+        # 캐시가 데이터보다 오래된 경우 무효화
+        if current_mtime > cache_mtime:
+            print(f"[CACHE] 데이터 파일이 캐시보다 최신 - 다시 로드 필요")
+            return False
+
+        with open(CACHE_FILE, 'rb') as f:
+            cached = pickle.load(f)
+
+        DATA_CACHE = cached.get('DATA_CACHE', {})
+        CACHE_TIME = cached.get('CACHE_TIME', {})
+        FILE_MTIME = cached.get('FILE_MTIME', {})
+        AI_SUMMARY_CACHE = cached.get('AI_SUMMARY_CACHE', {})
+
+        # 캐시 시간 업데이트 (현재 시간 기준으로)
+        import time
+        current_time = time.time()
+        for key in CACHE_TIME:
+            CACHE_TIME[key] = current_time
+
+        total_records = sum(len(v) for v in DATA_CACHE.values() if isinstance(v, list))
+        print(f"[CACHE] 파일에서 캐시 로드 완료 ({total_records:,}건)")
+        return True
+
+    except Exception as e:
+        print(f"[CACHE] 파일 캐시 로드 실패: {e}")
+        return False
+
+
+def save_cache_to_file():
+    """캐시를 파일로 저장"""
+    import pickle
+
+    try:
+        cached = {
+            'DATA_CACHE': DATA_CACHE,
+            'CACHE_TIME': CACHE_TIME,
+            'FILE_MTIME': FILE_MTIME,
+            'AI_SUMMARY_CACHE': AI_SUMMARY_CACHE
+        }
+        with open(CACHE_FILE, 'wb') as f:
+            pickle.dump(cached, f)
+        print(f"[CACHE] 파일로 캐시 저장 완료")
+    except Exception as e:
+        print(f"[CACHE] 파일 캐시 저장 실패: {e}")
 
 # 설정
 MANAGER_TO_BRANCH = {
@@ -4818,6 +4898,75 @@ def ai_analyze():
         print(f"[AI] 오류: 질문 없음")
         return jsonify({'error': '질문을 입력해주세요.'})
 
+    # 목표 달성 관련 질문인지 감지 (Gemini 없이 처리)
+    goal_keywords = ['목표', '달성', '억원', '억 원', '70억', '60억', '80억', '100억',
+                     '개선', '코칭', '부족한', '어떻게 하면', '성장률', '영업자별', '영업담당별']
+    query_lower = query.lower()
+    is_goal_query = any(kw in query for kw in goal_keywords)
+
+    if is_goal_query:
+        print(f"[AI] 목표 분석 질문 감지 - Gemini 없이 직접 분석")
+        # 목표 금액 추출 (기본 70억)
+        import re
+        target_match = re.search(r'(\d+)억', query)
+        target_amount = int(target_match.group(1)) * 100000000 if target_match else 7000000000
+
+        # 목표 연도 추출 (기본 2026)
+        year_match = re.search(r'(202[5-9]|203\d)년', query)
+        target_year = int(year_match.group(1)) if year_match else 2026
+
+        # 목표 분석 API 직접 호출
+        try:
+            from flask import current_app
+            with current_app.test_request_context(json={'target': target_amount, 'year': target_year, 'filters': {}}):
+                # goal_analysis 함수의 로직 재사용
+                food_2024 = load_food_item_data('2024')
+                food_2025 = load_food_item_data('2025')
+
+                def get_fee(row):
+                    fee = row.get('항목수수료', 0) or 0
+                    if isinstance(fee, str):
+                        fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+                    return float(fee)
+
+                revenue_2024 = sum(get_fee(row) for row in food_2024)
+                revenue_2025 = sum(get_fee(row) for row in food_2025)
+                growth_rate = ((revenue_2025 - revenue_2024) / revenue_2024 * 100) if revenue_2024 > 0 else 0
+                gap = target_amount - revenue_2025
+                required_growth = ((target_amount - revenue_2025) / revenue_2025 * 100) if revenue_2025 > 0 else 0
+
+                # 간단한 분석 결과 생성
+                analysis_text = f"""📊 **{target_year}년 {target_amount/100000000:.0f}억 목표 분석**
+
+**현황:**
+- 2024년 매출: {revenue_2024/100000000:.1f}억원
+- 2025년 매출: {revenue_2025/100000000:.1f}억원
+- 현재 성장률: {growth_rate:+.1f}%
+
+**목표 달성 필요:**
+- 추가 매출: {gap/100000000:.1f}억원
+- 필요 성장률: {required_growth:.1f}%
+- 월 평균 추가: {gap/12/10000:.0f}만원
+
+💡 **세부 분석이 필요하시면 '목표 달성 분석' 탭을 이용해주세요.**
+영업담당별, 검사목적별, 지역별 상세 분석과 개선 추천사항을 확인할 수 있습니다."""
+
+                return jsonify({
+                    'success': True,
+                    'analysis_type': 'direct_answer',
+                    'description': f'{target_year}년 {target_amount/100000000:.0f}억 목표 분석',
+                    'direct_answer': analysis_text,
+                    'parsed_query': {
+                        'analysis_type': 'goal_analysis',
+                        'target': target_amount,
+                        'year': target_year
+                    },
+                    'redirect_hint': 'goal_analysis'  # 프론트엔드에서 목표 분석 탭으로 안내
+                })
+        except Exception as e:
+            print(f"[AI] 목표 분석 직접 처리 실패: {e}")
+            # 실패하면 Gemini로 fallback
+
     api_key = GEMINI_API_KEY
     if not api_key:
         print(f"[AI] 오류: API 키 없음")
@@ -5568,12 +5717,31 @@ def extract_sido(address):
 
 
 def preload_data():
-    """서버 시작 시 데이터 미리 로드"""
-    print("[PRELOAD] 데이터 미리 로드 시작...")
+    """서버 시작 시 데이터 미리 로드 (파일 캐시 우선)"""
+    import time
+    start_time = time.time()
+
+    # 1. 파일 캐시에서 로드 시도
+    if load_cache_from_file():
+        elapsed = time.time() - start_time
+        print(f"[PRELOAD] 파일 캐시에서 로드 완료! ({elapsed:.1f}초)")
+        return
+
+    # 2. 파일 캐시가 없거나 무효 -> Excel에서 로드
+    print("[PRELOAD] Excel에서 데이터 로드 시작...")
     for year in ['2024', '2025']:
         load_excel_data(year)
         load_food_item_data(year)
-    print("[PRELOAD] 완료!")
+
+    # 3. AI 요약 캐시도 미리 생성
+    get_ai_data_summary(force_refresh=True)
+
+    # 4. 파일로 캐시 저장
+    save_cache_to_file()
+
+    elapsed = time.time() - start_time
+    print(f"[PRELOAD] 완료! ({elapsed:.1f}초)")
+
 
 if __name__ == '__main__':
     # 서버 시작 시 데이터 미리 로드

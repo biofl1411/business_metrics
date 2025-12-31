@@ -2138,87 +2138,236 @@ HTML_TEMPLATE = '''
                 </div>
 
                 <!-- 세부 필터 선택 섹션 -->
-                <div style="border-top: 1px solid #eee; padding-top: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-weight: bold; color: #667eea;">📊 세부 필터 선택 (체크한 항목만 분석)</span>
-                        <button onclick="toggleGoalFilters()" id="filterToggleBtn" style="padding: 5px 15px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-size: 13px;">
+                <style>
+                    .filter-container {
+                        border-top: 1px solid #e0e0e0;
+                        padding-top: 20px;
+                        margin-top: 10px;
+                    }
+                    .filter-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 15px;
+                    }
+                    .filter-title {
+                        font-weight: bold;
+                        color: #667eea;
+                        font-size: 15px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .filter-toggle-btn {
+                        padding: 8px 20px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        border: none;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 13px;
+                        font-weight: 500;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+                    }
+                    .filter-toggle-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                    }
+                    .filter-grid {
+                        display: grid;
+                        grid-template-columns: repeat(4, 1fr);
+                        gap: 16px;
+                    }
+                    @media (max-width: 1200px) {
+                        .filter-grid { grid-template-columns: repeat(2, 1fr); }
+                    }
+                    @media (max-width: 600px) {
+                        .filter-grid { grid-template-columns: 1fr; }
+                    }
+                    .filter-card {
+                        background: white;
+                        border: 1px solid #e8e8e8;
+                        border-radius: 12px;
+                        padding: 16px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                        transition: all 0.3s ease;
+                        min-height: 140px;
+                    }
+                    .filter-card:hover {
+                        border-color: #667eea;
+                        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
+                    }
+                    .filter-card-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 12px;
+                        padding-bottom: 10px;
+                        border-bottom: 2px solid #f0f0f0;
+                    }
+                    .filter-card-title {
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: #333;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+                    .filter-card-title span.icon {
+                        font-size: 18px;
+                    }
+                    .filter-all-check {
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        font-size: 12px;
+                        color: #666;
+                        background: #f5f5f5;
+                        padding: 4px 10px;
+                        border-radius: 12px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                    }
+                    .filter-all-check:hover {
+                        background: #e8e8e8;
+                    }
+                    .filter-all-check input {
+                        margin: 0;
+                        cursor: pointer;
+                    }
+                    .filter-card-body {
+                        max-height: 100px;
+                        overflow-y: auto;
+                        font-size: 13px;
+                    }
+                    .filter-card-body::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    .filter-card-body::-webkit-scrollbar-thumb {
+                        background: #ddd;
+                        border-radius: 4px;
+                    }
+                    .month-grid {
+                        display: grid;
+                        grid-template-columns: repeat(6, 1fr);
+                        gap: 6px;
+                    }
+                    .month-grid label {
+                        display: flex;
+                        align-items: center;
+                        gap: 3px;
+                        padding: 4px 6px;
+                        background: #f8f9fa;
+                        border-radius: 6px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                        white-space: nowrap;
+                    }
+                    .month-grid label:hover {
+                        background: #e3e8ff;
+                    }
+                    .month-grid input:checked + span {
+                        color: #667eea;
+                        font-weight: 600;
+                    }
+                    .filter-info {
+                        margin-top: 16px;
+                        text-align: center;
+                        padding: 10px;
+                        background: linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%);
+                        border-radius: 8px;
+                    }
+                    .filter-info small {
+                        color: #666;
+                        font-size: 12px;
+                    }
+                </style>
+                <div class="filter-container">
+                    <div class="filter-header">
+                        <span class="filter-title">
+                            <span style="font-size: 20px;">📊</span>
+                            세부 필터 선택 (체크한 항목만 분석)
+                        </span>
+                        <button onclick="toggleGoalFilters()" id="filterToggleBtn" class="filter-toggle-btn">
                             ▼ 필터 열기
                         </button>
                     </div>
                     <div id="goalFiltersPanel" style="display: none;">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div class="filter-grid">
                             <!-- 영업담당 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>👤 영업담당</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalManagerAll" checked onchange="toggleAllGoalFilters('manager')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">👤</span> 영업담당</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalManagerAll" checked onchange="toggleAllGoalFilters('manager')"> 전체</label>
                                 </div>
-                                <div id="goalManagerFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                                <div class="filter-card-body" id="goalManagerFilters"></div>
                             </div>
                             <!-- 팀 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>👥 팀</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalTeamAll" checked onchange="toggleAllGoalFilters('team')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">👥</span> 팀</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalTeamAll" checked onchange="toggleAllGoalFilters('team')"> 전체</label>
                                 </div>
-                                <div id="goalTeamFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
-                            </div>
-                            <!-- 월 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>📅 월</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalMonthAll" checked onchange="toggleAllGoalFilters('month')"> 전체</label>
-                                </div>
-                                <div id="goalMonthFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;">
-                                    <label><input type="checkbox" class="goalMonthFilter" value="1"> 1월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="2"> 2월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="3"> 3월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="4"> 4월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="5"> 5월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="6"> 6월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="7"> 7월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="8"> 8월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="9"> 9월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="10"> 10월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="11"> 11월</label>
-                                    <label><input type="checkbox" class="goalMonthFilter" value="12"> 12월</label>
-                                </div>
+                                <div class="filter-card-body" id="goalTeamFilters"></div>
                             </div>
                             <!-- 검사목적 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>🎯 검사목적</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalPurposeAll" checked onchange="toggleAllGoalFilters('purpose')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">🎯</span> 검사목적</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalPurposeAll" checked onchange="toggleAllGoalFilters('purpose')"> 전체</label>
                                 </div>
-                                <div id="goalPurposeFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                                <div class="filter-card-body" id="goalPurposeFilters"></div>
                             </div>
                             <!-- 지역 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>📍 지역</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalRegionAll" checked onchange="toggleAllGoalFilters('region')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">📍</span> 지역</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalRegionAll" checked onchange="toggleAllGoalFilters('region')"> 전체</label>
                                 </div>
-                                <div id="goalRegionFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                                <div class="filter-card-body" id="goalRegionFilters"></div>
+                            </div>
+                            <!-- 월 (2줄 그리드) -->
+                            <div class="filter-card" style="grid-column: span 2;">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">📅</span> 월 선택</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalMonthAll" checked onchange="toggleAllGoalFilters('month')"> 전체</label>
+                                </div>
+                                <div class="month-grid">
+                                    <label><input type="checkbox" class="goalMonthFilter" value="1"><span>1월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="2"><span>2월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="3"><span>3월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="4"><span>4월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="5"><span>5월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="6"><span>6월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="7"><span>7월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="8"><span>8월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="9"><span>9월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="10"><span>10월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="11"><span>11월</span></label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="12"><span>12월</span></label>
+                                </div>
                             </div>
                             <!-- 검체유형 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>🧪 검체유형</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalSampleTypeAll" checked onchange="toggleAllGoalFilters('sampleType')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">🧪</span> 검체유형</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalSampleTypeAll" checked onchange="toggleAllGoalFilters('sampleType')"> 전체</label>
                                 </div>
-                                <div id="goalSampleTypeFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                                <div class="filter-card-body" id="goalSampleTypeFilters"></div>
                             </div>
                             <!-- 분석자 -->
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                                    <span>🔬 분석자</span>
-                                    <label style="font-size: 12px;"><input type="checkbox" id="goalAnalyzerAll" checked onchange="toggleAllGoalFilters('analyzer')"> 전체</label>
+                            <div class="filter-card">
+                                <div class="filter-card-header">
+                                    <span class="filter-card-title"><span class="icon">🔬</span> 분석자</span>
+                                    <label class="filter-all-check"><input type="checkbox" id="goalAnalyzerAll" checked onchange="toggleAllGoalFilters('analyzer')"> 전체</label>
                                 </div>
-                                <div id="goalAnalyzerFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                                <div class="filter-card-body" id="goalAnalyzerFilters"></div>
                             </div>
                         </div>
-                        <div style="margin-top: 10px; text-align: center;">
-                            <small style="color: #888;">💡 전체 체크 시 해당 필터는 적용하지 않음 (모든 데이터 포함)</small>
+                        <div class="filter-info">
+                            <small>💡 <strong>전체</strong> 체크 시 해당 필터는 적용하지 않음 (모든 데이터 포함)</small>
                         </div>
                     </div>
                 </div>

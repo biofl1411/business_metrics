@@ -1538,7 +1538,7 @@ HTML_TEMPLATE = '''
             </div>
 
             <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
-                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 15px;">
                     <label style="font-weight: bold;">목표 연도:</label>
                     <select id="goalYear" style="padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
                         <option value="2026">2026년</option>
@@ -1551,6 +1551,92 @@ HTML_TEMPLATE = '''
                             style="padding: 12px 25px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold;">
                         🔍 종합 분석 실행
                     </button>
+                </div>
+
+                <!-- 세부 필터 선택 섹션 -->
+                <div style="border-top: 1px solid #eee; padding-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-weight: bold; color: #667eea;">📊 세부 필터 선택 (체크한 항목만 분석)</span>
+                        <button onclick="toggleGoalFilters()" id="filterToggleBtn" style="padding: 5px 15px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-size: 13px;">
+                            ▼ 필터 열기
+                        </button>
+                    </div>
+                    <div id="goalFiltersPanel" style="display: none;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <!-- 영업담당 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>👤 영업담당</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalManagerAll" checked onchange="toggleAllGoalFilters('manager')"> 전체</label>
+                                </div>
+                                <div id="goalManagerFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                            <!-- 팀 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>👥 팀</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalTeamAll" checked onchange="toggleAllGoalFilters('team')"> 전체</label>
+                                </div>
+                                <div id="goalTeamFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                            <!-- 월 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>📅 월</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalMonthAll" checked onchange="toggleAllGoalFilters('month')"> 전체</label>
+                                </div>
+                                <div id="goalMonthFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;">
+                                    <label><input type="checkbox" class="goalMonthFilter" value="1"> 1월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="2"> 2월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="3"> 3월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="4"> 4월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="5"> 5월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="6"> 6월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="7"> 7월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="8"> 8월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="9"> 9월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="10"> 10월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="11"> 11월</label>
+                                    <label><input type="checkbox" class="goalMonthFilter" value="12"> 12월</label>
+                                </div>
+                            </div>
+                            <!-- 검사목적 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>🎯 검사목적</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalPurposeAll" checked onchange="toggleAllGoalFilters('purpose')"> 전체</label>
+                                </div>
+                                <div id="goalPurposeFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                            <!-- 지역 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>📍 지역</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalRegionAll" checked onchange="toggleAllGoalFilters('region')"> 전체</label>
+                                </div>
+                                <div id="goalRegionFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                            <!-- 검체유형 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>🧪 검체유형</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalSampleTypeAll" checked onchange="toggleAllGoalFilters('sampleType')"> 전체</label>
+                                </div>
+                                <div id="goalSampleTypeFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                            <!-- 분석자 -->
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between;">
+                                    <span>🔬 분석자</span>
+                                    <label style="font-size: 12px;"><input type="checkbox" id="goalAnalyzerAll" checked onchange="toggleAllGoalFilters('analyzer')"> 전체</label>
+                                </div>
+                                <div id="goalAnalyzerFilters" style="max-height: 120px; overflow-y: auto; font-size: 13px;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; text-align: center;">
+                            <small style="color: #888;">💡 전체 체크 시 해당 필터는 적용하지 않음 (모든 데이터 포함)</small>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -4280,9 +4366,111 @@ HTML_TEMPLATE = '''
         }
 
         // ========== 목표 달성 분석 함수들 ==========
+        let goalFilterOptions = null;  // 필터 옵션 캐시
+
+        function toggleGoalFilters() {
+            const panel = document.getElementById('goalFiltersPanel');
+            const btn = document.getElementById('filterToggleBtn');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                btn.textContent = '▲ 필터 닫기';
+            } else {
+                panel.style.display = 'none';
+                btn.textContent = '▼ 필터 열기';
+            }
+        }
+
+        function toggleAllGoalFilters(type) {
+            const allCheckbox = document.getElementById(`goal${type.charAt(0).toUpperCase() + type.slice(1)}All`);
+            const checkboxes = document.querySelectorAll(`.goal${type.charAt(0).toUpperCase() + type.slice(1)}Filter`);
+            checkboxes.forEach(cb => cb.checked = false);
+        }
+
+        function getSelectedGoalFilters() {
+            const filters = {};
+
+            // 영업담당
+            if (!document.getElementById('goalManagerAll').checked) {
+                filters.managers = [...document.querySelectorAll('.goalManagerFilter:checked')].map(cb => cb.value);
+            }
+
+            // 팀
+            if (!document.getElementById('goalTeamAll').checked) {
+                filters.teams = [...document.querySelectorAll('.goalTeamFilter:checked')].map(cb => cb.value);
+            }
+
+            // 월
+            if (!document.getElementById('goalMonthAll').checked) {
+                filters.months = [...document.querySelectorAll('.goalMonthFilter:checked')].map(cb => parseInt(cb.value));
+            }
+
+            // 검사목적
+            if (!document.getElementById('goalPurposeAll').checked) {
+                filters.purposes = [...document.querySelectorAll('.goalPurposeFilter:checked')].map(cb => cb.value);
+            }
+
+            // 지역
+            if (!document.getElementById('goalRegionAll').checked) {
+                filters.regions = [...document.querySelectorAll('.goalRegionFilter:checked')].map(cb => cb.value);
+            }
+
+            // 검체유형
+            if (!document.getElementById('goalSampleTypeAll').checked) {
+                filters.sample_types = [...document.querySelectorAll('.goalSampleTypeFilter:checked')].map(cb => cb.value);
+            }
+
+            // 분석자
+            if (!document.getElementById('goalAnalyzerAll').checked) {
+                filters.analyzers = [...document.querySelectorAll('.goalAnalyzerFilter:checked')].map(cb => cb.value);
+            }
+
+            return filters;
+        }
+
+        function populateGoalFilters(options) {
+            goalFilterOptions = options;
+
+            // 영업담당
+            const managerDiv = document.getElementById('goalManagerFilters');
+            managerDiv.innerHTML = options.managers.map(m =>
+                `<label style="display: block;"><input type="checkbox" class="goalManagerFilter" value="${m}"> ${m}</label>`
+            ).join('');
+
+            // 팀
+            const teamDiv = document.getElementById('goalTeamFilters');
+            teamDiv.innerHTML = options.teams.map(t =>
+                `<label style="display: block;"><input type="checkbox" class="goalTeamFilter" value="${t}"> ${t}</label>`
+            ).join('');
+
+            // 검사목적
+            const purposeDiv = document.getElementById('goalPurposeFilters');
+            purposeDiv.innerHTML = options.purposes.map(p =>
+                `<label style="display: block;"><input type="checkbox" class="goalPurposeFilter" value="${p}"> ${p}</label>`
+            ).join('');
+
+            // 지역
+            const regionDiv = document.getElementById('goalRegionFilters');
+            regionDiv.innerHTML = options.regions.map(r =>
+                `<label style="display: block;"><input type="checkbox" class="goalRegionFilter" value="${r}"> ${r}</label>`
+            ).join('');
+
+            // 검체유형
+            const sampleTypeDiv = document.getElementById('goalSampleTypeFilters');
+            sampleTypeDiv.innerHTML = options.sample_types.map(st =>
+                `<label style="display: block;"><input type="checkbox" class="goalSampleTypeFilter" value="${st}"> ${st}</label>`
+            ).join('');
+
+            // 분석자
+            const analyzerDiv = document.getElementById('goalAnalyzerFilters');
+            analyzerDiv.innerHTML = options.analyzers.map(a =>
+                `<label style="display: block;"><input type="checkbox" class="goalAnalyzerFilter" value="${a}"> ${a}</label>`
+            ).join('');
+        }
+
         async function runGoalAnalysis() {
             const targetYear = document.getElementById('goalYear').value;
             const targetAmount = document.getElementById('goalTarget').value * 100000000; // 억 -> 원
+            const filters = getSelectedGoalFilters();
 
             document.getElementById('goalLoading').style.display = 'block';
             document.getElementById('goalResult').style.display = 'none';
@@ -4291,7 +4479,7 @@ HTML_TEMPLATE = '''
                 const response = await fetch('/api/ai/goal-analysis', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({target: targetAmount, year: parseInt(targetYear)})
+                    body: JSON.stringify({target: targetAmount, year: parseInt(targetYear), filters: filters})
                 });
 
                 const data = await response.json();
@@ -4300,6 +4488,11 @@ HTML_TEMPLATE = '''
                 if (data.error) {
                     alert('오류: ' + data.error);
                     return;
+                }
+
+                // 필터 옵션 업데이트
+                if (data.filter_options) {
+                    populateGoalFilters(data.filter_options);
                 }
 
                 displayGoalResult(data);
@@ -4914,15 +5107,62 @@ def goal_analysis():
         target_revenue = request.json.get('target', 7000000000)  # 기본 70억
         target_year = request.json.get('year', 2026)
 
-        # 데이터 로드
-        data_2024 = load_excel_data('2024')
-        data_2025 = load_excel_data('2025')
+        # 필터 옵션 (체크박스 선택)
+        filters = request.json.get('filters', {})
+        selected_managers = filters.get('managers', [])  # 빈 배열 = 전체
+        selected_teams = filters.get('teams', [])
+        selected_months = filters.get('months', [])
+        selected_purposes = filters.get('purposes', [])
+        selected_regions = filters.get('regions', [])
+        selected_sample_types = filters.get('sample_types', [])
+        selected_items = filters.get('items', [])
+        selected_analyzers = filters.get('analyzers', [])
+
+        # 데이터 로드 (food_item 데이터 사용 - 항목수수료 포함)
         food_2024 = load_food_item_data('2024')
         food_2025 = load_food_item_data('2025')
 
-        # 연도별 매출 계산
-        revenue_2024 = sum(float(str(row.get('총금액', 0) or 0).replace(',', '')) for row in data_2024)
-        revenue_2025 = sum(float(str(row.get('총금액', 0) or 0).replace(',', '')) for row in data_2025)
+        def get_fee(row):
+            """항목수수료 추출"""
+            fee = row.get('항목수수료', 0) or 0
+            if isinstance(fee, str):
+                fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+            return float(fee)
+
+        def match_filter(row, managers, teams, months, purposes, regions, sample_types, items, analyzers):
+            """필터 조건 매칭"""
+            # 빈 배열이면 전체 선택으로 처리
+            if managers and str(row.get('영업담당', '')).strip() not in managers:
+                return False
+            if teams:
+                manager = str(row.get('영업담당', '')).strip()
+                team = MANAGER_TO_BRANCH.get(manager, '기타')
+                if team not in teams:
+                    return False
+            if months:
+                date = row.get('접수일자')
+                if date and hasattr(date, 'month'):
+                    if date.month not in months:
+                        return False
+            if purposes and str(row.get('검사목적', '')).strip() not in purposes:
+                return False
+            if regions and str(row.get('지역', '')).strip() not in regions:
+                return False
+            if sample_types and str(row.get('검체유형', '')).strip() not in sample_types:
+                return False
+            if items and str(row.get('항목명', '')).strip() not in items:
+                return False
+            if analyzers and str(row.get('결과입력자', '')).strip() not in analyzers:
+                return False
+            return True
+
+        # 연도별 매출 계산 (항목수수료 기준)
+        revenue_2024 = sum(get_fee(row) for row in food_2024 if match_filter(
+            row, selected_managers, selected_teams, selected_months, selected_purposes,
+            selected_regions, selected_sample_types, selected_items, selected_analyzers))
+        revenue_2025 = sum(get_fee(row) for row in food_2025 if match_filter(
+            row, selected_managers, selected_teams, selected_months, selected_purposes,
+            selected_regions, selected_sample_types, selected_items, selected_analyzers))
 
         # 성장률 계산
         growth_rate = ((revenue_2025 - revenue_2024) / revenue_2024 * 100) if revenue_2024 > 0 else 0
@@ -4948,17 +5188,23 @@ def goal_analysis():
 
         # 1. 영업담당별 분석
         by_manager = {}
-        for row in data_2025:
+        for row in food_2025:
+            if not match_filter(row, [], selected_teams, selected_months, selected_purposes,
+                               selected_regions, selected_sample_types, selected_items, selected_analyzers):
+                continue
             manager = str(row.get('영업담당', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if manager not in by_manager:
                 by_manager[manager] = {'revenue_2025': 0, 'count_2025': 0, 'revenue_2024': 0, 'count_2024': 0}
             by_manager[manager]['revenue_2025'] += revenue
             by_manager[manager]['count_2025'] += 1
 
-        for row in data_2024:
+        for row in food_2024:
+            if not match_filter(row, [], selected_teams, selected_months, selected_purposes,
+                               selected_regions, selected_sample_types, selected_items, selected_analyzers):
+                continue
             manager = str(row.get('영업담당', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if manager not in by_manager:
                 by_manager[manager] = {'revenue_2025': 0, 'count_2025': 0, 'revenue_2024': 0, 'count_2024': 0}
             by_manager[manager]['revenue_2024'] += revenue
@@ -4989,17 +5235,23 @@ def goal_analysis():
 
         # 2. 검사목적별 분석
         by_purpose = {}
-        for row in data_2025:
+        for row in food_2025:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, [],
+                               selected_regions, selected_sample_types, selected_items, selected_analyzers):
+                continue
             purpose = str(row.get('검사목적', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if purpose not in by_purpose:
                 by_purpose[purpose] = {'revenue_2025': 0, 'count_2025': 0, 'revenue_2024': 0, 'count_2024': 0}
             by_purpose[purpose]['revenue_2025'] += revenue
             by_purpose[purpose]['count_2025'] += 1
 
-        for row in data_2024:
+        for row in food_2024:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, [],
+                               selected_regions, selected_sample_types, selected_items, selected_analyzers):
+                continue
             purpose = str(row.get('검사목적', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if purpose not in by_purpose:
                 by_purpose[purpose] = {'revenue_2025': 0, 'count_2025': 0, 'revenue_2024': 0, 'count_2024': 0}
             by_purpose[purpose]['revenue_2024'] += revenue
@@ -5025,16 +5277,22 @@ def goal_analysis():
 
         # 3. 검체유형별 분석
         by_sample_type = {}
-        for row in data_2025:
+        for row in food_2025:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               selected_regions, [], selected_items, selected_analyzers):
+                continue
             sample_type = str(row.get('검체유형', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if sample_type not in by_sample_type:
                 by_sample_type[sample_type] = {'revenue_2025': 0, 'revenue_2024': 0}
             by_sample_type[sample_type]['revenue_2025'] += revenue
 
-        for row in data_2024:
+        for row in food_2024:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               selected_regions, [], selected_items, selected_analyzers):
+                continue
             sample_type = str(row.get('검체유형', '') or '').strip() or '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if sample_type not in by_sample_type:
                 by_sample_type[sample_type] = {'revenue_2025': 0, 'revenue_2024': 0}
             by_sample_type[sample_type]['revenue_2024'] += revenue
@@ -5057,23 +5315,29 @@ def goal_analysis():
 
         # 4. 지역별 분석
         by_region = {}
-        for row in data_2025:
+        for row in food_2025:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               [], selected_sample_types, selected_items, selected_analyzers):
+                continue
             address = str(row.get('업체주소', '') or '').strip()
             region = extract_sido(address)
             if not region:
                 region = '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if region not in by_region:
                 by_region[region] = {'revenue_2025': 0, 'revenue_2024': 0, 'count_2025': 0}
             by_region[region]['revenue_2025'] += revenue
             by_region[region]['count_2025'] += 1
 
-        for row in data_2024:
+        for row in food_2024:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               [], selected_sample_types, selected_items, selected_analyzers):
+                continue
             address = str(row.get('업체주소', '') or '').strip()
             region = extract_sido(address)
             if not region:
                 region = '미지정'
-            revenue = float(str(row.get('총금액', 0) or 0).replace(',', ''))
+            revenue = get_fee(row)
             if region not in by_region:
                 by_region[region] = {'revenue_2025': 0, 'revenue_2024': 0, 'count_2025': 0}
             by_region[region]['revenue_2024'] += revenue
@@ -5098,24 +5362,26 @@ def goal_analysis():
         # 5. 항목별 분석 (food_item 데이터)
         by_item = {}
         for row in food_2025:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               selected_regions, selected_sample_types, [], selected_analyzers):
+                continue
             item = str(row.get('항목명', '') or '').strip()
             if not item:
                 continue
-            fee = row.get('항목수수료', 0) or 0
-            if isinstance(fee, str):
-                fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+            fee = get_fee(row)
             if item not in by_item:
                 by_item[item] = {'fee_2025': 0, 'count_2025': 0, 'fee_2024': 0, 'count_2024': 0}
             by_item[item]['fee_2025'] += fee
             by_item[item]['count_2025'] += 1
 
         for row in food_2024:
+            if not match_filter(row, selected_managers, selected_teams, selected_months, selected_purposes,
+                               selected_regions, selected_sample_types, [], selected_analyzers):
+                continue
             item = str(row.get('항목명', '') or '').strip()
             if not item:
                 continue
-            fee = row.get('항목수수료', 0) or 0
-            if isinstance(fee, str):
-                fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+            fee = get_fee(row)
             if item not in by_item:
                 by_item[item] = {'fee_2025': 0, 'count_2025': 0, 'fee_2024': 0, 'count_2024': 0}
             by_item[item]['fee_2024'] += fee
@@ -5237,6 +5503,50 @@ def goal_analysis():
         })
 
         result['recommendations'] = recommendations
+
+        # 필터 옵션 추가 (선택 가능한 값들)
+        all_managers = set()
+        all_purposes = set()
+        all_sample_types = set()
+        all_items = set()
+        all_analyzers = set()
+        all_regions = set()
+
+        for row in food_2025:
+            if row.get('영업담당'): all_managers.add(str(row.get('영업담당')).strip())
+            if row.get('검사목적'): all_purposes.add(str(row.get('검사목적')).strip())
+            if row.get('검체유형'): all_sample_types.add(str(row.get('검체유형')).strip())
+            if row.get('항목명'): all_items.add(str(row.get('항목명')).strip())
+            if row.get('결과입력자'): all_analyzers.add(str(row.get('결과입력자')).strip())
+            address = str(row.get('업체주소', '') or '').strip()
+            region = extract_sido(address)
+            if region: all_regions.add(region)
+
+        # 팀 목록 생성
+        teams = set(MANAGER_TO_BRANCH.values())
+
+        result['filter_options'] = {
+            'managers': sorted(all_managers),
+            'teams': sorted(teams),
+            'months': list(range(1, 13)),
+            'purposes': sorted(all_purposes),
+            'regions': sorted(all_regions),
+            'sample_types': sorted(all_sample_types),
+            'items': sorted(all_items)[:100],  # 상위 100개만
+            'analyzers': sorted(all_analyzers)
+        }
+
+        # 적용된 필터 정보
+        result['applied_filters'] = {
+            'managers': selected_managers,
+            'teams': selected_teams,
+            'months': selected_months,
+            'purposes': selected_purposes,
+            'regions': selected_regions,
+            'sample_types': selected_sample_types,
+            'items': selected_items,
+            'analyzers': selected_analyzers
+        }
 
         return jsonify(result)
 

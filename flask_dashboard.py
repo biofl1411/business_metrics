@@ -36,7 +36,7 @@ USE_CLAUDE = bool(CLAUDE_API_KEY)  # API 키가 있으면 Claude 사용
 
 # 경로 설정 - 절대 경로 사용
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path("/home/biofl/business_metrics/data")
+DATA_DIR = BASE_DIR / "data"  # 상대 경로로 변경
 CACHE_FILE = BASE_DIR / "data_cache.pkl"  # 파일 캐시 경로
 SQLITE_DB = DATA_DIR / "business_data.db"  # SQLite 데이터베이스 경로
 

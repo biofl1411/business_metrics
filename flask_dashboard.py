@@ -1158,8 +1158,8 @@ def process_data(data, purpose_filter=None):
         client = str(row.get('거래처', '') or '').strip() or '미지정'
         defect = str(row.get('부적합항목', '') or '').strip()
         sample_type = str(row.get('검체유형', '') or '').strip()
-        urgent = str(row.get('긴급여부', '') or '').strip()
-        is_urgent = urgent in ['Y', 'y', '긴급', '예', '1', 'O', 'o']
+        urgent = str(row.get('긴급여부', '') or '').strip().upper()
+        is_urgent = urgent in ['Y', '예', '1', 'O', '긴급', 'TRUE', 'YES', 'T', '참']
         if sample_type:
             sample_types.add(sample_type)
 
@@ -3821,27 +3821,52 @@ HTML_TEMPLATE = '''
                 return { x: m[1].count || 0, y: m[1].sales || 0, name: m[0], color };
             });
 
+            // 데이터셋 구성 (현재 연도)
+            const datasets = [{
+                label: currentData.year + '년',
+                data: data.map(d => ({ x: d.x, y: d.y })),
+                backgroundColor: data.map(d => d.color),
+                pointRadius: 10,
+                pointHoverRadius: 14,
+            }];
+
+            // 전년도 비교 데이터 추가
+            if (compareData && compareData.by_manager) {
+                const compManagers = compareData.by_manager || [];
+                const compData = compManagers.map(m => ({
+                    x: m[1].count || 0,
+                    y: m[1].sales || 0,
+                    name: m[0]
+                }));
+                datasets.push({
+                    label: compareData.year + '년',
+                    data: compData.map(d => ({ x: d.x, y: d.y })),
+                    backgroundColor: 'rgba(156, 163, 175, 0.5)',
+                    borderColor: 'rgba(156, 163, 175, 0.8)',
+                    pointRadius: 7,
+                    pointHoverRadius: 10,
+                    pointStyle: 'triangle',
+                });
+            }
+
             charts.efficiency = new Chart(ctx.getContext('2d'), {
                 type: 'scatter',
-                data: {
-                    datasets: [{
-                        data: data.map(d => ({ x: d.x, y: d.y })),
-                        backgroundColor: data.map(d => d.color),
-                        pointRadius: 10,
-                        pointHoverRadius: 14,
-                    }]
-                },
+                data: { datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
                             callbacks: {
                                 label: (context) => {
                                     const idx = context.dataIndex;
-                                    const m = managers[idx];
-                                    return [m[0], '매출: ' + formatCurrency(m[1].sales || 0), '건수: ' + (m[1].count || 0).toLocaleString() + '건'];
+                                    const dsIdx = context.datasetIndex;
+                                    const mgrs = dsIdx === 0 ? managers : (compareData?.by_manager || []);
+                                    const m = mgrs[idx];
+                                    if (!m) return '';
+                                    const year = dsIdx === 0 ? currentData.year : compareData?.year;
+                                    return [m[0] + ' (' + year + '년)', '매출: ' + formatCurrency(m[1].sales || 0), '건수: ' + (m[1].count || 0).toLocaleString() + '건'];
                                 }
                             }
                         }
@@ -3869,25 +3894,42 @@ HTML_TEMPLATE = '''
                 const monthMap = Object.fromEntries(currentData.by_month || []);
                 const totalMonthly = labels.map((_, i) => monthMap[i+1]?.sales || 0);
 
+                // 데이터셋 구성
+                const datasets = [{
+                    label: currentData.year + '년 전체',
+                    data: totalMonthly,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#6366f1',
+                }];
+
+                // 전년도 비교 데이터 추가
+                if (compareData && compareData.by_month) {
+                    const compMonthMap = Object.fromEntries(compareData.by_month || []);
+                    const compMonthly = labels.map((_, i) => compMonthMap[i+1]?.sales || 0);
+                    datasets.push({
+                        label: compareData.year + '년 전체',
+                        data: compMonthly,
+                        borderColor: 'rgba(156, 163, 175, 0.8)',
+                        backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: 'rgba(156, 163, 175, 0.8)',
+                        borderDash: [5, 5],
+                    });
+                }
+
                 charts.managerMonthly = new Chart(ctx.getContext('2d'), {
                     type: 'line',
-                    data: {
-                        labels,
-                        datasets: [{
-                            label: '전체 합계',
-                            data: totalMonthly,
-                            borderColor: '#6366f1',
-                            backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#6366f1',
-                        }]
-                    },
+                    data: { labels, datasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
+                        plugins: { legend: { display: compareData ? true : false, position: 'top' } },
                         scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
                     }
                 });
@@ -3986,21 +4028,40 @@ HTML_TEMPLATE = '''
             chartData.sort((a, b) => perCaseSortOrder === 'desc' ? b.avgPrice - a.avgPrice : a.avgPrice - b.avgPrice);
             const avgAll = chartData.reduce((s, d) => s + d.avgPrice, 0) / (chartData.length || 1);
 
+            // 데이터셋 구성 (현재 연도)
+            const datasets = [{
+                label: currentData.year + '년 건당 매출',
+                data: chartData.map(d => d.avgPrice),
+                backgroundColor: chartData.map(d => d.avgPrice >= avgAll ? 'rgba(16, 185, 129, 0.7)' : 'rgba(245, 158, 11, 0.7)'),
+                borderRadius: 6,
+            }];
+
+            // 전년도 비교 데이터 추가
+            if (compareData && compareData.by_manager) {
+                const compManagerMap = Object.fromEntries((compareData.by_manager || []).map(m => [m[0], m[1]]));
+                const compData = chartData.map(d => {
+                    const comp = compManagerMap[d.name];
+                    if (comp && comp.count > 0) return comp.sales / comp.count;
+                    return 0;
+                });
+                datasets.push({
+                    label: compareData.year + '년 건당 매출',
+                    data: compData,
+                    backgroundColor: 'rgba(156, 163, 175, 0.5)',
+                    borderRadius: 6,
+                });
+            }
+
             charts.perCase = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels: chartData.map(d => d.name),
-                    datasets: [{
-                        label: '건당 매출',
-                        data: chartData.map(d => d.avgPrice),
-                        backgroundColor: chartData.map(d => d.avgPrice >= avgAll ? 'rgba(16, 185, 129, 0.7)' : 'rgba(245, 158, 11, 0.7)'),
-                        borderRadius: 6,
-                    }]
+                    datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: compareData ? true : false, position: 'top' } },
                     scales: { y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } } }
                 }
             });
@@ -4016,26 +4077,44 @@ HTML_TEMPLATE = '''
             const urgentData = managers.map(m => ({ name: m[0], urgent: m[1].urgent || 0 })).sort((a, b) => b.urgent - a.urgent);
             const maxUrgent = Math.max(...urgentData.map(d => d.urgent)) || 1;
 
+            // 데이터셋 구성
+            const datasets = [{
+                label: currentData.year + '년 긴급',
+                data: urgentData.map(d => d.urgent),
+                backgroundColor: urgentData.map(d => {
+                    const ratio = d.urgent / maxUrgent;
+                    if (ratio >= 0.8) return 'rgba(239, 68, 68, 0.8)';
+                    if (ratio >= 0.5) return 'rgba(245, 158, 11, 0.8)';
+                    return 'rgba(99, 102, 241, 0.8)';
+                }),
+                borderRadius: 6,
+            }];
+
+            // 전년도 비교 데이터 추가
+            if (compareData && compareData.by_manager) {
+                const compManagerMap = Object.fromEntries((compareData.by_manager || []).map(m => [m[0], m[1]]));
+                const compData = urgentData.map(d => {
+                    const comp = compManagerMap[d.name];
+                    return comp ? (comp.urgent || 0) : 0;
+                });
+                datasets.push({
+                    label: compareData.year + '년 긴급',
+                    data: compData,
+                    backgroundColor: 'rgba(156, 163, 175, 0.5)',
+                    borderRadius: 6,
+                });
+            }
+
             charts.urgent = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels: urgentData.map(d => d.name),
-                    datasets: [{
-                        label: '긴급 접수 건수',
-                        data: urgentData.map(d => d.urgent),
-                        backgroundColor: urgentData.map(d => {
-                            const ratio = d.urgent / maxUrgent;
-                            if (ratio >= 0.8) return 'rgba(239, 68, 68, 0.8)';
-                            if (ratio >= 0.5) return 'rgba(245, 158, 11, 0.8)';
-                            return 'rgba(99, 102, 241, 0.8)';
-                        }),
-                        borderRadius: 6,
-                    }]
+                    datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: compareData ? true : false, position: 'top' } },
                     scales: { y: { beginAtZero: true } }
                 }
             });
@@ -4811,6 +4890,31 @@ def refresh_cache():
     # AI 요약 캐시도 미리 생성
     get_ai_data_summary(force_refresh=True)
     return jsonify({'status': 'ok', 'message': '캐시가 새로고침되었습니다.'})
+
+
+@app.route('/api/debug/urgent')
+def debug_urgent():
+    """긴급여부 필드 값 확인용 디버그 API"""
+    import pandas as pd
+    urgent_values = {}
+
+    for year in ['2024', '2025']:
+        data_path = DATA_DIR / str(year)
+        if not data_path.exists():
+            continue
+        urgent_values[year] = set()
+        for f in sorted(data_path.glob("*.xlsx")):
+            try:
+                df = pd.read_excel(f)
+                if '긴급여부' in df.columns:
+                    values = df['긴급여부'].dropna().unique()
+                    for v in values:
+                        urgent_values[year].add(str(v).strip())
+            except Exception as e:
+                pass
+        urgent_values[year] = list(urgent_values[year])
+
+    return jsonify({'urgent_values': urgent_values})
 
 
 @app.route('/api/token-usage')

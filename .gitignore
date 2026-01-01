@@ -32,3 +32,4 @@ flask.log
 *.db
 *.pkl
 data_cache.pkl
+nohup.out

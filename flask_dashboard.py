@@ -1159,9 +1159,8 @@ def process_data(data, purpose_filter=None):
         defect = str(row.get('부적합항목', '') or '').strip()
         sample_type = str(row.get('검체유형', '') or '').strip()
         urgent_raw = str(row.get('긴급여부', '') or '').strip()
-        is_urgent_12h = urgent_raw == '12시긴급'
-        is_urgent_normal = urgent_raw == '긴급'
-        is_urgent = is_urgent_12h or is_urgent_normal
+        # '일반'이 아니고 값이 있으면 모두 긴급으로 처리
+        is_urgent = urgent_raw and urgent_raw != '일반'
         if sample_type:
             sample_types.add(sample_type)
 
@@ -1170,14 +1169,10 @@ def process_data(data, purpose_filter=None):
 
         # 매니저별
         if manager not in by_manager:
-            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}, 'urgent': 0, 'urgent_12h': 0, 'urgent_normal': 0}
+            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}, 'urgent': 0}
         by_manager[manager]['sales'] += sales
         by_manager[manager]['count'] += 1
-        if is_urgent_12h:
-            by_manager[manager]['urgent_12h'] += 1
-            by_manager[manager]['urgent'] += 1
-        elif is_urgent_normal:
-            by_manager[manager]['urgent_normal'] += 1
+        if is_urgent:
             by_manager[manager]['urgent'] += 1
         if client not in by_manager[manager]['clients']:
             by_manager[manager]['clients'][client] = {'sales': 0, 'count': 0}
@@ -1461,7 +1456,7 @@ def process_data(data, purpose_filter=None):
         ]
 
     return {
-        'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0), 'urgent_12h': d.get('urgent_12h', 0), 'urgent_normal': d.get('urgent_normal', 0)}) for m, d in sorted_managers],
+        'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0)}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
                       for k, v in sorted_branches],
         'by_month': sorted(by_month.items()),

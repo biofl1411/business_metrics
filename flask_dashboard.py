@@ -2199,12 +2199,57 @@ HTML_TEMPLATE = '''
             font-weight: 700;
         }
 
-        .dept-card-compare .compare-value.positive {
-            color: var(--success);
+        .dept-ratio {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+            background: var(--primary-light);
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
         }
 
-        .dept-card-compare .compare-value.negative {
-            color: var(--danger);
+        .dept-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 16px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            padding: 16px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .dept-card:hover .dept-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .dept-overlay .overlay-title {
+            font-size: 13px;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 8px;
+        }
+
+        .dept-overlay .overlay-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .dept-overlay .overlay-value.positive { color: #4ade80; }
+        .dept-overlay .overlay-value.negative { color: #f87171; }
+
+        .dept-overlay .overlay-detail {
+            font-size: 12px;
+            color: rgba(255,255,255,0.6);
+            margin-top: 8px;
         }
 
         @media (max-width: 1200px) {
@@ -3109,16 +3154,8 @@ HTML_TEMPLATE = '''
 
         <!-- 메인 탭 콘텐츠 -->
         <div id="main" class="tab-content active">
-            <section class="purpose-kpi-section" id="purposeKpiSection">
-                <div class="section-title-bar">
-                    <div class="section-title">🎯 검사 목적별 현황</div>
-                    <div class="section-badge" id="purposeCount">0개 목적</div>
-                </div>
-                <div class="purpose-kpi-grid" id="purposeGrid"></div>
-            </section>
-
             <!-- 부서별 현황 카드 -->
-            <section class="department-section" style="margin-top: 24px;">
+            <section class="department-section" style="margin-bottom: 24px;">
                 <div class="section-title-bar">
                     <div class="section-title">🏢 부서별 현황</div>
                 </div>
@@ -3127,7 +3164,7 @@ HTML_TEMPLATE = '''
                     <div class="dept-card" id="deptCardBonsa">
                         <div class="dept-card-header">
                             <div class="dept-icon" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">🏛️</div>
-                            <div class="dept-name">본사</div>
+                            <div class="dept-name">본사 <span class="dept-ratio" id="deptBonsaRatio">-</span></div>
                         </div>
                         <div class="dept-card-body">
                             <div class="dept-stat">
@@ -3142,22 +3179,15 @@ HTML_TEMPLATE = '''
                                 <span class="dept-label">평균단가</span>
                                 <span class="dept-value" id="deptBonsaAvg">-</span>
                             </div>
-                            <div class="dept-stat">
-                                <span class="dept-label">매출비율</span>
-                                <span class="dept-value" id="deptBonsaRatio">-</span>
-                            </div>
                         </div>
-                        <div class="dept-card-compare" id="deptBonsaCompare" style="display: none;">
-                            <div class="compare-label">전년 대비</div>
-                            <div class="compare-value" id="deptBonsaGrowth">-</div>
-                        </div>
+                        <div class="dept-overlay" id="deptBonsaOverlay"></div>
                     </div>
 
                     <!-- 마케팅 카드 -->
                     <div class="dept-card" id="deptCardMarketing">
                         <div class="dept-card-header">
                             <div class="dept-icon" style="background: linear-gradient(135deg, #10b981, #059669);">📢</div>
-                            <div class="dept-name">마케팅</div>
+                            <div class="dept-name">마케팅 <span class="dept-ratio" id="deptMarketingRatio">-</span></div>
                         </div>
                         <div class="dept-card-body">
                             <div class="dept-stat">
@@ -3172,22 +3202,15 @@ HTML_TEMPLATE = '''
                                 <span class="dept-label">평균단가</span>
                                 <span class="dept-value" id="deptMarketingAvg">-</span>
                             </div>
-                            <div class="dept-stat">
-                                <span class="dept-label">매출비율</span>
-                                <span class="dept-value" id="deptMarketingRatio">-</span>
-                            </div>
                         </div>
-                        <div class="dept-card-compare" id="deptMarketingCompare" style="display: none;">
-                            <div class="compare-label">전년 대비</div>
-                            <div class="compare-value" id="deptMarketingGrowth">-</div>
-                        </div>
+                        <div class="dept-overlay" id="deptMarketingOverlay"></div>
                     </div>
 
                     <!-- 영업부 카드 -->
                     <div class="dept-card" id="deptCardSales">
                         <div class="dept-card-header">
                             <div class="dept-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">💼</div>
-                            <div class="dept-name">영업부</div>
+                            <div class="dept-name">영업부 <span class="dept-ratio" id="deptSalesRatio">-</span></div>
                         </div>
                         <div class="dept-card-body">
                             <div class="dept-stat">
@@ -3202,22 +3225,15 @@ HTML_TEMPLATE = '''
                                 <span class="dept-label">평균단가</span>
                                 <span class="dept-value" id="deptSalesAvg">-</span>
                             </div>
-                            <div class="dept-stat">
-                                <span class="dept-label">매출비율</span>
-                                <span class="dept-value" id="deptSalesRatio">-</span>
-                            </div>
                         </div>
-                        <div class="dept-card-compare" id="deptSalesCompare" style="display: none;">
-                            <div class="compare-label">전년 대비</div>
-                            <div class="compare-value" id="deptSalesGrowth">-</div>
-                        </div>
+                        <div class="dept-overlay" id="deptSalesOverlay"></div>
                     </div>
 
                     <!-- 지사 카드 -->
                     <div class="dept-card" id="deptCardBranch">
                         <div class="dept-card-header">
                             <div class="dept-icon" style="background: linear-gradient(135deg, #ec4899, #db2777);">🏬</div>
-                            <div class="dept-name">지사</div>
+                            <div class="dept-name">지사 <span class="dept-ratio" id="deptBranchRatio">-</span></div>
                         </div>
                         <div class="dept-card-body">
                             <div class="dept-stat">
@@ -3232,17 +3248,18 @@ HTML_TEMPLATE = '''
                                 <span class="dept-label">평균단가</span>
                                 <span class="dept-value" id="deptBranchAvg">-</span>
                             </div>
-                            <div class="dept-stat">
-                                <span class="dept-label">매출비율</span>
-                                <span class="dept-value" id="deptBranchRatio">-</span>
-                            </div>
                         </div>
-                        <div class="dept-card-compare" id="deptBranchCompare" style="display: none;">
-                            <div class="compare-label">전년 대비</div>
-                            <div class="compare-value" id="deptBranchGrowth">-</div>
-                        </div>
+                        <div class="dept-overlay" id="deptBranchOverlay"></div>
                     </div>
                 </div>
+            </section>
+
+            <section class="purpose-kpi-section" id="purposeKpiSection">
+                <div class="section-title-bar">
+                    <div class="section-title">🎯 검사 목적별 현황</div>
+                    <div class="section-badge" id="purposeCount">0개 목적</div>
+                </div>
+                <div class="purpose-kpi-grid" id="purposeGrid"></div>
             </section>
         </div>
 
@@ -4026,25 +4043,30 @@ HTML_TEMPLATE = '''
                 if (avgEl) avgEl.textContent = formatCurrency(avg);
                 if (ratioEl) ratioEl.textContent = ratio.toFixed(1) + '%';
 
-                // 전년 대비
-                const compareEl = document.getElementById(`dept${prefix}Compare`);
-                const growthEl = document.getElementById(`dept${prefix}Growth`);
+                // 오버레이 (전년 대비)
+                const overlayEl = document.getElementById(`dept${prefix}Overlay`);
 
                 if (compareData && compareDept[key]) {
                     const compSales = compareDept[key].sales || 0;
+                    const compCount = compareDept[key].count || 0;
                     if (compSales > 0) {
                         const growth = ((sales - compSales) / compSales * 100).toFixed(1);
                         const isPositive = parseFloat(growth) >= 0;
-                        if (compareEl) compareEl.style.display = 'flex';
-                        if (growthEl) {
-                            growthEl.textContent = (isPositive ? '+' : '') + growth + '%';
-                            growthEl.className = 'compare-value ' + (isPositive ? 'positive' : 'negative');
+                        const diff = sales - compSales;
+                        if (overlayEl) {
+                            overlayEl.className = 'dept-overlay active';
+                            overlayEl.innerHTML = `
+                                <div class="overlay-title">전년 대비</div>
+                                <div class="overlay-value ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${growth}%</div>
+                                <div class="overlay-detail">${compareData.year}년: ${formatCurrency(compSales)}</div>
+                                <div class="overlay-detail">차이: ${isPositive ? '+' : ''}${formatCurrency(diff)}</div>
+                            `;
                         }
                     } else {
-                        if (compareEl) compareEl.style.display = 'none';
+                        if (overlayEl) overlayEl.className = 'dept-overlay';
                     }
                 } else {
-                    if (compareEl) compareEl.style.display = 'none';
+                    if (overlayEl) overlayEl.className = 'dept-overlay';
                 }
             });
         }

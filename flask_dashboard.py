@@ -1158,6 +1158,8 @@ def process_data(data, purpose_filter=None):
         client = str(row.get('거래처', '') or '').strip() or '미지정'
         defect = str(row.get('부적합항목', '') or '').strip()
         sample_type = str(row.get('검체유형', '') or '').strip()
+        urgent = str(row.get('긴급여부', '') or '').strip()
+        is_urgent = urgent in ['Y', 'y', '긴급', '예', '1', 'O', 'o']
         if sample_type:
             sample_types.add(sample_type)
 
@@ -1166,9 +1168,11 @@ def process_data(data, purpose_filter=None):
 
         # 매니저별
         if manager not in by_manager:
-            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}}
+            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}, 'urgent': 0}
         by_manager[manager]['sales'] += sales
         by_manager[manager]['count'] += 1
+        if is_urgent:
+            by_manager[manager]['urgent'] += 1
         if client not in by_manager[manager]['clients']:
             by_manager[manager]['clients'][client] = {'sales': 0, 'count': 0}
         by_manager[manager]['clients'][client]['sales'] += sales
@@ -1367,8 +1371,11 @@ def process_data(data, purpose_filter=None):
         total_sales += sales
         total_count += 1
 
-    # 정렬
-    sorted_managers = sorted(by_manager.items(), key=lambda x: x[1]['sales'], reverse=True)
+    # 정렬 (EXCLUDED_MANAGERS 제외)
+    sorted_managers = sorted(
+        [(m, d) for m, d in by_manager.items() if m not in EXCLUDED_MANAGERS],
+        key=lambda x: x[1]['sales'], reverse=True
+    )
     sorted_branches = sorted(by_branch.items(), key=lambda x: x[1]['sales'], reverse=True)
     sorted_clients = sorted(by_client.items(), key=lambda x: x[1]['sales'], reverse=True)
     sorted_purposes = sorted(by_purpose.items(), key=lambda x: x[1]['sales'], reverse=True)
@@ -1448,7 +1455,7 @@ def process_data(data, purpose_filter=None):
         ]
 
     return {
-        'by_manager': [(m, {'sales': d['sales'], 'count': d['count']}) for m, d in sorted_managers],
+        'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0)}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
                       for k, v in sorted_branches],
         'by_month': sorted(by_month.items()),

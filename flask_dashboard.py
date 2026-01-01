@@ -6030,7 +6030,7 @@ HTML_TEMPLATE = '''
                             <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: normal;">Claude Opus 4</span>
                         </h3>
                         <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6;">
-                            ${data.ai_insight.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}
+                            ${data.ai_insight.content.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>').replace(/\\n/g, '<br>')}
                         </div>
                         <div style="margin-top: 10px; font-size: 11px; opacity: 0.7; text-align: right;">
                             ${data.ai_insight.generated_at ? '생성: ' + new Date(data.ai_insight.generated_at).toLocaleString('ko-KR') : ''}

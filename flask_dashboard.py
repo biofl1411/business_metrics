@@ -2423,10 +2423,10 @@ HTML_TEMPLATE = '''
             background: var(--gray-100);
             color: var(--gray-600);
         }
-        .q-item.q1 { background: rgba(16, 185, 129, 0.15); color: #059669; }
-        .q-item.q2 { background: rgba(99, 102, 241, 0.15); color: #4f46e5; }
-        .q-item.q3 { background: rgba(245, 158, 11, 0.15); color: #d97706; }
-        .q-item.q4 { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+        .q-item.q1 { background: rgba(37, 99, 235, 0.15); color: #1d4ed8; }   /* 고건수·고매출: 파란색 */
+        .q-item.q2 { background: rgba(6, 182, 212, 0.15); color: #0891b2; }   /* 저건수·고매출: 청록색 */
+        .q-item.q3 { background: rgba(249, 115, 22, 0.15); color: #ea580c; }  /* 고건수·저매출: 주황색 */
+        .q-item.q4 { background: rgba(220, 38, 38, 0.15); color: #dc2626; }   /* 저건수·저매출: 빨간색 */
 
         /* 다중 선택 드롭다운 */
         .multi-select-container {
@@ -4297,14 +4297,22 @@ HTML_TEMPLATE = '''
             const avgCount = managers.reduce((sum, m) => sum + (m[1].count || 0), 0) / managers.length;
             const avgSales = managers.reduce((sum, m) => sum + (m[1].sales || 0), 0) / managers.length;
 
+            // 4분면별 색상 (더 명확한 구분)
+            const quadrantColors = {
+                q1: 'rgba(37, 99, 235, 0.85)',   // 고건수·고매출: 진한 파란색
+                q2: 'rgba(6, 182, 212, 0.85)',   // 저건수·고매출: 청록색(시안)
+                q3: 'rgba(249, 115, 22, 0.85)',  // 고건수·저매출: 주황색
+                q4: 'rgba(220, 38, 38, 0.85)',   // 저건수·저매출: 빨간색
+            };
+
             const data = managers.map(m => {
                 const isHighCount = (m[1].count || 0) >= avgCount;
                 const isHighSales = (m[1].sales || 0) >= avgSales;
                 let color;
-                if (isHighCount && isHighSales) color = 'rgba(16, 185, 129, 0.8)';
-                else if (!isHighCount && isHighSales) color = 'rgba(99, 102, 241, 0.8)';
-                else if (isHighCount && !isHighSales) color = 'rgba(245, 158, 11, 0.8)';
-                else color = 'rgba(239, 68, 68, 0.8)';
+                if (isHighCount && isHighSales) color = quadrantColors.q1;
+                else if (!isHighCount && isHighSales) color = quadrantColors.q2;
+                else if (isHighCount && !isHighSales) color = quadrantColors.q3;
+                else color = quadrantColors.q4;
                 return { x: m[1].count || 0, y: m[1].sales || 0, name: m[0], color };
             });
 
@@ -4313,8 +4321,10 @@ HTML_TEMPLATE = '''
                 label: currentData.year + '년',
                 data: data.map(d => ({ x: d.x, y: d.y })),
                 backgroundColor: data.map(d => d.color),
-                pointRadius: 10,
-                pointHoverRadius: 14,
+                borderColor: data.map(d => d.color.replace('0.85', '1')),
+                borderWidth: 2,
+                pointRadius: 12,
+                pointHoverRadius: 16,
             }];
 
             // 전년도 비교 데이터 추가
@@ -4328,10 +4338,11 @@ HTML_TEMPLATE = '''
                 datasets.push({
                     label: compareData.year + '년',
                     data: compData.map(d => ({ x: d.x, y: d.y })),
-                    backgroundColor: 'rgba(156, 163, 175, 0.5)',
-                    borderColor: 'rgba(156, 163, 175, 0.8)',
-                    pointRadius: 7,
-                    pointHoverRadius: 10,
+                    backgroundColor: 'rgba(168, 85, 247, 0.4)',  // 보라색 (전년도)
+                    borderColor: 'rgba(168, 85, 247, 0.8)',
+                    borderWidth: 2,
+                    pointRadius: 9,
+                    pointHoverRadius: 12,
                     pointStyle: 'triangle',
                 });
             }

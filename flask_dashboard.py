@@ -1913,6 +1913,75 @@ HTML_TEMPLATE = '''
             font-weight: 500;
         }
 
+        /* KPI 카드 호버 오버레이 */
+        .kpi-card {
+            cursor: default;
+            transition: all 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .kpi-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.97);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        .kpi-card:hover .kpi-overlay {
+            opacity: 1;
+        }
+
+        .kpi-overlay-year {
+            font-size: 13px;
+            color: var(--gray-400);
+            margin-bottom: 6px;
+        }
+
+        .kpi-overlay-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--purple);
+            margin-bottom: 6px;
+        }
+
+        .kpi-overlay-sub {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .kpi-overlay-diff {
+            margin-top: 10px;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .kpi-overlay-diff.positive {
+            background: var(--success-light);
+            color: var(--success);
+        }
+
+        .kpi-overlay-diff.negative {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
         /* 검사 목적별 카드 섹션 */
         .purpose-kpi-section {
             margin-bottom: 24px;
@@ -2058,6 +2127,65 @@ HTML_TEMPLATE = '''
         .purpose-kpi-sub span {
             color: var(--gray-600);
             font-weight: 500;
+        }
+
+        /* 호버 오버레이 (전년도 값 표시) */
+        .purpose-kpi-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .purpose-kpi-card:hover .purpose-kpi-overlay {
+            opacity: 1;
+        }
+
+        .purpose-kpi-overlay-year {
+            font-size: 12px;
+            color: var(--gray-400);
+            margin-bottom: 4px;
+        }
+
+        .purpose-kpi-overlay-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--purple);
+            margin-bottom: 4px;
+        }
+
+        .purpose-kpi-overlay-sub {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .purpose-kpi-overlay-diff {
+            margin-top: 8px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .purpose-kpi-overlay-diff.positive {
+            background: var(--success-light);
+            color: var(--success);
+        }
+
+        .purpose-kpi-overlay-diff.negative {
+            background: var(--danger-light);
+            color: var(--danger);
         }
 
         /* 콘텐츠 영역 */
@@ -2430,6 +2558,11 @@ HTML_TEMPLATE = '''
                 <div class="kpi-label">총 매출</div>
                 <div class="kpi-value" id="totalSales">-</div>
                 <div class="kpi-compare" id="compareTotalSales" style="display: none;"></div>
+                <div class="kpi-overlay" id="salesOverlay" style="display: none;">
+                    <div class="kpi-overlay-year" id="salesOverlayYear">2024년</div>
+                    <div class="kpi-overlay-value" id="salesOverlayValue">-</div>
+                    <div class="kpi-overlay-diff" id="salesOverlayDiff">전년대비 0%</div>
+                </div>
             </div>
 
             <div class="kpi-card count">
@@ -2440,6 +2573,11 @@ HTML_TEMPLATE = '''
                 <div class="kpi-label">총 건수</div>
                 <div class="kpi-value" id="totalCount">-</div>
                 <div class="kpi-compare" id="compareTotalCount" style="display: none;"></div>
+                <div class="kpi-overlay" id="countOverlay" style="display: none;">
+                    <div class="kpi-overlay-year" id="countOverlayYear">2024년</div>
+                    <div class="kpi-overlay-value" id="countOverlayValue">-</div>
+                    <div class="kpi-overlay-diff" id="countOverlayDiff">전년대비 0%</div>
+                </div>
             </div>
 
             <div class="kpi-card price">
@@ -2450,6 +2588,11 @@ HTML_TEMPLATE = '''
                 <div class="kpi-label">평균 단가</div>
                 <div class="kpi-value" id="avgPrice">-</div>
                 <div class="kpi-compare" id="compareAvgPrice" style="display: none;"></div>
+                <div class="kpi-overlay" id="priceOverlay" style="display: none;">
+                    <div class="kpi-overlay-year" id="priceOverlayYear">2024년</div>
+                    <div class="kpi-overlay-value" id="priceOverlayValue">-</div>
+                    <div class="kpi-overlay-diff" id="priceOverlayDiff">전년대비 0%</div>
+                </div>
             </div>
 
             <div class="kpi-card goal">
@@ -2853,9 +2996,13 @@ HTML_TEMPLATE = '''
                 const compCount = compareData.total_count || 0;
                 const compAvg = compCount > 0 ? compSales / compCount : 0;
 
-                updateTrendBadge('salesTrend', compSales > 0 ? ((totalSales - compSales) / compSales * 100).toFixed(1) : 0);
-                updateTrendBadge('countTrend', compCount > 0 ? ((totalCount - compCount) / compCount * 100).toFixed(1) : 0);
-                updateTrendBadge('priceTrend', compAvg > 0 ? ((avgPrice - compAvg) / compAvg * 100).toFixed(1) : 0);
+                const salesDiff = compSales > 0 ? ((totalSales - compSales) / compSales * 100).toFixed(1) : 0;
+                const countDiff = compCount > 0 ? ((totalCount - compCount) / compCount * 100).toFixed(1) : 0;
+                const priceDiff = compAvg > 0 ? ((avgPrice - compAvg) / compAvg * 100).toFixed(1) : 0;
+
+                updateTrendBadge('salesTrend', salesDiff);
+                updateTrendBadge('countTrend', countDiff);
+                updateTrendBadge('priceTrend', priceDiff);
 
                 document.getElementById('compareTotalSales').innerHTML = `${compareData.year}년: <span>${formatCurrency(compSales)}</span>`;
                 document.getElementById('compareTotalSales').style.display = 'block';
@@ -2863,9 +3010,16 @@ HTML_TEMPLATE = '''
                 document.getElementById('compareTotalCount').style.display = 'block';
                 document.getElementById('compareAvgPrice').innerHTML = `${compareData.year}년: <span>${formatCurrency(compAvg)}</span>`;
                 document.getElementById('compareAvgPrice').style.display = 'block';
+
+                // KPI 카드 호버 오버레이 업데이트
+                updateKpiOverlay('sales', compareData.year, formatCurrency(compSales), salesDiff);
+                updateKpiOverlay('count', compareData.year, compCount.toLocaleString() + '건', countDiff);
+                updateKpiOverlay('price', compareData.year, formatCurrency(compAvg), priceDiff);
             } else {
                 ['compareTotalSales', 'compareTotalCount', 'compareAvgPrice'].forEach(id => document.getElementById(id).style.display = 'none');
                 ['salesTrend', 'countTrend', 'priceTrend'].forEach(id => document.getElementById(id).style.visibility = 'hidden');
+                // 오버레이 숨기기
+                ['salesOverlay', 'countOverlay', 'priceOverlay'].forEach(id => document.getElementById(id).style.display = 'none');
             }
         }
 
@@ -2875,6 +3029,23 @@ HTML_TEMPLATE = '''
             const isUp = parseFloat(diff) >= 0;
             el.className = 'kpi-trend ' + (isUp ? 'up' : 'down');
             el.innerHTML = `<span>${isUp ? '↑' : '↓'} ${isUp ? '+' : ''}${diff}%</span>`;
+        }
+
+        function updateKpiOverlay(type, year, value, diff) {
+            const overlay = document.getElementById(type + 'Overlay');
+            const yearEl = document.getElementById(type + 'OverlayYear');
+            const valueEl = document.getElementById(type + 'OverlayValue');
+            const diffEl = document.getElementById(type + 'OverlayDiff');
+
+            if (overlay && yearEl && valueEl && diffEl) {
+                overlay.style.display = 'flex';
+                yearEl.textContent = year + '년';
+                valueEl.textContent = value;
+
+                const isUp = parseFloat(diff) >= 0;
+                diffEl.className = 'kpi-overlay-diff ' + (isUp ? 'positive' : 'negative');
+                diffEl.textContent = `전년대비 ${isUp ? '+' : ''}${diff}%`;
+            }
         }
 
         function updatePurposeGrid() {
@@ -2894,12 +3065,29 @@ HTML_TEMPLATE = '''
                 const salesValue = isCancel ? '-' + formatCurrency(Math.abs(sales)) : formatCurrency(sales);
 
                 let changeHtml = '';
+                let overlayHtml = '';
+
                 if (compareData && compareMap[name]) {
                     const compSales = compareMap[name].sales || 0;
+                    const compCount = compareMap[name].count || 0;
+                    const compSalesValue = isCancel ? '-' + formatCurrency(Math.abs(compSales)) : formatCurrency(compSales);
+
                     if (Math.abs(compSales) > 0) {
                         const diff = ((sales - compSales) / Math.abs(compSales) * 100).toFixed(1);
                         const isUp = parseFloat(diff) >= 0;
                         changeHtml = `<div class="purpose-kpi-trend ${isUp ? 'up' : 'down'}">${isUp ? '↑' : '↓'} ${isUp ? '+' : ''}${diff}%</div>`;
+
+                        // 호버 오버레이 생성
+                        overlayHtml = `
+                            <div class="purpose-kpi-overlay">
+                                <div class="purpose-kpi-overlay-year">${compareData.year}년</div>
+                                <div class="purpose-kpi-overlay-value">${compSalesValue}</div>
+                                <div class="purpose-kpi-overlay-sub">건수: ${compCount.toLocaleString()}건</div>
+                                <div class="purpose-kpi-overlay-diff ${isUp ? 'positive' : 'negative'}">
+                                    전년대비 ${isUp ? '+' : ''}${diff}%
+                                </div>
+                            </div>
+                        `;
                     }
                 }
 
@@ -2912,6 +3100,7 @@ HTML_TEMPLATE = '''
                         <div class="purpose-kpi-name">${name}</div>
                         <div class="purpose-kpi-value">${salesValue}</div>
                         <div class="purpose-kpi-sub">건수: <span>${count.toLocaleString()}건</span></div>
+                        ${overlayHtml}
                     </div>
                 `;
             }).join('');

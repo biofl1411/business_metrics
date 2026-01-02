@@ -407,9 +407,20 @@ def process_data(data, purpose_filter=None):
 
         if month > 0:
             if month not in by_month:
-                by_month[month] = {'sales': 0, 'count': 0}
+                by_month[month] = {'sales': 0, 'count': 0, 'byPurpose': {}, 'byManager': {}}
             by_month[month]['sales'] += sales
             by_month[month]['count'] += 1
+            # 월별 검사목적별 데이터
+            if purpose:
+                if purpose not in by_month[month]['byPurpose']:
+                    by_month[month]['byPurpose'][purpose] = {'sales': 0, 'count': 0}
+                by_month[month]['byPurpose'][purpose]['sales'] += sales
+                by_month[month]['byPurpose'][purpose]['count'] += 1
+            # 월별 담당자별 데이터
+            if manager not in by_month[month]['byManager']:
+                by_month[month]['byManager'][manager] = {'sales': 0, 'count': 0}
+            by_month[month]['byManager'][manager]['sales'] += sales
+            by_month[month]['byManager'][manager]['count'] += 1
 
         # 거래처별
         if client not in by_client:
@@ -997,14 +1008,163 @@ HTML_TEMPLATE = '''
 
     <!-- 월별 탭 -->
     <div id="monthly" class="tab-content">
+        <!-- KPI 카드 4개 -->
+        <div class="monthly-kpi-cards" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+            <div class="kpi-card" id="kpiMaxMonth" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); cursor: pointer; position: relative;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 24px;">🏆</span>
+                    <span style="color: #6b7280; font-size: 14px;">최고 매출 월</span>
+                </div>
+                <div id="kpiMaxMonthValue" style="font-size: 28px; font-weight: bold; color: #1e293b;">-</div>
+                <div id="kpiMaxMonthSub" style="font-size: 14px; color: #6b7280; margin-top: 5px;">-</div>
+            </div>
+            <div class="kpi-card" id="kpiMinMonth" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); cursor: pointer; position: relative;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 24px;">📉</span>
+                    <span style="color: #6b7280; font-size: 14px;">최저 매출 월</span>
+                </div>
+                <div id="kpiMinMonthValue" style="font-size: 28px; font-weight: bold; color: #1e293b;">-</div>
+                <div id="kpiMinMonthSub" style="font-size: 14px; color: #6b7280; margin-top: 5px;">-</div>
+            </div>
+            <div class="kpi-card" id="kpiAvgMonth" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); position: relative;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 24px;">📊</span>
+                    <span style="color: #6b7280; font-size: 14px;">월 평균 매출</span>
+                </div>
+                <div id="kpiAvgMonthValue" style="font-size: 28px; font-weight: bold; color: #1e293b;">-</div>
+                <div id="kpiAvgMonthSub" style="font-size: 14px; color: #6b7280; margin-top: 5px;">12개월 평균</div>
+            </div>
+            <div class="kpi-card" id="kpiYtd" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); position: relative;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 24px;">📈</span>
+                    <span style="color: #6b7280; font-size: 14px;">YTD 누적</span>
+                </div>
+                <div id="kpiYtdValue" style="font-size: 28px; font-weight: bold; color: #1e293b;">-</div>
+                <div id="kpiYtdSub" style="font-size: 14px; color: #6b7280; margin-top: 5px;">-</div>
+            </div>
+        </div>
+
+        <!-- 월별 매출/건수 추이 차트 -->
         <div class="charts">
-            <div class="chart-container full">
+            <div class="chart-container" style="flex: 1;">
                 <h3>월별 매출 추이</h3>
                 <div id="monthlyLegend" class="legend-custom" style="display:none;"></div>
-                <div style="height: 300px;"><canvas id="monthlyChart"></canvas></div>
+                <div style="height: 280px;"><canvas id="monthlyChart"></canvas></div>
+                <div id="monthlySalesAnalysis" style="display: none; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 13px;"></div>
+            </div>
+            <div class="chart-container" style="flex: 1;">
+                <h3>월별 건수 추이</h3>
+                <div id="monthlyCountLegend" class="legend-custom" style="display:none;"></div>
+                <div style="height: 280px;"><canvas id="monthlyCountChart"></canvas></div>
+                <div id="monthlyCountAnalysis" style="display: none; margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 13px;"></div>
+            </div>
+        </div>
+
+        <!-- 분기별/평균단가 차트 -->
+        <div class="charts" style="margin-top: 20px;">
+            <div class="chart-container" style="flex: 1;">
+                <h3>분기별 매출 비교</h3>
+                <div id="quarterlyLegend" class="legend-custom" style="display:none;"></div>
+                <div style="height: 280px;"><canvas id="quarterlyChart"></canvas></div>
+            </div>
+            <div class="chart-container" style="flex: 1;">
+                <h3>월별 평균단가 추이</h3>
+                <div style="height: 280px;"><canvas id="avgPriceChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- 전년 동월 대비 증감률 차트 -->
+        <div class="charts" style="margin-top: 20px;">
+            <div class="chart-container full">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3>전년 동월 대비 증감률</h3>
+                    <select id="yoyPurposeFilter" onchange="updateYoyChart()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd;">
+                        <option value="">전체</option>
+                    </select>
+                </div>
+                <div style="height: 250px;"><canvas id="yoyChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- 히트맵: 월별 검사목적 매출 분포 -->
+        <div class="charts" style="margin-top: 20px;">
+            <div class="chart-container full">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3>월별 검사목적 매출 분포</h3>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <select id="heatmapMode" onchange="updateHeatmap()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd;">
+                            <option value="sales">매출액</option>
+                            <option value="percent">비율(%)</option>
+                        </select>
+                        <div style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #6b7280;">
+                            <span>낮음</span>
+                            <div style="display: flex; gap: 2px;">
+                                <div style="width: 20px; height: 12px; background: #f8fafc; border: 1px solid #e5e7eb;"></div>
+                                <div style="width: 20px; height: 12px; background: #e0f2fe;"></div>
+                                <div style="width: 20px; height: 12px; background: #7dd3fc;"></div>
+                                <div style="width: 20px; height: 12px; background: #38bdf8;"></div>
+                                <div style="width: 20px; height: 12px; background: #0ea5e9;"></div>
+                                <div style="width: 20px; height: 12px; background: #0284c7;"></div>
+                            </div>
+                            <span>높음</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="scroll-table" style="max-height: 500px; overflow: auto;">
+                    <table id="heatmapTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead id="heatmapTableHead"></thead>
+                        <tbody id="heatmapTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 월별 상세 테이블 -->
+        <div class="charts" style="margin-top: 20px;">
+            <div class="chart-container full">
+                <h3>월별 상세</h3>
+                <div class="scroll-table">
+                    <table id="monthlyDetailTable" style="width: 100%; border-collapse: collapse;">
+                        <thead id="monthlyDetailTableHead"></thead>
+                        <tbody id="monthlyDetailTableBody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- 월 상세 모달 -->
+    <div id="monthDetailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
+        <div style="background: white; max-width: 900px; margin: 50px auto; border-radius: 15px; box-shadow: 0 10px 50px rgba(0,0,0,0.3);">
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 15px 15px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                <h3 id="monthModalTitle" style="margin: 0; font-size: 18px;">월 상세</h3>
+                <button onclick="closeMonthModal()" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                    <div style="flex: 1; text-align: center;">
+                        <div id="monthModalCurrentYear" style="font-weight: bold; margin-bottom: 10px;">2025년</div>
+                        <div style="height: 200px;"><canvas id="monthModalCurrentChart"></canvas></div>
+                        <div id="monthModalCurrentTotal" style="font-size: 20px; font-weight: bold; color: #6366f1; margin-top: 10px;">-</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div id="monthModalCompareYear" style="font-weight: bold; margin-bottom: 10px;">2024년</div>
+                        <div style="height: 200px;"><canvas id="monthModalCompareChart"></canvas></div>
+                        <div id="monthModalCompareTotal" style="font-size: 20px; font-weight: bold; color: #8b5cf6; margin-top: 10px;">-</div>
+                    </div>
+                </div>
+                <div class="scroll-table" style="max-height: 300px;">
+                    <table id="monthModalTable" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead id="monthModalTableHead"></thead>
+                        <tbody id="monthModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 호버 팝업 컨테이너 -->
+    <div id="monthlyPopup" style="display: none; position: fixed; z-index: 9999; background: white; border: 2px solid #6366f1; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); padding: 15px; max-width: 350px; max-height: 80vh; overflow-y: auto; font-size: 13px;"></div>
 
     <!-- 업체별 탭 -->
     <div id="client" class="tab-content">
@@ -1680,7 +1840,7 @@ HTML_TEMPLATE = '''
                 ['updateTeamLabels', updateTeamLabels],
                 ['updateManagerChart', updateManagerChart],
                 ['updateBranchChart', updateBranchChart],
-                ['updateMonthlyChart', updateMonthlyChart],
+                ['updateMonthlyTab', updateMonthlyTab],
                 ['updateManagerTable', updateManagerTable],
                 ['updateBranchTable', updateBranchTable],
                 ['updateClientTables', updateClientTables],
@@ -1851,28 +2011,645 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // ========== 월별 탭 함수들 ==========
+        let monthModalCharts = { current: null, compare: null };
+
+        function updateMonthlyTab() {
+            updateMonthlyKPI();
+            updateMonthlyChart();
+            updateMonthlyCountChart();
+            updateQuarterlyChart();
+            updateAvgPriceChart();
+            updateYoyPurposeFilter();
+            updateYoyChart();
+            updateHeatmap();
+            updateMonthlyDetailTable();
+        }
+
+        function updateMonthlyKPI() {
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const months = Object.keys(currentMap).map(Number).filter(m => m > 0);
+            if (months.length === 0) return;
+
+            // 최고/최저 매출 월
+            let maxMonth = months[0], minMonth = months[0];
+            months.forEach(m => {
+                if ((currentMap[m]?.sales || 0) > (currentMap[maxMonth]?.sales || 0)) maxMonth = m;
+                if ((currentMap[m]?.sales || 0) < (currentMap[minMonth]?.sales || 0)) minMonth = m;
+            });
+
+            const maxSales = currentMap[maxMonth]?.sales || 0;
+            const minSales = currentMap[minMonth]?.sales || 0;
+            const totalSales = months.reduce((sum, m) => sum + (currentMap[m]?.sales || 0), 0);
+            const avgSales = totalSales / months.length;
+
+            document.getElementById('kpiMaxMonthValue').textContent = maxMonth + '월';
+            document.getElementById('kpiMaxMonthSub').textContent = formatCurrency(maxSales);
+            document.getElementById('kpiMinMonthValue').textContent = minMonth + '월';
+            document.getElementById('kpiMinMonthSub').textContent = formatCurrency(minSales);
+            document.getElementById('kpiAvgMonthValue').textContent = formatCurrency(avgSales);
+            document.getElementById('kpiYtdValue').textContent = formatCurrency(totalSales);
+            document.getElementById('kpiYtdSub').textContent = months.length + '개월 누적';
+
+            // 전년비교 시 배지 추가
+            if (compareData) {
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compareTotalSales = months.reduce((sum, m) => sum + (compareMap[m]?.sales || 0), 0);
+                const ytdDiff = ((totalSales - compareTotalSales) / compareTotalSales * 100).toFixed(1);
+                const ytdBadge = ytdDiff >= 0 ?
+                    `<span style="background: #dcfce7; color: #16a34a; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 8px;">+${ytdDiff}%</span>` :
+                    `<span style="background: #fee2e2; color: #dc2626; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 8px;">${ytdDiff}%</span>`;
+                document.getElementById('kpiYtdSub').innerHTML = months.length + '개월 누적 ' + ytdBadge;
+            }
+        }
+
         function updateMonthlyChart() {
             const ctx = document.getElementById('monthlyChart').getContext('2d');
             if (charts.monthly) charts.monthly.destroy();
 
             const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
             const currentMap = Object.fromEntries(currentData.by_month);
-            const datasets = [{ label: currentData.year + '년', data: labels.map((_, i) => currentMap[i+1]?.sales || 0), borderColor: '#667eea', backgroundColor: 'rgba(102, 126, 234, 0.1)', fill: true, tension: 0.4 }];
+            const currentSalesData = labels.map((_, i) => currentMap[i+1]?.sales || 0);
+
+            const datasets = [{
+                label: currentData.year + '년',
+                data: currentSalesData,
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#6366f1'
+            }];
+
+            let analysisHtml = '';
 
             if (compareData) {
                 const compareMap = Object.fromEntries(compareData.by_month);
-                datasets.push({ label: compareData.year + '년', data: labels.map((_, i) => compareMap[i+1]?.sales || 0), borderColor: '#764ba2', backgroundColor: 'rgba(118, 75, 162, 0.1)', fill: true, tension: 0.4 });
-                document.getElementById('monthlyLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background:#667eea"></div>${currentData.year}년</div><div class="legend-item"><div class="legend-color" style="background:#764ba2"></div>${compareData.year}년</div>`;
+                const compareSalesData = labels.map((_, i) => compareMap[i+1]?.sales || 0);
+                datasets.push({
+                    label: compareData.year + '년',
+                    data: compareSalesData,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#8b5cf6'
+                });
+
+                document.getElementById('monthlyLegend').innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:#6366f1"></div>${currentData.year}년</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#8b5cf6"></div>${compareData.year}년</div>`;
                 document.getElementById('monthlyLegend').style.display = 'flex';
+
+                // 변동 분석 (±10% 이상, ±2000만 이상)
+                const variations = [];
+                for (let i = 0; i < 12; i++) {
+                    const curr = currentSalesData[i] || 0;
+                    const comp = compareSalesData[i] || 0;
+                    if (comp > 0) {
+                        const diff = curr - comp;
+                        const pct = (diff / comp) * 100;
+                        if (Math.abs(pct) >= 10 && Math.abs(diff) >= 20000000) {
+                            variations.push({ month: i + 1, diff, pct, curr, comp });
+                        }
+                    }
+                }
+                variations.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+                if (variations.length > 0) {
+                    analysisHtml = '<strong>📈 주요 변동 분석</strong><div style="margin-top: 8px;">';
+                    variations.slice(0, 3).forEach(v => {
+                        const icon = v.pct >= 0 ? '📈' : '📉';
+                        const color = v.pct >= 0 ? '#16a34a' : '#dc2626';
+                        analysisHtml += `<div style="margin: 4px 0;">${icon} <strong>${v.month}월</strong> <span style="color: ${color};">${v.pct >= 0 ? '+' : ''}${v.pct.toFixed(1)}%</span> (${formatCurrency(v.diff)})</div>`;
+                    });
+                    analysisHtml += '</div>';
+                }
             } else {
                 document.getElementById('monthlyLegend').style.display = 'none';
             }
 
+            document.getElementById('monthlySalesAnalysis').innerHTML = analysisHtml;
+            document.getElementById('monthlySalesAnalysis').style.display = analysisHtml ? 'block' : 'none';
+
             charts.monthly = new Chart(ctx, {
-                type: 'line', data: { labels, datasets },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } }
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { ticks: { callback: v => formatCurrency(v) } } },
+                    interaction: { intersect: false, mode: 'index' }
+                }
             });
         }
+
+        function updateMonthlyCountChart() {
+            const ctx = document.getElementById('monthlyCountChart').getContext('2d');
+            if (charts.monthlyCount) charts.monthlyCount.destroy();
+
+            const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const currentCountData = labels.map((_, i) => currentMap[i+1]?.count || 0);
+
+            const datasets = [{
+                label: currentData.year + '년',
+                data: currentCountData,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#10b981'
+            }];
+
+            let analysisHtml = '';
+
+            if (compareData) {
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compareCountData = labels.map((_, i) => compareMap[i+1]?.count || 0);
+                datasets.push({
+                    label: compareData.year + '년',
+                    data: compareCountData,
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#059669'
+                });
+
+                document.getElementById('monthlyCountLegend').innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:#10b981"></div>${currentData.year}년</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#059669"></div>${compareData.year}년</div>`;
+                document.getElementById('monthlyCountLegend').style.display = 'flex';
+
+                // 변동 분석 (±10% 이상, ±200건 이상)
+                const variations = [];
+                for (let i = 0; i < 12; i++) {
+                    const curr = currentCountData[i] || 0;
+                    const comp = compareCountData[i] || 0;
+                    if (comp > 0) {
+                        const diff = curr - comp;
+                        const pct = (diff / comp) * 100;
+                        if (Math.abs(pct) >= 10 && Math.abs(diff) >= 200) {
+                            variations.push({ month: i + 1, diff, pct });
+                        }
+                    }
+                }
+                variations.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+                if (variations.length > 0) {
+                    analysisHtml = '<strong>📊 건수 변동 분석</strong><div style="margin-top: 8px;">';
+                    variations.slice(0, 3).forEach(v => {
+                        const icon = v.pct >= 0 ? '📈' : '📉';
+                        const color = v.pct >= 0 ? '#16a34a' : '#dc2626';
+                        analysisHtml += `<div style="margin: 4px 0;">${icon} <strong>${v.month}월</strong> <span style="color: ${color};">${v.pct >= 0 ? '+' : ''}${v.pct.toFixed(1)}%</span> (${v.diff >= 0 ? '+' : ''}${v.diff}건)</div>`;
+                    });
+                    analysisHtml += '</div>';
+                }
+            } else {
+                document.getElementById('monthlyCountLegend').style.display = 'none';
+            }
+
+            document.getElementById('monthlyCountAnalysis').innerHTML = analysisHtml;
+            document.getElementById('monthlyCountAnalysis').style.display = analysisHtml ? 'block' : 'none';
+
+            charts.monthlyCount = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { ticks: { callback: v => v.toLocaleString() + '건' } } },
+                    interaction: { intersect: false, mode: 'index' }
+                }
+            });
+        }
+
+        function updateQuarterlyChart() {
+            const ctx = document.getElementById('quarterlyChart').getContext('2d');
+            if (charts.quarterly) charts.quarterly.destroy();
+
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+            const quarterMonths = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]];
+            const currentQuarterlySales = quarterMonths.map(ms => ms.reduce((sum, m) => sum + (currentMap[m]?.sales || 0), 0));
+
+            const datasets = [{
+                label: currentData.year + '년',
+                data: currentQuarterlySales,
+                backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                borderRadius: 6
+            }];
+
+            if (compareData) {
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compareQuarterlySales = quarterMonths.map(ms => ms.reduce((sum, m) => sum + (compareMap[m]?.sales || 0), 0));
+                datasets.push({
+                    label: compareData.year + '년',
+                    data: compareQuarterlySales,
+                    backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                    borderRadius: 6
+                });
+                document.getElementById('quarterlyLegend').innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:rgba(99, 102, 241, 0.8)"></div>${currentData.year}년</div>
+                    <div class="legend-item"><div class="legend-color" style="background:rgba(139, 92, 246, 0.6)"></div>${compareData.year}년</div>`;
+                document.getElementById('quarterlyLegend').style.display = 'flex';
+            } else {
+                document.getElementById('quarterlyLegend').style.display = 'none';
+            }
+
+            charts.quarterly = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: quarters, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
+                }
+            });
+        }
+
+        function updateAvgPriceChart() {
+            const ctx = document.getElementById('avgPriceChart').getContext('2d');
+            if (charts.avgPrice) charts.avgPrice.destroy();
+
+            const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const currentAvgData = labels.map((_, i) => {
+                const m = currentMap[i+1];
+                return m && m.count > 0 ? m.sales / m.count : 0;
+            });
+
+            const datasets = [{
+                label: currentData.year + '년',
+                data: currentAvgData,
+                backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                borderRadius: 4
+            }];
+
+            if (compareData) {
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compareAvgData = labels.map((_, i) => {
+                    const m = compareMap[i+1];
+                    return m && m.count > 0 ? m.sales / m.count : 0;
+                });
+                datasets.push({
+                    label: compareData.year + '년',
+                    data: compareAvgData,
+                    backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                    borderRadius: 4
+                });
+            }
+
+            charts.avgPrice = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: compareData ? true : false, position: 'top' } },
+                    scales: { y: { ticks: { callback: v => (v/10000).toFixed(0) + '만' } } }
+                }
+            });
+        }
+
+        function updateYoyPurposeFilter() {
+            const select = document.getElementById('yoyPurposeFilter');
+            select.innerHTML = '<option value="">전체</option>';
+            if (currentData.by_purpose) {
+                currentData.by_purpose.slice(0, 15).forEach(p => {
+                    select.innerHTML += `<option value="${p[0]}">${p[0]}</option>`;
+                });
+            }
+        }
+
+        function updateYoyChart() {
+            const ctx = document.getElementById('yoyChart').getContext('2d');
+            if (charts.yoy) charts.yoy.destroy();
+
+            if (!compareData) {
+                // 비교 데이터 없으면 차트 숨김
+                ctx.canvas.parentElement.innerHTML = '<div style="text-align: center; padding: 50px; color: #6b7280;">전년 비교를 선택하면 증감률을 확인할 수 있습니다.</div>';
+                return;
+            }
+
+            const purpose = document.getElementById('yoyPurposeFilter').value;
+            const labels = []; for (let i = 1; i <= 12; i++) labels.push(i + '월');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const compareMap = Object.fromEntries(compareData.by_month);
+
+            const yoyData = labels.map((_, i) => {
+                const month = i + 1;
+                let currSales, compSales;
+
+                if (purpose) {
+                    currSales = currentMap[month]?.byPurpose?.[purpose]?.sales || 0;
+                    compSales = compareMap[month]?.byPurpose?.[purpose]?.sales || 0;
+                } else {
+                    currSales = currentMap[month]?.sales || 0;
+                    compSales = compareMap[month]?.sales || 0;
+                }
+
+                if (compSales === 0) return 0;
+                return ((currSales - compSales) / compSales) * 100;
+            });
+
+            const bgColors = yoyData.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)');
+
+            charts.yoy = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '전년 대비 증감률',
+                        data: yoyData,
+                        backgroundColor: bgColors,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            ticks: { callback: v => v.toFixed(0) + '%' },
+                            grid: { color: ctx => ctx.tick.value === 0 ? '#94a3b8' : '#e5e7eb' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateHeatmap() {
+            const mode = document.getElementById('heatmapMode').value;
+            const thead = document.getElementById('heatmapTableHead');
+            const tbody = document.getElementById('heatmapTableBody');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const compareMap = compareData ? Object.fromEntries(compareData.by_month) : null;
+
+            // 헤더: 검사목적 | 1월~12월 | 합계
+            let headerHtml = '<tr><th style="padding: 10px; text-align: left; border-bottom: 2px solid #e5e7eb; background: #f8fafc; position: sticky; left: 0; z-index: 1;">검사목적</th>';
+            for (let i = 1; i <= 12; i++) {
+                headerHtml += `<th style="padding: 10px; text-align: center; border-bottom: 2px solid #e5e7eb; background: #f8fafc; min-width: 70px;">${i}월</th>`;
+            }
+            headerHtml += '<th style="padding: 10px; text-align: center; border-bottom: 2px solid #e5e7eb; background: #f1f5f9; font-weight: bold;">합계</th></tr>';
+            thead.innerHTML = headerHtml;
+
+            // 검사목적별 월별 데이터 수집
+            const purposeData = {};
+            if (currentData.by_purpose) {
+                currentData.by_purpose.forEach(p => {
+                    purposeData[p[0]] = { monthly: {}, total: 0 };
+                });
+            }
+
+            for (let month = 1; month <= 12; month++) {
+                const monthData = currentMap[month]?.byPurpose || {};
+                Object.keys(monthData).forEach(purpose => {
+                    if (!purposeData[purpose]) purposeData[purpose] = { monthly: {}, total: 0 };
+                    purposeData[purpose].monthly[month] = monthData[purpose].sales;
+                    purposeData[purpose].total += monthData[purpose].sales;
+                });
+            }
+
+            // 합계순 정렬
+            const sortedPurposes = Object.entries(purposeData).sort((a, b) => b[1].total - a[1].total);
+
+            // 히트맵 색상 함수
+            function getHeatmapColor(value, max) {
+                if (max === 0 || value === 0) return '#f8fafc';
+                const ratio = value / max;
+                if (ratio <= 0.2) return '#e0f2fe';
+                if (ratio <= 0.4) return '#7dd3fc';
+                if (ratio <= 0.6) return '#38bdf8';
+                if (ratio <= 0.8) return '#0ea5e9';
+                return '#0284c7';
+            }
+
+            // 테이블 바디
+            let bodyHtml = '';
+            sortedPurposes.slice(0, 15).forEach(([purpose, data]) => {
+                const maxMonthly = Math.max(...Object.values(data.monthly), 1);
+                bodyHtml += `<tr><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; background: #fff; position: sticky; left: 0; z-index: 1; font-weight: 500;">${purpose}</td>`;
+
+                for (let month = 1; month <= 12; month++) {
+                    const value = data.monthly[month] || 0;
+                    const bgColor = getHeatmapColor(value, maxMonthly);
+                    const textColor = value / maxMonthly > 0.6 ? '#fff' : '#1e293b';
+
+                    let displayValue = mode === 'percent'
+                        ? (data.total > 0 ? (value / data.total * 100).toFixed(1) + '%' : '-')
+                        : (value > 0 ? formatCurrency(value) : '-');
+
+                    // 전년비교 삼각형
+                    let triangle = '';
+                    if (compareMap) {
+                        const compValue = compareMap[month]?.byPurpose?.[purpose]?.sales || 0;
+                        if (compValue > 0 && value !== compValue) {
+                            const triColor = value > compValue ? '#16a34a' : '#dc2626';
+                            triangle = value > compValue ? `<span style="color: ${triColor}; font-size: 10px;">▲</span>` : `<span style="color: ${triColor}; font-size: 10px;">▼</span>`;
+                        }
+                    }
+
+                    bodyHtml += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid #e5e7eb; background: ${bgColor}; color: ${textColor};">${displayValue}${triangle}</td>`;
+                }
+
+                // 합계
+                const totalDisplay = mode === 'percent' ? '100%' : formatCurrency(data.total);
+                bodyHtml += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid #e5e7eb; background: #f1f5f9; font-weight: bold;">${totalDisplay}</td></tr>`;
+            });
+
+            tbody.innerHTML = bodyHtml;
+        }
+
+        function updateMonthlyDetailTable() {
+            const thead = document.getElementById('monthlyDetailTableHead');
+            const tbody = document.getElementById('monthlyDetailTableBody');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const compareMap = compareData ? Object.fromEntries(compareData.by_month) : null;
+            const totalSales = currentData.total_sales || 1;
+
+            // 헤더
+            let headerHtml = '<tr>';
+            if (compareData) {
+                headerHtml += `<th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">월</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">${currentData.year}년 매출</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">${currentData.year}년 건수</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">${compareData.year}년 매출</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">${compareData.year}년 건수</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">평균단가</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">증감</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">비중</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">상세</th>`;
+            } else {
+                headerHtml += `<th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">월</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">매출액</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">건수</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">평균단가</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">비중</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #e5e7eb;">상세</th>`;
+            }
+            headerHtml += '</tr>';
+            thead.innerHTML = headerHtml;
+
+            // 바디
+            let bodyHtml = '';
+            for (let month = 1; month <= 12; month++) {
+                const curr = currentMap[month] || { sales: 0, count: 0 };
+                const avgPrice = curr.count > 0 ? curr.sales / curr.count : 0;
+                const ratio = (curr.sales / totalSales * 100).toFixed(1);
+
+                bodyHtml += '<tr style="border-bottom: 1px solid #e5e7eb;">';
+                bodyHtml += `<td style="padding: 10px; font-weight: bold;">${month}월</td>`;
+                bodyHtml += `<td style="padding: 10px; text-align: right;">${formatCurrency(curr.sales)}</td>`;
+                bodyHtml += `<td style="padding: 10px; text-align: right;">${curr.count.toLocaleString()}</td>`;
+
+                if (compareData) {
+                    const comp = compareMap?.[month] || { sales: 0, count: 0 };
+                    const diff = comp.sales > 0 ? ((curr.sales - comp.sales) / comp.sales * 100).toFixed(1) : 0;
+                    const diffBadge = diff >= 0
+                        ? `<span style="background: #dcfce7; color: #16a34a; padding: 2px 8px; border-radius: 10px;">+${diff}%</span>`
+                        : `<span style="background: #fee2e2; color: #dc2626; padding: 2px 8px; border-radius: 10px;">${diff}%</span>`;
+
+                    bodyHtml += `<td style="padding: 10px; text-align: right;">${formatCurrency(comp.sales)}</td>`;
+                    bodyHtml += `<td style="padding: 10px; text-align: right;">${comp.count.toLocaleString()}</td>`;
+                    bodyHtml += `<td style="padding: 10px; text-align: right;">${formatCurrency(avgPrice)}</td>`;
+                    bodyHtml += `<td style="padding: 10px; text-align: center;">${diffBadge}</td>`;
+                } else {
+                    bodyHtml += `<td style="padding: 10px; text-align: right;">${formatCurrency(avgPrice)}</td>`;
+                }
+
+                // 비중 프로그레스바
+                bodyHtml += `<td style="padding: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="flex: 1; background: #e5e7eb; border-radius: 4px; height: 8px;">
+                            <div style="width: ${ratio}%; background: #6366f1; border-radius: 4px; height: 100%;"></div>
+                        </div>
+                        <span style="font-size: 12px; color: #6b7280;">${ratio}%</span>
+                    </div>
+                </td>`;
+
+                // 상세 버튼
+                bodyHtml += `<td style="padding: 10px; text-align: center;">
+                    <button onclick="showMonthDetail(${month})" style="background: #6366f1; color: white; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">상세</button>
+                </td>`;
+
+                bodyHtml += '</tr>';
+            }
+
+            tbody.innerHTML = bodyHtml;
+        }
+
+        function showMonthDetail(month) {
+            const modal = document.getElementById('monthDetailModal');
+            const currentMap = Object.fromEntries(currentData.by_month);
+            const monthData = currentMap[month] || { sales: 0, count: 0, byPurpose: {} };
+
+            document.getElementById('monthModalTitle').textContent = `📅 ${month}월 검사목적별 비교`;
+            document.getElementById('monthModalCurrentYear').textContent = currentData.year + '년';
+            document.getElementById('monthModalCurrentTotal').textContent = formatCurrency(monthData.sales);
+
+            // 현재년도 도넛차트
+            if (monthModalCharts.current) monthModalCharts.current.destroy();
+            const currentCtx = document.getElementById('monthModalCurrentChart').getContext('2d');
+            const purposeColors = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6'];
+            const currentPurposes = Object.entries(monthData.byPurpose || {}).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10);
+
+            monthModalCharts.current = new Chart(currentCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: currentPurposes.map(p => p[0]),
+                    datasets: [{
+                        data: currentPurposes.map(p => p[1].sales),
+                        backgroundColor: purposeColors
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // 비교년도 도넛차트
+            if (monthModalCharts.compare) monthModalCharts.compare.destroy();
+            const compareCtx = document.getElementById('monthModalCompareChart').getContext('2d');
+
+            if (compareData) {
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compMonthData = compareMap[month] || { sales: 0, count: 0, byPurpose: {} };
+                document.getElementById('monthModalCompareYear').textContent = compareData.year + '년';
+                document.getElementById('monthModalCompareTotal').textContent = formatCurrency(compMonthData.sales);
+
+                const comparePurposes = Object.entries(compMonthData.byPurpose || {}).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10);
+
+                monthModalCharts.compare = new Chart(compareCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: comparePurposes.map(p => p[0]),
+                        datasets: [{
+                            data: comparePurposes.map(p => p[1].sales),
+                            backgroundColor: purposeColors
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+            } else {
+                document.getElementById('monthModalCompareYear').textContent = '비교 데이터';
+                document.getElementById('monthModalCompareTotal').textContent = '없음';
+                compareCtx.canvas.parentElement.innerHTML = '<div style="height: 200px; display: flex; align-items: center; justify-content: center; color: #6b7280;">비교 데이터 없음</div>';
+            }
+
+            // 테이블
+            const thead = document.getElementById('monthModalTableHead');
+            const tbody = document.getElementById('monthModalTableBody');
+
+            if (compareData) {
+                thead.innerHTML = '<tr><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: left;">검사목적</th><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: right;">' + currentData.year + '년</th><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: right;">' + compareData.year + '년</th><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: right;">증감</th></tr>';
+
+                const compareMap = Object.fromEntries(compareData.by_month);
+                const compMonthData = compareMap[month] || { byPurpose: {} };
+
+                let tableHtml = '';
+                currentPurposes.forEach(([purpose, data]) => {
+                    const compData = compMonthData.byPurpose?.[purpose] || { sales: 0 };
+                    const diff = compData.sales > 0 ? ((data.sales - compData.sales) / compData.sales * 100).toFixed(1) : 0;
+                    const diffBadge = diff >= 0
+                        ? `<span style="color: #16a34a;">+${diff}%</span>`
+                        : `<span style="color: #dc2626;">${diff}%</span>`;
+                    tableHtml += `<tr><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb;">${purpose}</td><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(data.sales)}</td><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(compData.sales)}</td><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${diffBadge}</td></tr>`;
+                });
+                tbody.innerHTML = tableHtml;
+            } else {
+                thead.innerHTML = '<tr><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: left;">검사목적</th><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: right;">매출액</th><th style="padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: right;">건수</th></tr>';
+
+                let tableHtml = '';
+                currentPurposes.forEach(([purpose, data]) => {
+                    tableHtml += `<tr><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb;">${purpose}</td><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(data.sales)}</td><td style="padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.count.toLocaleString()}</td></tr>`;
+                });
+                tbody.innerHTML = tableHtml;
+            }
+
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMonthModal() {
+            document.getElementById('monthDetailModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // ESC 키로 월 모달 닫기
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMonthModal();
+                closeManagerModal();
+            }
+        });
 
         function updateManagerTable() {
             const thead = document.getElementById('managerTableHead');

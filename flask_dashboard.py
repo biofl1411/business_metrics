@@ -1248,7 +1248,7 @@ def process_data(data, purpose_filter=None):
 
         if month > 0:
             if month not in by_month:
-                by_month[month] = {'sales': 0, 'count': 0, 'byPurpose': {}, 'byManager': {}}
+                by_month[month] = {'sales': 0, 'count': 0, 'byPurpose': {}, 'byManager': {}, 'byBranch': {}}
             by_month[month]['sales'] += sales
             by_month[month]['count'] += 1
 
@@ -1264,6 +1264,12 @@ def process_data(data, purpose_filter=None):
                 by_month[month]['byManager'][manager] = {'sales': 0, 'count': 0}
             by_month[month]['byManager'][manager]['sales'] += sales
             by_month[month]['byManager'][manager]['count'] += 1
+
+            # 월별 팀별 데이터
+            if branch not in by_month[month]['byBranch']:
+                by_month[month]['byBranch'][branch] = {'sales': 0, 'count': 0}
+            by_month[month]['byBranch'][branch]['sales'] += sales
+            by_month[month]['byBranch'][branch]['count'] += 1
 
             # 월별 긴급 데이터
             if month not in by_urgent_month:
@@ -5474,15 +5480,15 @@ HTML_TEMPLATE = '''
                 branches = branches.filter(b => b[0] === branchMonthlySelected);
             }
 
-            // 팀별 월별 데이터 계산
+            // 팀별 월별 데이터 - 실제 byBranch 데이터 사용
             const branchMonthlyData = branches.map(b => {
-                const totalSales = b[1].sales || 0;
-                const totalMonthly = Object.values(monthMap).reduce((s, m) => s + (m.sales || 0), 0) || 1;
+                const branchName = b[0];
                 const monthlyData = labels.map((_, mi) => {
-                    const monthSales = monthMap[mi+1]?.sales || 0;
-                    return totalSales * (monthSales / totalMonthly);
+                    // 실제 팀별 월별 데이터 사용
+                    const monthData = monthMap[mi+1];
+                    return monthData?.byBranch?.[branchName]?.sales || 0;
                 });
-                return { name: b[0], data: monthlyData, byPurpose: b[1].by_purpose || {} };
+                return { name: branchName, data: monthlyData, byPurpose: b[1].by_purpose || {} };
             });
 
             // 월별 전체 평균 계산

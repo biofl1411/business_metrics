@@ -9576,16 +9576,21 @@ HTML_TEMPLATE = '''
                 return { name: branchName, data: salesArr, monthlyInfo, ownAvg };
             });
 
-            // 팀별 검사목적별 월평균 계산 (증감 비교용)
+            // 팀별 검사목적별 월평균 계산 (매출 + 건수)
             const branchPurposeAvg = {};
+            const branchPurposeAvgCount = {};
             branchMonthlyData.forEach(b => {
                 branchPurposeAvg[b.name] = {};
+                branchPurposeAvgCount[b.name] = {};
                 const allPurposes = new Set();
                 b.monthlyInfo.forEach(m => Object.keys(m.byPurpose).forEach(p => allPurposes.add(p)));
                 allPurposes.forEach(purpose => {
-                    const values = b.monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
-                    const nonZero = values.filter(v => v > 0);
-                    branchPurposeAvg[b.name][purpose] = nonZero.length > 0 ? nonZero.reduce((a,b) => a+b, 0) / nonZero.length : 0;
+                    const salesValues = b.monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
+                    const countValues = b.monthlyInfo.map(m => m.byPurpose[purpose]?.count || 0);
+                    const nonZeroSales = salesValues.filter(v => v > 0);
+                    const nonZeroCount = countValues.filter(v => v > 0);
+                    branchPurposeAvg[b.name][purpose] = nonZeroSales.length > 0 ? nonZeroSales.reduce((a,b) => a+b, 0) / nonZeroSales.length : 0;
+                    branchPurposeAvgCount[b.name][purpose] = nonZeroCount.length > 0 ? nonZeroCount.reduce((a,b) => a+b, 0) / nonZeroCount.length : 0;
                 });
             });
 
@@ -9652,6 +9657,244 @@ HTML_TEMPLATE = '''
                 });
             }
 
+            // 외부 HTML 툴팁 생성 함수 (팀별 월별 추이)
+            const getOrCreateBranchMonthlyTooltip = (chart) => {
+                let tooltipEl = document.getElementById('branchMonthlyChartTooltip');
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement('div');
+                    tooltipEl.id = 'branchMonthlyChartTooltip';
+                    tooltipEl.style.cssText = `
+                        position: fixed;
+                        background: rgba(30, 41, 59, 0.98);
+                        border-radius: 12px;
+                        padding: 16px;
+                        pointer-events: none;
+                        z-index: 99999;
+                        font-size: 13px;
+                        color: #e2e8f0;
+                        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                        min-width: 360px;
+                        max-width: 420px;
+                        max-height: 85vh;
+                        overflow-y: auto;
+                        transition: opacity 0.15s ease;
+                        line-height: 1.5;
+                    `;
+                    document.body.appendChild(tooltipEl);
+                }
+                return tooltipEl;
+            };
+
+            // 추세 계산 함수
+            const calcBranchTrend = (monthIdx, monthlyInfo) => {
+                let upCount = 0, downCount = 0;
+                for (let i = monthIdx; i > 0; i--) {
+                    if (monthlyInfo[i].sales > monthlyInfo[i-1].sales) {
+                        if (downCount > 0) break;
+                        upCount++;
+                    } else if (monthlyInfo[i].sales < monthlyInfo[i-1].sales) {
+                        if (upCount > 0) break;
+                        downCount++;
+                    } else break;
+                }
+                return upCount > 0 ? { type: 'up', count: upCount } : { type: 'down', count: downCount };
+            };
+
+            // 외부 툴팁 핸들러
+            const branchMonthlyTooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateBranchMonthlyTooltip(chart);
+
+                if (tooltip.opacity === 0) {
+                    tooltipEl.style.opacity = 0;
+                    return;
+                }
+
+                if (tooltip.body) {
+                    const dataPoints = tooltip.dataPoints || [];
+                    const monthIdx = dataPoints[0]?.dataIndex;
+                    const monthLabel = labels[monthIdx];
+
+                    let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${currentData.year}년 ${monthLabel}</div>`;
+
+                    dataPoints.forEach(point => {
+                        const ds = point.dataset;
+                        const branchName = ds.label;
+                        const value = point.raw || 0;
+                        const info = ds.monthlyInfo?.[monthIdx];
+
+                        if (branchName === '평균' || ds.isComparison) return;
+
+                        const borderColor = ds.borderColor || '#6366f1';
+                        html += `<div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid ${borderColor};">`;
+                        html += `<div style="font-size: 15px; font-weight: bold; margin-bottom: 8px; color: ${borderColor};">🏢 ${branchName}</div>`;
+
+                        // 1. 기본 정보
+                        html += `<div style="margin-bottom: 4px;">💰 매출: <strong>${(value / 100000000).toFixed(2)}억</strong></div>`;
+                        if (info) {
+                            html += `<div style="margin-bottom: 4px;">📋 건수: ${info.count.toLocaleString()}건 | 건당: ${formatCurrency(info.perCase)}</div>`;
+                        }
+
+                        // 2. 비교 분석
+                        if (info && ds.ownAvg) {
+                            const ownAvg = ds.ownAvg;
+                            const diff = value - ownAvg;
+                            const diffPct = ownAvg > 0 ? (diff / ownAvg * 100) : 0;
+                            const isIncrease = diff >= 0;
+                            const avgColor = isIncrease ? '#10b981' : '#ef4444';
+                            const avgSign = isIncrease ? '+' : '';
+
+                            html += `<div style="color: #94a3b8; margin: 8px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2);">── 비교 분석 ──</div>`;
+                            html += `<div style="margin-bottom: 4px;">📊 월평균 대비: <span style="color: ${avgColor}; font-weight: bold;">${avgSign}${diffPct.toFixed(1)}% (${avgSign}${(diff / 10000).toFixed(0)}만)</span></div>`;
+
+                            // 전년 동월 대비
+                            if (compareData && compareData.by_month) {
+                                const compMonthMap = Object.fromEntries(compareData.by_month || []);
+                                const compMonthData = compMonthMap[monthIdx + 1];
+                                const compSales = compMonthData?.byBranch?.[branchName]?.sales || 0;
+                                if (compSales > 0) {
+                                    const yoyDiff = value - compSales;
+                                    const yoyPct = (yoyDiff / compSales * 100);
+                                    const yoyColor = yoyDiff >= 0 ? '#10b981' : '#ef4444';
+                                    const yoySign = yoyDiff >= 0 ? '+' : '';
+                                    html += `<div style="margin-bottom: 4px;">📆 전년 동월 대비: <span style="color: ${yoyColor}; font-weight: bold;">${yoySign}${yoyPct.toFixed(1)}% (${yoySign}${(yoyDiff / 10000).toFixed(0)}만)</span></div>`;
+                                }
+                            }
+
+                            // 전월 대비
+                            if (monthIdx > 0 && ds.monthlyInfo[monthIdx - 1].sales > 0) {
+                                const prevInfo = ds.monthlyInfo[monthIdx - 1];
+                                const momDiff = value - prevInfo.sales;
+                                const momPct = (momDiff / prevInfo.sales * 100);
+                                const momColor = momDiff >= 0 ? '#10b981' : '#ef4444';
+                                const momSign = momDiff >= 0 ? '+' : '';
+
+                                const trend = calcBranchTrend(monthIdx, ds.monthlyInfo);
+                                let trendText = '';
+                                if (trend.count >= 2) {
+                                    const trendIcon = trend.type === 'up' ? '↗' : '↘';
+                                    const trendColor = trend.type === 'up' ? '#10b981' : '#ef4444';
+                                    trendText = ` <span style="color: ${trendColor};">${trendIcon} ${trend.count}개월 연속</span>`;
+                                }
+                                html += `<div style="margin-bottom: 4px;">📈 전월 대비: <span style="color: ${momColor}; font-weight: bold;">${momSign}${momPct.toFixed(1)}%</span>${trendText}</div>`;
+
+                                // 변화 원인 분해
+                                const countEffect = (info.count - prevInfo.count) * prevInfo.perCase;
+                                const priceEffect = (info.perCase - prevInfo.perCase) * info.count;
+                                const totalChange = value - prevInfo.sales;
+
+                                html += `<div style="color: #94a3b8; margin: 8px 0 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.2);">── 변화 원인 분해 ──</div>`;
+                                const countColor = countEffect >= 0 ? '#10b981' : '#ef4444';
+                                const countSign = countEffect >= 0 ? '+' : '';
+                                const countPct = totalChange !== 0 ? Math.abs(countEffect / totalChange * 100) : 0;
+                                html += `<div style="margin-bottom: 4px;">📋 건수 효과: <span style="color: ${countColor};">${countSign}${(countEffect / 10000).toFixed(0)}만</span> <span style="color: #94a3b8;">(${countPct.toFixed(0)}%)</span></div>`;
+
+                                const priceColor = priceEffect >= 0 ? '#10b981' : '#ef4444';
+                                const priceSign = priceEffect >= 0 ? '+' : '';
+                                const pricePct = totalChange !== 0 ? Math.abs(priceEffect / totalChange * 100) : 0;
+                                html += `<div style="margin-bottom: 4px;">💵 단가 효과: <span style="color: ${priceColor};">${priceSign}${(priceEffect / 10000).toFixed(0)}만</span> <span style="color: #94a3b8;">(${pricePct.toFixed(0)}%)</span></div>`;
+
+                                const mainCause = Math.abs(countEffect) > Math.abs(priceEffect) ? '건수' : '단가';
+                                const causeDirection = (mainCause === '건수' ? countEffect : priceEffect) >= 0 ? '증가' : '감소';
+                                html += `<div style="color: #60a5fa; font-size: 11px; margin-top: 4px;">→ ${mainCause} ${causeDirection}가 주요 원인</div>`;
+                            }
+
+                            // 3. 증감 요인 (검사목적별)
+                            const purposeAvg = branchPurposeAvg[branchName] || {};
+                            const purposeAvgCnt = branchPurposeAvgCount[branchName] || {};
+                            const purposeChanges = Object.entries(info.byPurpose || {}).map(([purpose, data]) => {
+                                const avgP = purposeAvg[purpose] || 0;
+                                const avgPCount = purposeAvgCnt[purpose] || 0;
+                                const salesDiff = data.sales - avgP;
+                                const countDiff = (data.count || 0) - avgPCount;
+                                const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+                                const avgPriceAvg = avgPCount > 0 ? avgP / avgPCount : 0;
+                                const priceDiff = avgPrice - avgPriceAvg;
+                                const salesDiffPct = avgP > 0 ? (salesDiff / avgP * 100) : (data.sales > 0 ? 100 : 0);
+                                const countDiffPct = avgPCount > 0 ? (countDiff / avgPCount * 100) : (data.count > 0 ? 100 : 0);
+                                return { purpose, sales: data.sales, count: data.count || 0, avgPrice, priceDiff, salesDiff, countDiff, salesDiffPct, countDiffPct };
+                            }).sort((a, b) => b.salesDiff - a.salesDiff);
+
+                            const allIncreases = purposeChanges.filter(p => p.salesDiff > 0);
+                            const allDecreases = purposeChanges.filter(p => p.salesDiff < 0);
+                            const totalIncrease = allIncreases.reduce((sum, p) => sum + p.salesDiff, 0);
+                            const totalDecrease = allDecreases.reduce((sum, p) => sum + p.salesDiff, 0);
+
+                            const topItems = isIncrease ? allIncreases.slice(0, 3) : allDecreases.slice(0, 5);
+
+                            if (isIncrease && topItems.length > 0) {
+                                const topSum = topItems.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalIncrease > 0 ? (topSum / totalIncrease * 100) : 0;
+                                html += `<div style="color: #10b981; margin: 8px 0 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 TOP ${topItems.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 +${(totalIncrease/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+                                topItems.forEach(p => {
+                                    const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
+                                    const countSign = p.countDiff >= 0 ? '+' : '';
+                                    html += `<div style="margin-left: 8px; margin-bottom: 4px; padding: 4px 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; border-left: 2px solid #10b981; font-size: 11px;">
+                                        <div style="font-weight: 600;">• ${p.purpose}</div>
+                                        <div>건수: <span style="color: ${countColor};">${countSign}${p.countDiff.toLocaleString()}건</span> | 매출: <span style="color: #10b981;">+${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                    </div>`;
+                                });
+                            } else if (!isIncrease && topItems.length > 0) {
+                                const topSum = topItems.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalDecrease < 0 ? (topSum / totalDecrease * 100) : 0;
+                                html += `<div style="color: #ef4444; margin: 8px 0 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 TOP ${topItems.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 ${(totalDecrease/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+
+                                const countDropItems = topItems.filter(p => p.countDiff <= 0);
+                                const priceDropItems = topItems.filter(p => p.countDiff > 0);
+
+                                if (countDropItems.length > 0) {
+                                    html += `<div style="color: #f97316; font-size: 11px; margin: 4px 0 4px 8px;">📉 건수 감소:</div>`;
+                                    countDropItems.forEach(p => {
+                                        const countSign = p.countDiff >= 0 ? '+' : '';
+                                        html += `<div style="margin-left: 8px; margin-bottom: 4px; padding: 4px 6px; background: rgba(239, 68, 68, 0.1); border-radius: 4px; border-left: 2px solid #ef4444; font-size: 11px;">
+                                            <div style="font-weight: 600;">• ${p.purpose}</div>
+                                            <div>건수: <span style="color: #ef4444;">${countSign}${p.countDiff.toLocaleString()}건</span> | 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                        </div>`;
+                                    });
+                                }
+
+                                if (priceDropItems.length > 0) {
+                                    html += `<div style="color: #a855f7; font-size: 11px; margin: 6px 0 4px 8px;">💸 단가 하락 (건수↑ 단가↓):</div>`;
+                                    priceDropItems.forEach(p => {
+                                        html += `<div style="margin-left: 8px; margin-bottom: 4px; padding: 4px 6px; background: rgba(168, 85, 247, 0.1); border-radius: 4px; border-left: 2px solid #a855f7; font-size: 11px;">
+                                            <div style="font-weight: 600;">• ${p.purpose}</div>
+                                            <div>건수: <span style="color: #10b981;">+${p.countDiff.toLocaleString()}건</span> | 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span> | 단가: <span style="color: #ef4444;">(↓${formatCurrency(Math.round(Math.abs(p.priceDiff)))})</span></div>
+                                        </div>`;
+                                    });
+                                }
+                            }
+                        }
+                        html += '</div>';
+                    });
+
+                    tooltipEl.innerHTML = html;
+                }
+
+                // 위치 계산 (짤림 방지)
+                const canvasRect = chart.canvas.getBoundingClientRect();
+                let left = canvasRect.left + tooltip.caretX + 15;
+                let top = canvasRect.top + tooltip.caretY - 10;
+
+                const tooltipWidth = tooltipEl.offsetWidth || 400;
+                const tooltipHeight = tooltipEl.offsetHeight || 500;
+
+                // 우측 경계 체크
+                if (left + tooltipWidth > window.innerWidth - 20) {
+                    left = canvasRect.left + tooltip.caretX - tooltipWidth - 15;
+                }
+                if (left < 10) left = 10;
+
+                // 하단 경계 체크 - 화면 85% 높이를 초과하면 상단으로
+                if (top + tooltipHeight > window.innerHeight - 20) {
+                    top = Math.max(10, window.innerHeight - tooltipHeight - 20);
+                }
+                if (top < 10) top = 10;
+
+                tooltipEl.style.opacity = 1;
+                tooltipEl.style.left = left + 'px';
+                tooltipEl.style.top = top + 'px';
+            };
+
             charts.branchMonthly = new Chart(ctx.getContext('2d'), {
                 type: 'line',
                 data: { labels, datasets },
@@ -9661,70 +9904,8 @@ HTML_TEMPLATE = '''
                     plugins: {
                         legend: { position: 'top', labels: { usePointStyle: true } },
                         tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const ds = context.dataset;
-                                    const label = ds.label || '';
-                                    const value = context.raw || 0;
-                                    const monthIdx = context.dataIndex;
-                                    const info = ds.monthlyInfo?.[monthIdx];
-
-                                    if (label === '평균') return `${label}: ${formatCurrency(value)}`;
-
-                                    // 매출, 건수, 건당 단가 표시
-                                    let result = [`${label}: ${formatCurrency(value)}`];
-                                    if (info) {
-                                        result.push(`  건수: ${info.count.toLocaleString()}건`);
-                                        result.push(`  건당: ${formatCurrency(info.perCase)}`);
-                                    }
-
-                                    // 자체 월평균 대비 및 검사목적별 증감 (현재 연도만)
-                                    if (!ds.isComparison && info && ds.ownAvg) {
-                                        const ownAvg = ds.ownAvg;
-                                        const diff = value - ownAvg;
-                                        const diffPct = ownAvg > 0 ? ((diff / ownAvg) * 100).toFixed(1) : 0;
-
-                                        result.push('─────────');
-                                        result.push(`월평균: ${formatCurrency(ownAvg)}`);
-                                        if (diff >= 0) {
-                                            result.push(`📈 월평균 대비 +${diffPct}%`);
-                                            // 평균보다 높은 검사목적 (증가 요인)
-                                            const purposeAvg = branchPurposeAvg[label] || {};
-                                            const increases = Object.entries(info.byPurpose || {})
-                                                .map(([p, d]) => ({ name: p, sales: d.sales, avg: purposeAvg[p] || 0, diff: d.sales - (purposeAvg[p] || 0) }))
-                                                .filter(d => d.diff > 0)
-                                                .sort((a, b) => b.diff - a.diff)
-                                                .slice(0, 3);
-                                            if (increases.length > 0) {
-                                                result.push('▲ 증가 요인:');
-                                                increases.forEach(d => {
-                                                    const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
-                                                    result.push(`  • ${d.name}: +${formatCurrency(d.diff)} (+${pct}%)`);
-                                                });
-                                            }
-                                        } else {
-                                            result.push(`📉 월평균 대비 ${diffPct}%`);
-                                            // 평균보다 낮은 검사목적 (감소 요인)
-                                            const purposeAvg = branchPurposeAvg[label] || {};
-                                            const decreases = Object.entries(purposeAvg)
-                                                .map(p => ({ name: p[0], avg: p[1], sales: info.byPurpose?.[p[0]]?.sales || 0 }))
-                                                .map(d => ({ ...d, diff: d.sales - d.avg }))
-                                                .filter(d => d.diff < 0)
-                                                .sort((a, b) => a.diff - b.diff)
-                                                .slice(0, 3);
-                                            if (decreases.length > 0) {
-                                                result.push('▼ 감소 요인:');
-                                                decreases.forEach(d => {
-                                                    const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
-                                                    result.push(`  • ${d.name}: ${formatCurrency(d.diff)} (${pct}%)`);
-                                                });
-                                            }
-                                        }
-                                    }
-
-                                    return result;
-                                }
-                            }
+                            enabled: false,
+                            external: branchMonthlyTooltipHandler
                         }
                     },
                     scales: {

@@ -3455,7 +3455,12 @@ HTML_TEMPLATE = '''
             <div class="card">
                 <div class="card-header">
                     <div class="card-title">📋 영업담당별 상세</div>
-                    <div class="card-badge" id="managerTableBadge">0명</div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <select id="managerPurposeFilter" class="filter-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0;" onchange="updateManagerTable()">
+                            <option value="전체">전체 검사목적</option>
+                        </select>
+                        <div class="card-badge" id="managerTableBadge">0명</div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="scroll-table" style="max-height: 500px;">
@@ -4340,6 +4345,7 @@ HTML_TEMPLATE = '''
             // 건당 매출/긴급 목적 드롭다운 초기화
             initPerCasePurposeSelect();
             initUrgentPurposeSelect();
+            initManagerPurposeFilter();
 
             // 차트들 업데이트
             updateEfficiencyChart();
@@ -4442,6 +4448,20 @@ HTML_TEMPLATE = '''
             const select = document.getElementById('urgentPurposeSelect');
             if (select) {
                 select.innerHTML = '<option value="전체">검사목적: 전체</option>' +
+                    Array.from(purposes).filter(p => p !== '전체').map(p =>
+                        `<option value="${p}">${p}</option>`
+                    ).join('');
+            }
+        }
+
+        function initManagerPurposeFilter() {
+            const purposes = new Set(['전체']);
+            (currentData.by_purpose || []).forEach(p => {
+                if (p[0] !== '접수취소') purposes.add(p[0]);
+            });
+            const select = document.getElementById('managerPurposeFilter');
+            if (select) {
+                select.innerHTML = '<option value="전체">전체 검사목적</option>' +
                     Array.from(purposes).filter(p => p !== '전체').map(p =>
                         `<option value="${p}">${p}</option>`
                     ).join('');
@@ -5706,9 +5726,20 @@ HTML_TEMPLATE = '''
         }
 
         function updateManagerTable() {
-            let managers = [...(currentData.by_manager || [])];
+            const purposeFilter = document.getElementById('managerPurposeFilter')?.value || '전체';
+            let managers = [];
+
+            // 검사목적 필터 적용
+            if (purposeFilter === '전체') {
+                managers = [...(currentData.by_manager || [])];
+            } else {
+                // purpose_managers에서 해당 목적의 담당자 데이터 가져오기
+                const purposeManagerData = currentData.purpose_managers?.[purposeFilter] || [];
+                managers = purposeManagerData.map(m => [m.name, { sales: m.sales, count: m.count, urgent: 0 }]);
+            }
+
             const tbody = document.querySelector('#managerTable tbody');
-            const total = currentData.total_sales || 1;
+            const total = purposeFilter === '전체' ? (currentData.total_sales || 1) : managers.reduce((sum, m) => sum + m[1].sales, 0) || 1;
             const workingDays = 250;
             const compareMap = compareData ? Object.fromEntries(compareData.by_manager || []) : {};
 

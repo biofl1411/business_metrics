@@ -6905,6 +6905,11 @@ HTML_TEMPLATE = '''
                 return tooltipEl;
             };
 
+            // 순위 계산 (단가 높은 순)
+            const rankSortedData = [...chartData].sort((a, b) => b.avgPrice - a.avgPrice);
+            const rankMap = {};
+            rankSortedData.forEach((d, i) => { rankMap[d.name] = i + 1; });
+
             // 외부 툴팁 핸들러
             const externalTooltipHandler = (context) => {
                 const { chart, tooltip } = context;
@@ -6919,11 +6924,43 @@ HTML_TEMPLATE = '''
                     const dataIndex = tooltip.dataPoints[0].dataIndex;
                     const datasetIndex = tooltip.dataPoints[0].datasetIndex;
                     const d = chartData[dataIndex];
+                    const rank = rankMap[d.name];
+                    const isTop3 = rank <= 3;
+                    const isBottom3 = rank >= chartData.length - 2;
+                    const isAboveAvg = d.avgPrice >= avgAll;
+
+                    // 스타일 결정
+                    let borderColor, headerBg, rankIcon;
+                    if (rank === 1) {
+                        borderColor = 'rgba(255, 215, 0, 0.8)';
+                        headerBg = 'linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 180, 0, 0.2))';
+                        rankIcon = '🏆';
+                    } else if (rank === 2) {
+                        borderColor = 'rgba(192, 192, 192, 0.8)';
+                        headerBg = 'linear-gradient(135deg, rgba(192, 192, 192, 0.3), rgba(160, 160, 160, 0.2))';
+                        rankIcon = '🥈';
+                    } else if (rank === 3) {
+                        borderColor = 'rgba(205, 127, 50, 0.8)';
+                        headerBg = 'linear-gradient(135deg, rgba(205, 127, 50, 0.3), rgba(180, 100, 30, 0.2))';
+                        rankIcon = '🥉';
+                    } else if (isBottom3) {
+                        borderColor = 'rgba(239, 68, 68, 0.6)';
+                        headerBg = 'rgba(239, 68, 68, 0.15)';
+                        rankIcon = '⚠️';
+                    } else {
+                        borderColor = isAboveAvg ? 'rgba(16, 185, 129, 0.6)' : 'rgba(245, 158, 11, 0.6)';
+                        headerBg = isAboveAvg ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+                        rankIcon = '';
+                    }
+                    tooltipEl.style.border = `2px solid ${borderColor}`;
 
                     let html = '';
 
-                    // 헤더
-                    html += `<div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.2);">👤 ${d.name}</div>`;
+                    // 헤더 (순위 포함)
+                    html += `<div style="font-size: 16px; font-weight: bold; color: #fff; margin: -16px -16px 12px -16px; padding: 12px 16px; background: ${headerBg}; border-radius: 10px 10px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                        <span>${rankIcon} ${d.name}</span>
+                        <span style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 12px;">단가 ${rank}위/${chartData.length}명</span>
+                    </div>`;
 
                     if (datasetIndex !== 0 && compChartData[dataIndex]) {
                         // 전년도 데이터
@@ -6933,19 +6970,38 @@ HTML_TEMPLATE = '''
                         // 현재 연도 데이터 - 상세 오버레이
 
                         // 1. 기본 지표
-                        html += `<div style="margin-bottom: 4px;">💰 건당 매출: <strong>${formatCurrency(Math.round(d.avgPrice))}</strong></div>`;
-                        html += `<div style="margin-bottom: 4px;">📋 총 거래 건수: <strong>${d.count.toLocaleString()}건</strong></div>`;
-                        html += `<div style="margin-bottom: 4px;">📊 총 매출액: <strong>${(d.sales / 100000000).toFixed(2)}억</strong></div>`;
+                        html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+                        html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>💰 건당 매출</span><strong>${formatCurrency(Math.round(d.avgPrice))}</strong></div>`;
+                        html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>📋 총 건수</span><strong>${d.count.toLocaleString()}건</strong></div>`;
+                        html += `<div style="display: flex; justify-content: space-between;"><span>📊 총 매출</span><strong>${(d.sales / 100000000).toFixed(2)}억</strong></div>`;
+                        html += `</div>`;
 
                         // 전체 평균 대비
                         const diffFromAvg = ((d.avgPrice - avgAll) / avgAll * 100);
                         const diffIcon = diffFromAvg >= 0 ? '📈' : '📉';
                         const diffSign = diffFromAvg >= 0 ? '+' : '';
                         const diffColor = diffFromAvg >= 0 ? '#10b981' : '#ef4444';
-                        html += `<div style="margin-bottom: 8px;">${diffIcon} 전체 평균(${formatCurrency(Math.round(avgAll))}) 대비: <span style="color: ${diffColor}; font-weight: bold;">${diffSign}${diffFromAvg.toFixed(1)}%</span></div>`;
+                        html += `<div style="margin-bottom: 12px; padding: 8px; border-radius: 6px; background: ${diffFromAvg >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'};">
+                            ${diffIcon} 전체 평균 대비: <span style="color: ${diffColor}; font-weight: bold;">${diffSign}${diffFromAvg.toFixed(1)}%</span>
+                            <span style="color: #94a3b8; font-size: 11px;">(평균: ${formatCurrency(Math.round(avgAll))})</span>
+                        </div>`;
+
+                        // 전년 대비 (compareData 있을 때)
+                        if (compareData && compChartData[dataIndex]) {
+                            const compD = compChartData[dataIndex];
+                            if (compD.avgPrice > 0) {
+                                const yoyDiff = ((d.avgPrice - compD.avgPrice) / compD.avgPrice * 100);
+                                const yoyColor = yoyDiff >= 0 ? '#10b981' : '#ef4444';
+                                const yoySign = yoyDiff >= 0 ? '+' : '';
+                                html += `<div style="margin-bottom: 12px; padding: 8px; border-radius: 6px; background: rgba(99, 102, 241, 0.1);">
+                                    📅 ${compareData.year}년 대비: <span style="color: ${yoyColor}; font-weight: bold;">${yoySign}${yoyDiff.toFixed(1)}%</span>
+                                    <span style="color: #94a3b8; font-size: 11px;">(${formatCurrency(Math.round(compD.avgPrice))} → ${formatCurrency(Math.round(d.avgPrice))})</span>
+                                </div>`;
+                            }
+                        }
 
                         // 2. 단가 구성 분석
-                        html += `<div style="color: #94a3b8; margin: 12px 0 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2);">── 단가 구성 분석 ──</div>`;
+                        html += `<div style="color: #94a3b8; margin: 8px 0 8px; font-size: 12px;">── 단가 구성 분석 ──</div>`;
 
                         // 담당자별 고단가/저단가 비중 계산
                         let mgrHighCount = 0, mgrLowCount = 0, mgrTotalCount = 0;
@@ -6961,10 +7017,29 @@ HTML_TEMPLATE = '''
 
                         const highDiffColor = highDiff >= 0 ? '#10b981' : '#f59e0b';
                         const lowDiffColor = lowDiff <= 0 ? '#10b981' : '#f59e0b';
-                        html += `<div style="margin-bottom: 4px;">🔺 고단가(15만↑) 비중: ${mgrHighRatio.toFixed(1)}% <span style="color: ${highDiffColor};">(평균 대비 ${highDiff >= 0 ? '+' : ''}${highDiff.toFixed(1)}%p)</span></div>`;
-                        html += `<div style="margin-bottom: 8px;">🔻 저단가(5만↓) 비중: ${mgrLowRatio.toFixed(1)}% <span style="color: ${lowDiffColor};">(평균 대비 ${lowDiff >= 0 ? '+' : ''}${lowDiff.toFixed(1)}%p)</span></div>`;
+                        html += `<div style="margin-bottom: 4px;">🔺 고단가(15만↑): ${mgrHighRatio.toFixed(1)}% <span style="color: ${highDiffColor}; font-size: 11px;">(평균 대비 ${highDiff >= 0 ? '+' : ''}${highDiff.toFixed(1)}%p)</span></div>`;
+                        html += `<div style="margin-bottom: 8px;">🔻 저단가(5만↓): ${mgrLowRatio.toFixed(1)}% <span style="color: ${lowDiffColor}; font-size: 11px;">(평균 대비 ${lowDiff >= 0 ? '+' : ''}${lowDiff.toFixed(1)}%p)</span></div>`;
 
-                        // 3. 강점 검사목적
+                        // 3. 검사목적별 분포 TOP 5
+                        const purposeRanked = Object.entries(d.purposeAvgPrices)
+                            .sort((a, b) => b[1].count - a[1].count)
+                            .slice(0, 5);
+
+                        if (purposeRanked.length > 0) {
+                            html += `<div style="color: #94a3b8; margin: 12px 0 8px; font-size: 12px;">── 검사목적별 분포 (TOP ${purposeRanked.length}) ──</div>`;
+                            purposeRanked.forEach(([purpose, data]) => {
+                                const pctOfTotal = (data.count / d.count * 100).toFixed(1);
+                                const globalAvg = purposeGlobalAvg[purpose] || 0;
+                                const vsGlobal = globalAvg > 0 ? ((data.avgPrice - globalAvg) / globalAvg * 100) : 0;
+                                const vsColor = vsGlobal >= 0 ? '#10b981' : '#ef4444';
+                                html += `<div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 12px;">
+                                    <span>${purpose}</span>
+                                    <span>${formatCurrency(Math.round(data.avgPrice))} <span style="color: ${vsColor};">(${vsGlobal >= 0 ? '+' : ''}${vsGlobal.toFixed(0)}%)</span> · ${pctOfTotal}%</span>
+                                </div>`;
+                            });
+                        }
+
+                        // 4. 강점 검사목적
                         const strengths = Object.entries(d.purposeAvgPrices)
                             .map(([purpose, data]) => {
                                 const globalAvg = purposeGlobalAvg[purpose] || 0;
@@ -6976,13 +7051,13 @@ HTML_TEMPLATE = '''
                             .slice(0, 3);
 
                         if (strengths.length > 0) {
-                            html += `<div style="color: #10b981; margin: 12px 0 6px; font-weight: 600;">▲ 강점 검사목적 (평균 대비 높음)</div>`;
+                            html += `<div style="color: #10b981; margin: 12px 0 6px; font-weight: 600; font-size: 12px;">💪 강점 검사목적</div>`;
                             strengths.forEach(s => {
-                                html += `<div style="margin-left: 8px; margin-bottom: 2px;">• ${s.purpose}: ${formatCurrency(Math.round(s.avgPrice))} <span style="color: #10b981;">(+${s.diff.toFixed(0)}%)</span></div>`;
+                                html += `<div style="margin-left: 8px; margin-bottom: 2px; font-size: 12px;">• ${s.purpose}: ${formatCurrency(Math.round(s.avgPrice))} <span style="color: #10b981;">(+${s.diff.toFixed(0)}%)</span></div>`;
                             });
                         }
 
-                        // 4. 개선 기회
+                        // 5. 개선 기회
                         const improvements = Object.entries(d.purposeAvgPrices)
                             .map(([purpose, data]) => {
                                 const globalAvg = purposeGlobalAvg[purpose] || 0;
@@ -6994,9 +7069,9 @@ HTML_TEMPLATE = '''
                             .slice(0, 3);
 
                         if (improvements.length > 0) {
-                            html += `<div style="color: #f59e0b; margin: 12px 0 6px; font-weight: 600;">▼ 개선 기회</div>`;
+                            html += `<div style="color: #f59e0b; margin: 12px 0 6px; font-weight: 600; font-size: 12px;">📌 개선 기회</div>`;
                             improvements.forEach(s => {
-                                html += `<div style="margin-left: 8px; margin-bottom: 2px;">• ${s.purpose}: ${formatCurrency(Math.round(s.avgPrice))} <span style="color: #f59e0b;">(${s.diff.toFixed(0)}%)</span></div>`;
+                                html += `<div style="margin-left: 8px; margin-bottom: 2px; font-size: 12px;">• ${s.purpose}: ${formatCurrency(Math.round(s.avgPrice))} <span style="color: #f59e0b;">(${s.diff.toFixed(0)}%)</span></div>`;
                             });
                         }
                     }
@@ -11697,7 +11772,14 @@ HTML_TEMPLATE = '''
                     <th class="${sortClass('percent')}" onclick="sortManagerTable('percent')">비중</th>
                     <th class="text-center">상세</th>
                 </tr>`;
-                tbody.innerHTML = managers.map(d => {
+                // 평균 계산 (강조 기준)
+                const avgSales = managers.reduce((s, m) => s + (m[1].sales || 0), 0) / (managers.length || 1);
+                const avgPriceAll = managers.reduce((s, m) => {
+                    const c = m[1].count || 0;
+                    return s + (c > 0 ? m[1].sales / c : 0);
+                }, 0) / (managers.length || 1);
+
+                tbody.innerHTML = managers.map((d, idx) => {
                     const compData = compareMap[d[0]] || {};
                     const compSales = compData.sales || 0;
                     const compCount = compData.count || 0;
@@ -11707,14 +11789,43 @@ HTML_TEMPLATE = '''
                     const avgPrice = (d[1].count || 0) > 0 ? d[1].sales / d[1].count : 0;
                     const compAvgPrice = compCount > 0 ? compSales / compCount : 0;
                     const urgent = d[1].urgent || 0;
-                    return `<tr>
-                        <td><strong>${d[0]}</strong></td>
-                        <td class="text-right">${formatCurrency(d[1].sales)}</td>
-                        <td class="text-right">${formatCurrency(avgPrice)}</td>
+
+                    // 순위 배지 & 행 스타일
+                    const rank = idx + 1;
+                    let rankBadge = '';
+                    let rowStyle = '';
+                    if (rank === 1) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥇 1위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), transparent);';
+                    } else if (rank === 2) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥈 2위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(156, 163, 175, 0.12), transparent);';
+                    } else if (rank === 3) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fcd9bd, #f97316); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥉 3위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(249, 115, 22, 0.1), transparent);';
+                    } else if (rank >= managers.length - 1) {
+                        rowStyle = 'background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent);';
+                    }
+
+                    // 매출액 강조 (평균 대비)
+                    const salesVsAvg = d[1].sales >= avgSales;
+                    const salesStyle = salesVsAvg ? 'color: #10b981; font-weight: 600;' : '';
+
+                    // 단가 강조 (평균 대비)
+                    const priceVsAvg = avgPrice >= avgPriceAll;
+                    const priceStyle = priceVsAvg ? 'background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px;' : '';
+
+                    // 증감 아이콘
+                    const trendIcon = parseFloat(diffRate) >= 10 ? '🔥' : parseFloat(diffRate) <= -10 ? '⚠️' : '';
+
+                    return `<tr style="${rowStyle}">
+                        <td>${rankBadge}<strong>${d[0]}</strong></td>
+                        <td class="text-right" style="${salesStyle}">${formatCurrency(d[1].sales)}</td>
+                        <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compAvgPrice)}</td>
                         <td class="text-right"><span class="urgent-badge">🚨 ${urgent}건</span></td>
-                        <td class="text-right"><span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
+                        <td class="text-right">${trendIcon}<span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
                         <td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td>
                         <td class="text-center"><button class="btn-detail" onclick="showManagerDetail('${d[0]}')">상세</button></td>
                     </tr>`;
@@ -11730,16 +11841,49 @@ HTML_TEMPLATE = '''
                     <th class="${sortClass('percent')}" onclick="sortManagerTable('percent')">비중</th>
                     <th class="text-center">상세</th>
                 </tr>`;
-                tbody.innerHTML = managers.map(d => {
+                // 평균 계산 (강조 기준)
+                const avgSalesNo = managers.reduce((s, m) => s + (m[1].sales || 0), 0) / (managers.length || 1);
+                const avgPriceAllNo = managers.reduce((s, m) => {
+                    const c = m[1].count || 0;
+                    return s + (c > 0 ? m[1].sales / c : 0);
+                }, 0) / (managers.length || 1);
+
+                tbody.innerHTML = managers.map((d, idx) => {
                     const percent = (d[1].sales / total * 100).toFixed(1);
                     const avgPrice = (d[1].count || 0) > 0 ? d[1].sales / d[1].count : 0;
                     const dailyAvg = d[1].sales / workingDays;
                     const urgent = d[1].urgent || 0;
-                    return `<tr>
-                        <td><strong>${d[0]}</strong></td>
-                        <td class="text-right">${formatCurrency(d[1].sales)}</td>
+
+                    // 순위 배지 & 행 스타일
+                    const rank = idx + 1;
+                    let rankBadge = '';
+                    let rowStyle = '';
+                    if (rank === 1) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥇 1위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), transparent);';
+                    } else if (rank === 2) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥈 2위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(156, 163, 175, 0.12), transparent);';
+                    } else if (rank === 3) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fcd9bd, #f97316); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥉 3위</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(249, 115, 22, 0.1), transparent);';
+                    } else if (rank >= managers.length - 1) {
+                        rowStyle = 'background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent);';
+                    }
+
+                    // 매출액 강조 (평균 대비)
+                    const salesVsAvg = d[1].sales >= avgSalesNo;
+                    const salesStyle = salesVsAvg ? 'color: #10b981; font-weight: 600;' : '';
+
+                    // 단가 강조 (평균 대비)
+                    const priceVsAvg = avgPrice >= avgPriceAllNo;
+                    const priceStyle = priceVsAvg ? 'background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px;' : '';
+
+                    return `<tr style="${rowStyle}">
+                        <td>${rankBadge}<strong>${d[0]}</strong></td>
+                        <td class="text-right" style="${salesStyle}">${formatCurrency(d[1].sales)}</td>
                         <td class="text-right">${(d[1].count || 0).toLocaleString()}</td>
-                        <td class="text-right">${formatCurrency(avgPrice)}</td>
+                        <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
                         <td class="text-right">${formatCurrency(dailyAvg)}</td>
                         <td class="text-right"><span class="urgent-badge">🚨 ${urgent}건</span></td>
                         <td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td>
@@ -11793,31 +11937,92 @@ HTML_TEMPLATE = '''
                 });
 
                 document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">${currentData.year}년</th><th class="text-right">${compareData.year}년</th><th class="text-right">평균단가</th><th class="text-right">증감</th><th>비중</th></tr>`;
-                tbody.innerHTML = branchData.map(d => {
+
+                // 평균 계산
+                const avgBranchSales = branchData.reduce((s, b) => s + b.sales, 0) / (branchData.length || 1);
+                const avgBranchPrice = branchData.reduce((s, b) => s + (b.count > 0 ? b.sales / b.count : 0), 0) / (branchData.length || 1);
+
+                tbody.innerHTML = branchData.map((d, idx) => {
                     const compSales = compareMap[d.name]?.sales || 0;
                     const diff = d.sales - compSales;
                     const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : 0;
                     const avgPrice = d.count > 0 ? d.sales / d.count : 0;
                     const percent = (d.sales / total * 100).toFixed(1);
-                    return `<tr>
-                        <td><strong>${d.name}</strong></td>
-                        <td class="text-right">${formatCurrency(d.sales)}</td>
+
+                    // 순위 배지 & 행 스타일
+                    const rank = idx + 1;
+                    let rankBadge = '';
+                    let rowStyle = '';
+                    if (rank === 1) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥇</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), transparent);';
+                    } else if (rank === 2) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥈</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(156, 163, 175, 0.12), transparent);';
+                    } else if (rank === 3) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fcd9bd, #f97316); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥉</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(249, 115, 22, 0.1), transparent);';
+                    } else if (rank >= branchData.length - 1 && branchData.length > 3) {
+                        rowStyle = 'background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent);';
+                    }
+
+                    // 매출액 강조
+                    const salesStyle = d.sales >= avgBranchSales ? 'color: #10b981; font-weight: 600;' : '';
+
+                    // 단가 강조
+                    const priceStyle = avgPrice >= avgBranchPrice ? 'background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px;' : '';
+
+                    // 트렌드 아이콘
+                    const trendIcon = parseFloat(diffRate) >= 10 ? '🔥' : parseFloat(diffRate) <= -10 ? '⚠️' : '';
+
+                    return `<tr style="${rowStyle}">
+                        <td>${rankBadge}<strong>${d.name}</strong></td>
+                        <td class="text-right" style="${salesStyle}">${formatCurrency(d.sales)}</td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
-                        <td class="text-right">${formatCurrency(avgPrice)}</td>
-                        <td class="text-right"><span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
+                        <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
+                        <td class="text-right">${trendIcon}<span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
                         <td><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div><span>${percent}%</span></div></td>
                     </tr>`;
                 }).join('');
             } else {
                 document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">매출액</th><th class="text-right">건수</th><th class="text-right">평균단가</th><th class="text-right">담당자수</th><th>비중</th></tr>`;
-                tbody.innerHTML = branchData.map(d => {
+
+                // 평균 계산
+                const avgBranchSalesNo = branchData.reduce((s, b) => s + b.sales, 0) / (branchData.length || 1);
+                const avgBranchPriceNo = branchData.reduce((s, b) => s + (b.count > 0 ? b.sales / b.count : 0), 0) / (branchData.length || 1);
+
+                tbody.innerHTML = branchData.map((d, idx) => {
                     const avgPrice = d.count > 0 ? d.sales / d.count : 0;
                     const percent = (d.sales / total * 100).toFixed(1);
-                    return `<tr>
-                        <td><strong>${d.name}</strong></td>
-                        <td class="text-right">${formatCurrency(d.sales)}</td>
+
+                    // 순위 배지 & 행 스타일
+                    const rank = idx + 1;
+                    let rankBadge = '';
+                    let rowStyle = '';
+                    if (rank === 1) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥇</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), transparent);';
+                    } else if (rank === 2) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥈</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(156, 163, 175, 0.12), transparent);';
+                    } else if (rank === 3) {
+                        rankBadge = '<span style="background: linear-gradient(135deg, #fcd9bd, #f97316); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 6px;">🥉</span>';
+                        rowStyle = 'background: linear-gradient(90deg, rgba(249, 115, 22, 0.1), transparent);';
+                    } else if (rank >= branchData.length - 1 && branchData.length > 3) {
+                        rowStyle = 'background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent);';
+                    }
+
+                    // 매출액 강조
+                    const salesStyle = d.sales >= avgBranchSalesNo ? 'color: #10b981; font-weight: 600;' : '';
+
+                    // 단가 강조
+                    const priceStyle = avgPrice >= avgBranchPriceNo ? 'background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px;' : '';
+
+                    return `<tr style="${rowStyle}">
+                        <td>${rankBadge}<strong>${d.name}</strong></td>
+                        <td class="text-right" style="${salesStyle}">${formatCurrency(d.sales)}</td>
                         <td class="text-right">${d.count.toLocaleString()}건</td>
-                        <td class="text-right">${formatCurrency(avgPrice)}</td>
+                        <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
                         <td class="text-right">${d.managers?.size || d.managers || '-'}명</td>
                         <td><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div><span>${percent}%</span></div></td>
                     </tr>`;

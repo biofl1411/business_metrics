@@ -1795,6 +1795,26 @@ HTML_TEMPLATE = '''
             box-shadow: 0 0 0 3px var(--primary-light);
         }
 
+        .filter-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            background: white;
+            font-size: 13px;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-300);
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
         .filter-divider {
             width: 1px;
             height: 32px;
@@ -3596,6 +3616,13 @@ HTML_TEMPLATE = '''
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📆 팀별 월별 추이</div>
+                        <div class="chart-controls" style="display: flex; gap: 8px; align-items: center;">
+                            <button class="filter-btn active" onclick="setBranchMonthlyFilter('all')" id="branchMonthlyAll">전체</button>
+                            <button class="filter-btn" onclick="setBranchMonthlyFilter('top3')" id="branchMonthlyTop3">TOP 3</button>
+                            <select id="branchMonthlySelect" class="filter-select" style="min-width: 120px;" onchange="setBranchMonthlyFilter('select')">
+                                <option value="">팀 선택</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-legend" id="branchMonthlyLegend" style="display: none;"></div>
@@ -5409,32 +5436,93 @@ HTML_TEMPLATE = '''
         }
 
         // 지사별 월별 추이
+        let branchMonthlyFilter = 'all';
+        let branchMonthlySelected = '';
+
+        function initBranchMonthlySelect() {
+            const branches = currentData.by_branch || [];
+            const select = document.getElementById('branchMonthlySelect');
+            if (select) {
+                select.innerHTML = '<option value="">팀 선택</option>' +
+                    branches.map(b => `<option value="${b[0]}">${b[0]}</option>`).join('');
+            }
+        }
+
+        function setBranchMonthlyFilter(type) {
+            branchMonthlyFilter = type;
+            document.getElementById('branchMonthlyAll').classList.toggle('active', type === 'all');
+            document.getElementById('branchMonthlyTop3').classList.toggle('active', type === 'top3');
+            if (type === 'select') {
+                branchMonthlySelected = document.getElementById('branchMonthlySelect').value;
+            } else {
+                document.getElementById('branchMonthlySelect').value = '';
+                branchMonthlySelected = '';
+            }
+            updateBranchMonthlyChart();
+        }
+
         function updateBranchMonthlyChart() {
             const ctx = document.getElementById('branchMonthlyChart');
             if (!ctx) return;
             if (charts.branchMonthly) charts.branchMonthly.destroy();
 
+            // 드롭다운 초기화
+            initBranchMonthlySelect();
+
             const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-            const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'];
-            const branches = currentData.by_branch || [];
+            const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
+            let branches = [...(currentData.by_branch || [])];
             const monthMap = Object.fromEntries(currentData.by_month || []);
 
-            // 지사별 월별 데이터 (비율로 추정)
-            const datasets = branches.map((b, i) => {
+            // 필터 적용
+            if (branchMonthlyFilter === 'top3') {
+                branches = branches.slice(0, 3);
+            } else if (branchMonthlyFilter === 'select' && branchMonthlySelected) {
+                branches = branches.filter(b => b[0] === branchMonthlySelected);
+            }
+
+            // 팀별 월별 데이터 계산
+            const branchMonthlyData = branches.map(b => {
                 const totalSales = b[1].sales || 0;
                 const totalMonthly = Object.values(monthMap).reduce((s, m) => s + (m.sales || 0), 0) || 1;
-                return {
-                    label: b[0],
-                    data: labels.map((_, mi) => {
-                        const monthSales = monthMap[mi+1]?.sales || 0;
-                        return totalSales * (monthSales / totalMonthly);
-                    }),
-                    borderColor: colors[i % colors.length],
-                    backgroundColor: colors[i % colors.length] + '20',
-                    fill: false,
-                    tension: 0.4,
-                    pointRadius: 3,
-                };
+                const monthlyData = labels.map((_, mi) => {
+                    const monthSales = monthMap[mi+1]?.sales || 0;
+                    return totalSales * (monthSales / totalMonthly);
+                });
+                return { name: b[0], data: monthlyData, byPurpose: b[1].by_purpose || {} };
+            });
+
+            // 월별 전체 평균 계산
+            const monthlyAvg = labels.map((_, mi) => {
+                const sum = branchMonthlyData.reduce((s, b) => s + b.data[mi], 0);
+                return sum / (branchMonthlyData.length || 1);
+            });
+
+            // 데이터셋 생성
+            const datasets = branchMonthlyData.map((b, i) => ({
+                label: b.name,
+                data: b.data,
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length],
+                fill: false,
+                tension: 0.4,
+                pointRadius: 8,
+                pointHoverRadius: 12,
+                pointStyle: b.data.map((v, mi) => v < monthlyAvg[mi] ? 'triangle' : 'circle'),
+                pointBackgroundColor: b.data.map((v, mi) => v < monthlyAvg[mi] ? '#ef4444' : colors[i % colors.length]),
+                pointBorderColor: b.data.map((v, mi) => v < monthlyAvg[mi] ? '#ef4444' : colors[i % colors.length]),
+                borderWidth: 2,
+            }));
+
+            // 평균선 추가
+            datasets.push({
+                label: '평균',
+                data: monthlyAvg,
+                borderColor: '#94a3b8',
+                borderDash: [5, 5],
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
             });
 
             charts.branchMonthly = new Chart(ctx.getContext('2d'), {
@@ -5443,8 +5531,53 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
+                    plugins: {
+                        legend: { position: 'top', labels: { usePointStyle: true } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.raw || 0;
+                                    const monthIdx = context.dataIndex;
+                                    const avg = monthlyAvg[monthIdx];
+                                    const diff = value - avg;
+                                    const diffPct = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+                                    if (label === '평균') return `${label}: ${formatCurrency(value)}`;
+
+                                    let result = [`${label}: ${formatCurrency(value)}`];
+                                    if (diff >= 0) {
+                                        result.push(`📈 평균 대비 +${diffPct}% (${formatCurrency(diff)})`);
+                                    } else {
+                                        result.push(`📉 평균 대비 ${diffPct}% (${formatCurrency(diff)})`);
+                                    }
+
+                                    // 검사목적별 상세 (top 3)
+                                    const branchData = branchMonthlyData.find(b => b.name === label);
+                                    if (branchData && branchData.byPurpose) {
+                                        const purposes = Object.entries(branchData.byPurpose)
+                                            .sort((a, b) => b[1].sales - a[1].sales)
+                                            .slice(0, 3);
+                                        if (purposes.length > 0) {
+                                            result.push('─────────');
+                                            result.push('주요 검사목적:');
+                                            purposes.forEach(([p, d]) => {
+                                                result.push(`  • ${p}: ${formatCurrency(d.sales)}`);
+                                            });
+                                        }
+                                    }
+                                    return result;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { callback: v => formatCurrency(v) },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
                 }
             });
         }

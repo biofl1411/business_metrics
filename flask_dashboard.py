@@ -5801,6 +5801,8 @@ HTML_TEMPLATE = '''
                                 const salesDiff = data.sales - avgP;
                                 const countDiff = (data.count || 0) - avgPCount;
                                 const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+                                const avgPriceAvg = avgPCount > 0 ? avgP / avgPCount : 0;
+                                const priceDiff = avgPrice - avgPriceAvg;
                                 const salesDiffPct = avgP > 0 ? (salesDiff / avgP * 100) : (data.sales > 0 ? 100 : 0);
                                 const countDiffPct = avgPCount > 0 ? (countDiff / avgPCount * 100) : (data.count > 0 ? 100 : 0);
                                 return {
@@ -5808,6 +5810,8 @@ HTML_TEMPLATE = '''
                                     sales: data.sales,
                                     count: data.count || 0,
                                     avgPrice,
+                                    avgPriceAvg,
+                                    priceDiff,
                                     salesDiff,
                                     countDiff,
                                     salesDiffPct,
@@ -5815,11 +5819,24 @@ HTML_TEMPLATE = '''
                                 };
                             }).sort((a, b) => b.salesDiff - a.salesDiff);
 
-                            const topIncreases = purposeChanges.filter(p => p.salesDiff > 0).slice(0, 3);
-                            const topDecreases = purposeChanges.filter(p => p.salesDiff < 0).slice(0, 3);
+                            // 전체 증감 합계 계산
+                            const allIncreases = purposeChanges.filter(p => p.salesDiff > 0);
+                            const allDecreases = purposeChanges.filter(p => p.salesDiff < 0);
+                            const totalIncrease = allIncreases.reduce((sum, p) => sum + p.salesDiff, 0);
+                            const totalDecrease = allDecreases.reduce((sum, p) => sum + p.salesDiff, 0);
+
+                            // 건수 증가했지만 단가 하락으로 매출 감소한 항목 (단가 효과)
+                            const priceDropItems = purposeChanges.filter(p => p.salesDiff < 0 && p.countDiff > 0);
+                            // 건수 감소로 매출 감소한 항목 (건수 효과)
+                            const countDropItems = purposeChanges.filter(p => p.salesDiff < 0 && p.countDiff <= 0);
+
+                            const topIncreases = allIncreases.slice(0, 3);
+                            const topDecreases = allDecreases.slice(0, 5);
 
                             if (isIncrease && topIncreases.length > 0) {
-                                html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 (검사목적)</div>`;
+                                const top3Sum = topIncreases.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalIncrease > 0 ? (top3Sum / totalIncrease * 100) : 0;
+                                html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 TOP ${topIncreases.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 +${(totalIncrease/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
                                 topIncreases.forEach(p => {
                                     const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
                                     const countSign = p.countDiff >= 0 ? '+' : '';
@@ -5833,21 +5850,56 @@ HTML_TEMPLATE = '''
                                         </div>
                                     </div>`;
                                 });
+                                // 기타 증가분
+                                if (allIncreases.length > 3) {
+                                    const otherSum = totalIncrease - top3Sum;
+                                    html += `<div style="margin-left: 8px; color: #94a3b8; font-size: 11px;">+ 기타 ${allIncreases.length - 3}개 항목: +${(otherSum/10000).toFixed(0)}만</div>`;
+                                }
                             } else if (!isIncrease && topDecreases.length > 0) {
-                                html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 (검사목적)</div>`;
-                                topDecreases.forEach(p => {
-                                    const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
-                                    const countSign = p.countDiff >= 0 ? '+' : '';
-                                    html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
-                                        <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
-                                            <div>📋 건수: <span style="color: ${countColor};">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
-                                            <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
-                                            <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
-                                            <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
-                                        </div>
-                                    </div>`;
-                                });
+                                const topSum = topDecreases.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalDecrease < 0 ? (topSum / totalDecrease * 100) : 0;
+                                html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 TOP ${topDecreases.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 ${(totalDecrease/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+
+                                // 건수 감소로 인한 매출 감소
+                                const countDropInTop = topDecreases.filter(p => p.countDiff <= 0);
+                                if (countDropInTop.length > 0) {
+                                    html += `<div style="color: #f97316; font-size: 11px; margin: 4px 0 6px 8px;">📉 건수 감소 영향:</div>`;
+                                    countDropInTop.forEach(p => {
+                                        const countSign = p.countDiff >= 0 ? '+' : '';
+                                        html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
+                                            <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                <div>📋 건수: <span style="color: #ef4444;">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
+                                                <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                            </div>
+                                        </div>`;
+                                    });
+                                }
+
+                                // 단가 하락으로 인한 매출 감소 (건수는 증가)
+                                const priceDropInTop = topDecreases.filter(p => p.countDiff > 0);
+                                if (priceDropInTop.length > 0) {
+                                    html += `<div style="color: #a855f7; font-size: 11px; margin: 8px 0 6px 8px;">💸 단가 하락 영향 (건수↑ 단가↓):</div>`;
+                                    priceDropInTop.forEach(p => {
+                                        html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(168, 85, 247, 0.1); border-radius: 6px; border-left: 3px solid #a855f7;">
+                                            <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                <div>📋 건수: <span style="color: #10b981;">+${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(+${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))} <span style="color: #ef4444;">(↓${formatCurrency(Math.round(Math.abs(p.priceDiff)))})</span></div>
+                                                <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                            </div>
+                                        </div>`;
+                                    });
+                                }
+
+                                // 기타 감소분
+                                if (allDecreases.length > 5) {
+                                    const otherSum = totalDecrease - topSum;
+                                    html += `<div style="margin-left: 8px; margin-top: 6px; color: #94a3b8; font-size: 11px;">+ 기타 ${allDecreases.length - 5}개 항목: ${(otherSum/10000).toFixed(0)}만</div>`;
+                                }
                             }
 
                             // 6. YTD 누적 현황
@@ -6129,14 +6181,16 @@ HTML_TEMPLATE = '''
                             }
 
                             // 5. 증감 요인 (검사목적별) - 건수, 매출, 단가 상세 분석
-                            const purposeAvg = managerPurposeAvg[managerName] || {};
-                            const purposeAvgCnt = managerPurposeAvgCount[managerName] || {};
-                            const purposeChanges = Object.entries(info.byPurpose || {}).map(([purpose, data]) => {
-                                const avgP = purposeAvg[purpose] || 0;
-                                const avgPCount = purposeAvgCnt[purpose] || 0;
+                            const purposeAvgT3 = managerPurposeAvg[managerName] || {};
+                            const purposeAvgCntT3 = managerPurposeAvgCount[managerName] || {};
+                            const purposeChangesT3 = Object.entries(info.byPurpose || {}).map(([purpose, data]) => {
+                                const avgP = purposeAvgT3[purpose] || 0;
+                                const avgPCount = purposeAvgCntT3[purpose] || 0;
                                 const salesDiff = data.sales - avgP;
                                 const countDiff = (data.count || 0) - avgPCount;
                                 const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+                                const avgPriceAvg = avgPCount > 0 ? avgP / avgPCount : 0;
+                                const priceDiff = avgPrice - avgPriceAvg;
                                 const salesDiffPct = avgP > 0 ? (salesDiff / avgP * 100) : (data.sales > 0 ? 100 : 0);
                                 const countDiffPct = avgPCount > 0 ? (countDiff / avgPCount * 100) : (data.count > 0 ? 100 : 0);
                                 return {
@@ -6144,6 +6198,8 @@ HTML_TEMPLATE = '''
                                     sales: data.sales,
                                     count: data.count || 0,
                                     avgPrice,
+                                    avgPriceAvg,
+                                    priceDiff,
                                     salesDiff,
                                     countDiff,
                                     salesDiffPct,
@@ -6151,12 +6207,20 @@ HTML_TEMPLATE = '''
                                 };
                             }).sort((a, b) => b.salesDiff - a.salesDiff);
 
-                            const topIncreases = purposeChanges.filter(p => p.salesDiff > 0).slice(0, 3);
-                            const topDecreases = purposeChanges.filter(p => p.salesDiff < 0).slice(0, 3);
+                            // 전체 증감 합계 계산
+                            const allIncreasesT3 = purposeChangesT3.filter(p => p.salesDiff > 0);
+                            const allDecreasesT3 = purposeChangesT3.filter(p => p.salesDiff < 0);
+                            const totalIncreaseT3 = allIncreasesT3.reduce((sum, p) => sum + p.salesDiff, 0);
+                            const totalDecreaseT3 = allDecreasesT3.reduce((sum, p) => sum + p.salesDiff, 0);
 
-                            if (isIncrease && topIncreases.length > 0) {
-                                html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 (검사목적)</div>`;
-                                topIncreases.forEach(p => {
+                            const topIncreasesT3 = allIncreasesT3.slice(0, 3);
+                            const topDecreasesT3 = allDecreasesT3.slice(0, 5);
+
+                            if (isIncrease && topIncreasesT3.length > 0) {
+                                const top3Sum = topIncreasesT3.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalIncreaseT3 > 0 ? (top3Sum / totalIncreaseT3 * 100) : 0;
+                                html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 TOP ${topIncreasesT3.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 +${(totalIncreaseT3/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+                                topIncreasesT3.forEach(p => {
                                     const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
                                     const countSign = p.countDiff >= 0 ? '+' : '';
                                     html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border-left: 3px solid #10b981;">
@@ -6169,21 +6233,54 @@ HTML_TEMPLATE = '''
                                         </div>
                                     </div>`;
                                 });
-                            } else if (!isIncrease && topDecreases.length > 0) {
-                                html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 (검사목적)</div>`;
-                                topDecreases.forEach(p => {
-                                    const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
-                                    const countSign = p.countDiff >= 0 ? '+' : '';
-                                    html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
-                                        <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
-                                            <div>📋 건수: <span style="color: ${countColor};">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
-                                            <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
-                                            <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
-                                            <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
-                                        </div>
-                                    </div>`;
-                                });
+                                if (allIncreasesT3.length > 3) {
+                                    const otherSum = totalIncreaseT3 - top3Sum;
+                                    html += `<div style="margin-left: 8px; color: #94a3b8; font-size: 11px;">+ 기타 ${allIncreasesT3.length - 3}개 항목: +${(otherSum/10000).toFixed(0)}만</div>`;
+                                }
+                            } else if (!isIncrease && topDecreasesT3.length > 0) {
+                                const topSum = topDecreasesT3.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const explainPct = totalDecreaseT3 < 0 ? (topSum / totalDecreaseT3 * 100) : 0;
+                                html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 TOP ${topDecreasesT3.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 ${(totalDecreaseT3/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+
+                                // 건수 감소로 인한 매출 감소
+                                const countDropInTopT3 = topDecreasesT3.filter(p => p.countDiff <= 0);
+                                if (countDropInTopT3.length > 0) {
+                                    html += `<div style="color: #f97316; font-size: 11px; margin: 4px 0 6px 8px;">📉 건수 감소 영향:</div>`;
+                                    countDropInTopT3.forEach(p => {
+                                        const countSign = p.countDiff >= 0 ? '+' : '';
+                                        html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
+                                            <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                <div>📋 건수: <span style="color: #ef4444;">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
+                                                <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                            </div>
+                                        </div>`;
+                                    });
+                                }
+
+                                // 단가 하락으로 인한 매출 감소 (건수는 증가)
+                                const priceDropInTopT3 = topDecreasesT3.filter(p => p.countDiff > 0);
+                                if (priceDropInTopT3.length > 0) {
+                                    html += `<div style="color: #a855f7; font-size: 11px; margin: 8px 0 6px 8px;">💸 단가 하락 영향 (건수↑ 단가↓):</div>`;
+                                    priceDropInTopT3.forEach(p => {
+                                        html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(168, 85, 247, 0.1); border-radius: 6px; border-left: 3px solid #a855f7;">
+                                            <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                <div>📋 건수: <span style="color: #10b981;">+${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(+${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))} <span style="color: #ef4444;">(↓${formatCurrency(Math.round(Math.abs(p.priceDiff)))})</span></div>
+                                                <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                            </div>
+                                        </div>`;
+                                    });
+                                }
+
+                                if (allDecreasesT3.length > 5) {
+                                    const otherSum = totalDecreaseT3 - topSum;
+                                    html += `<div style="margin-left: 8px; margin-top: 6px; color: #94a3b8; font-size: 11px;">+ 기타 ${allDecreasesT3.length - 5}개 항목: ${(otherSum/10000).toFixed(0)}만</div>`;
+                                }
                             }
 
                             // 6. YTD 누적 현황
@@ -6475,14 +6572,16 @@ HTML_TEMPLATE = '''
                                 }
 
                                 // 5. 증감 요인 (검사목적별) - 건수, 매출, 단가 상세 분석
-                                const purposeAvg = managerPurposeAvg[managerName] || {};
-                                const purposeAvgCnt = managerPurposeAvgCount[managerName] || {};
-                                const purposeChanges = Object.entries(info.byPurpose || {}).map(([purpose, data]) => {
-                                    const avgP = purposeAvg[purpose] || 0;
-                                    const avgPCount = purposeAvgCnt[purpose] || 0;
+                                const purposeAvgSel = managerPurposeAvg[managerName] || {};
+                                const purposeAvgCntSel = managerPurposeAvgCount[managerName] || {};
+                                const purposeChangesSel = Object.entries(info.byPurpose || {}).map(([purpose, data]) => {
+                                    const avgP = purposeAvgSel[purpose] || 0;
+                                    const avgPCount = purposeAvgCntSel[purpose] || 0;
                                     const salesDiff = data.sales - avgP;
                                     const countDiff = (data.count || 0) - avgPCount;
                                     const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+                                    const avgPriceAvg = avgPCount > 0 ? avgP / avgPCount : 0;
+                                    const priceDiff = avgPrice - avgPriceAvg;
                                     const salesDiffPct = avgP > 0 ? (salesDiff / avgP * 100) : (data.sales > 0 ? 100 : 0);
                                     const countDiffPct = avgPCount > 0 ? (countDiff / avgPCount * 100) : (data.count > 0 ? 100 : 0);
                                     return {
@@ -6490,6 +6589,8 @@ HTML_TEMPLATE = '''
                                         sales: data.sales,
                                         count: data.count || 0,
                                         avgPrice,
+                                        avgPriceAvg,
+                                        priceDiff,
                                         salesDiff,
                                         countDiff,
                                         salesDiffPct,
@@ -6497,12 +6598,20 @@ HTML_TEMPLATE = '''
                                     };
                                 }).sort((a, b) => b.salesDiff - a.salesDiff);
 
-                                const topIncreases = purposeChanges.filter(p => p.salesDiff > 0).slice(0, 3);
-                                const topDecreases = purposeChanges.filter(p => p.salesDiff < 0).slice(0, 3);
+                                // 전체 증감 합계 계산
+                                const allIncreasesSel = purposeChangesSel.filter(p => p.salesDiff > 0);
+                                const allDecreasesSel = purposeChangesSel.filter(p => p.salesDiff < 0);
+                                const totalIncreaseSel = allIncreasesSel.reduce((sum, p) => sum + p.salesDiff, 0);
+                                const totalDecreaseSel = allDecreasesSel.reduce((sum, p) => sum + p.salesDiff, 0);
 
-                                if (isIncrease && topIncreases.length > 0) {
-                                    html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 (검사목적)</div>`;
-                                    topIncreases.forEach(p => {
+                                const topIncreasesSel = allIncreasesSel.slice(0, 3);
+                                const topDecreasesSel = allDecreasesSel.slice(0, 5);
+
+                                if (isIncrease && topIncreasesSel.length > 0) {
+                                    const top3Sum = topIncreasesSel.reduce((sum, p) => sum + p.salesDiff, 0);
+                                    const explainPct = totalIncreaseSel > 0 ? (top3Sum / totalIncreaseSel * 100) : 0;
+                                    html += `<div style="color: #10b981; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▲ 증가 요인 TOP ${topIncreasesSel.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 +${(totalIncreaseSel/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+                                    topIncreasesSel.forEach(p => {
                                         const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
                                         const countSign = p.countDiff >= 0 ? '+' : '';
                                         html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border-left: 3px solid #10b981;">
@@ -6515,21 +6624,54 @@ HTML_TEMPLATE = '''
                                             </div>
                                         </div>`;
                                     });
-                                } else if (!isIncrease && topDecreases.length > 0) {
-                                    html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 (검사목적)</div>`;
-                                    topDecreases.forEach(p => {
-                                        const countColor = p.countDiff >= 0 ? '#10b981' : '#ef4444';
-                                        const countSign = p.countDiff >= 0 ? '+' : '';
-                                        html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
-                                            <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
-                                                <div>📋 건수: <span style="color: ${countColor};">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
-                                                <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
-                                                <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
-                                                <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
-                                            </div>
-                                        </div>`;
-                                    });
+                                    if (allIncreasesSel.length > 3) {
+                                        const otherSum = totalIncreaseSel - top3Sum;
+                                        html += `<div style="margin-left: 8px; color: #94a3b8; font-size: 11px;">+ 기타 ${allIncreasesSel.length - 3}개 항목: +${(otherSum/10000).toFixed(0)}만</div>`;
+                                    }
+                                } else if (!isIncrease && topDecreasesSel.length > 0) {
+                                    const topSum = topDecreasesSel.reduce((sum, p) => sum + p.salesDiff, 0);
+                                    const explainPct = totalDecreaseSel < 0 ? (topSum / totalDecreaseSel * 100) : 0;
+                                    html += `<div style="color: #ef4444; margin: 12px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2); font-weight: 600;">▼ 감소 요인 TOP ${topDecreasesSel.length} <span style="font-weight: normal; font-size: 11px; color: #94a3b8;">(전체 ${(totalDecreaseSel/10000).toFixed(0)}만 중 ${explainPct.toFixed(0)}%)</span></div>`;
+
+                                    // 건수 감소로 인한 매출 감소
+                                    const countDropInTopSel = topDecreasesSel.filter(p => p.countDiff <= 0);
+                                    if (countDropInTopSel.length > 0) {
+                                        html += `<div style="color: #f97316; font-size: 11px; margin: 4px 0 6px 8px;">📉 건수 감소 영향:</div>`;
+                                        countDropInTopSel.forEach(p => {
+                                            const countSign = p.countDiff >= 0 ? '+' : '';
+                                            html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
+                                                <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                    <div>📋 건수: <span style="color: #ef4444;">${countSign}${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(${countSign}${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                    <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                    <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))}</div>
+                                                    <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                                </div>
+                                            </div>`;
+                                        });
+                                    }
+
+                                    // 단가 하락으로 인한 매출 감소 (건수는 증가)
+                                    const priceDropInTopSel = topDecreasesSel.filter(p => p.countDiff > 0);
+                                    if (priceDropInTopSel.length > 0) {
+                                        html += `<div style="color: #a855f7; font-size: 11px; margin: 8px 0 6px 8px;">💸 단가 하락 영향 (건수↑ 단가↓):</div>`;
+                                        priceDropInTopSel.forEach(p => {
+                                            html += `<div style="margin-left: 8px; margin-bottom: 6px; padding: 6px 8px; background: rgba(168, 85, 247, 0.1); border-radius: 6px; border-left: 3px solid #a855f7;">
+                                                <div style="font-weight: 600; margin-bottom: 4px;">• ${p.purpose}</div>
+                                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+                                                    <div>📋 건수: <span style="color: #10b981;">+${p.countDiff.toLocaleString()}건</span> <span style="color: #94a3b8;">(+${p.countDiffPct.toFixed(0)}%)</span></div>
+                                                    <div>💰 매출: <span style="color: #ef4444;">${(p.salesDiff / 10000).toFixed(0)}만</span></div>
+                                                    <div>💵 단가: ${formatCurrency(Math.round(p.avgPrice))} <span style="color: #ef4444;">(↓${formatCurrency(Math.round(Math.abs(p.priceDiff)))})</span></div>
+                                                    <div>📊 현재: ${p.count.toLocaleString()}건 / ${(p.sales / 10000).toFixed(0)}만</div>
+                                                </div>
+                                            </div>`;
+                                        });
+                                    }
+
+                                    if (allDecreasesSel.length > 5) {
+                                        const otherSum = totalDecreaseSel - topSum;
+                                        html += `<div style="margin-left: 8px; margin-top: 6px; color: #94a3b8; font-size: 11px;">+ 기타 ${allDecreasesSel.length - 5}개 항목: ${(otherSum/10000).toFixed(0)}만</div>`;
+                                    }
                                 }
 
                                 // 6. YTD 누적 현황

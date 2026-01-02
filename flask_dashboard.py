@@ -1261,15 +1261,27 @@ def process_data(data, purpose_filter=None):
 
             # 월별 담당자별 데이터
             if manager not in by_month[month]['byManager']:
-                by_month[month]['byManager'][manager] = {'sales': 0, 'count': 0}
+                by_month[month]['byManager'][manager] = {'sales': 0, 'count': 0, 'byPurpose': {}}
             by_month[month]['byManager'][manager]['sales'] += sales
             by_month[month]['byManager'][manager]['count'] += 1
+            # 월별 담당자별 검사목적 데이터
+            if purpose:
+                if purpose not in by_month[month]['byManager'][manager]['byPurpose']:
+                    by_month[month]['byManager'][manager]['byPurpose'][purpose] = {'sales': 0, 'count': 0}
+                by_month[month]['byManager'][manager]['byPurpose'][purpose]['sales'] += sales
+                by_month[month]['byManager'][manager]['byPurpose'][purpose]['count'] += 1
 
             # 월별 팀별 데이터
             if branch not in by_month[month]['byBranch']:
-                by_month[month]['byBranch'][branch] = {'sales': 0, 'count': 0}
+                by_month[month]['byBranch'][branch] = {'sales': 0, 'count': 0, 'byPurpose': {}}
             by_month[month]['byBranch'][branch]['sales'] += sales
             by_month[month]['byBranch'][branch]['count'] += 1
+            # 월별 팀별 검사목적 데이터
+            if purpose:
+                if purpose not in by_month[month]['byBranch'][branch]['byPurpose']:
+                    by_month[month]['byBranch'][branch]['byPurpose'][purpose] = {'sales': 0, 'count': 0}
+                by_month[month]['byBranch'][branch]['byPurpose'][purpose]['sales'] += sales
+                by_month[month]['byBranch'][branch]['byPurpose'][purpose]['count'] += 1
 
             # 월별 긴급 데이터
             if month not in by_urgent_month:
@@ -4694,13 +4706,15 @@ HTML_TEMPLATE = '''
                 const monthMap = Object.fromEntries(currentData.by_month || []);
                 const top3Labels = managers.slice(0, 3).map(m => m[0]);
 
-                // 현재 연도 데이터셋 (매출, 건수 포함)
+                // 현재 연도 데이터셋 (매출, 건수, 검사목적 포함)
                 const datasets = top3Labels.map((name, i) => {
                     const monthlyInfo = labels.map((_, mi) => {
                         const monthData = monthMap[mi+1];
-                        const sales = monthData?.byManager?.[name]?.sales || 0;
-                        const count = monthData?.byManager?.[name]?.count || 0;
-                        return { sales, count, perCase: count > 0 ? sales / count : 0 };
+                        const mgrData = monthData?.byManager?.[name];
+                        const sales = mgrData?.sales || 0;
+                        const count = mgrData?.count || 0;
+                        const byPurpose = mgrData?.byPurpose || {};
+                        return { sales, count, perCase: count > 0 ? sales / count : 0, byPurpose };
                     });
                     return {
                         label: name,
@@ -4715,15 +4729,36 @@ HTML_TEMPLATE = '''
                     };
                 });
 
+                // 담당자별 검사목적별 월평균 계산
+                const managerPurposeAvg = {};
+                datasets.filter(ds => !ds.isComparison).forEach(ds => {
+                    managerPurposeAvg[ds.label] = {};
+                    const allPurposes = new Set();
+                    ds.monthlyInfo.forEach(m => Object.keys(m.byPurpose).forEach(p => allPurposes.add(p)));
+                    allPurposes.forEach(purpose => {
+                        const values = ds.monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
+                        const nonZero = values.filter(v => v > 0);
+                        managerPurposeAvg[ds.label][purpose] = nonZero.length > 0 ? nonZero.reduce((a,b) => a+b, 0) / nonZero.length : 0;
+                    });
+                });
+
+                // 월별 평균 계산
+                const monthlyAvg = labels.map((_, mi) => {
+                    const sum = datasets.filter(ds => !ds.isComparison).reduce((s, ds) => s + ds.data[mi], 0);
+                    return sum / (datasets.filter(ds => !ds.isComparison).length || 1);
+                });
+
                 // 전년도 비교 데이터 추가
                 if (compareData && compareData.by_month) {
                     const compMonthMap = Object.fromEntries(compareData.by_month || []);
                     top3Labels.forEach((name, i) => {
                         const monthlyInfo = labels.map((_, mi) => {
                             const monthData = compMonthMap[mi+1];
-                            const sales = monthData?.byManager?.[name]?.sales || 0;
-                            const count = monthData?.byManager?.[name]?.count || 0;
-                            return { sales, count, perCase: count > 0 ? sales / count : 0 };
+                            const mgrData = monthData?.byManager?.[name];
+                            const sales = mgrData?.sales || 0;
+                            const count = mgrData?.count || 0;
+                            const byPurpose = mgrData?.byPurpose || {};
+                            return { sales, count, perCase: count > 0 ? sales / count : 0, byPurpose };
                         });
                         datasets.push({
                             label: name + ' (' + compareData.year + ')',
@@ -4752,13 +4787,57 @@ HTML_TEMPLATE = '''
                                 callbacks: {
                                     label: function(context) {
                                         const ds = context.dataset;
-                                        const info = ds.monthlyInfo?.[context.dataIndex];
+                                        const monthIdx = context.dataIndex;
+                                        const info = ds.monthlyInfo?.[monthIdx];
                                         if (!info) return ds.label + ': ' + formatCurrency(context.raw);
-                                        return [
+
+                                        let result = [
                                             ds.label + ': ' + formatCurrency(info.sales),
                                             '  건수: ' + info.count.toLocaleString() + '건',
                                             '  건당: ' + formatCurrency(info.perCase)
                                         ];
+
+                                        // 평균 대비 및 검사목적별 증감 (현재 연도만)
+                                        if (!ds.isComparison) {
+                                            const avg = monthlyAvg[monthIdx];
+                                            const diff = info.sales - avg;
+                                            const diffPct = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+                                            result.push('─────────');
+                                            const mgrAvg = managerPurposeAvg[ds.label] || {};
+                                            if (diff >= 0) {
+                                                result.push(`📈 평균 대비 +${diffPct}%`);
+                                                const increases = Object.entries(info.byPurpose || {})
+                                                    .map(([p, d]) => ({ name: p, sales: d.sales, avg: mgrAvg[p] || 0, diff: d.sales - (mgrAvg[p] || 0) }))
+                                                    .filter(d => d.diff > 0)
+                                                    .sort((a, b) => b.diff - a.diff)
+                                                    .slice(0, 3);
+                                                if (increases.length > 0) {
+                                                    result.push('▲ 증가 요인:');
+                                                    increases.forEach(d => {
+                                                        const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                        result.push(`  • ${d.name}: +${formatCurrency(d.diff)} (+${pct}%)`);
+                                                    });
+                                                }
+                                            } else {
+                                                result.push(`📉 평균 대비 ${diffPct}%`);
+                                                const decreases = Object.entries(mgrAvg)
+                                                    .map(p => ({ name: p[0], avg: p[1], sales: info.byPurpose?.[p[0]]?.sales || 0 }))
+                                                    .map(d => ({ ...d, diff: d.sales - d.avg }))
+                                                    .filter(d => d.diff < 0)
+                                                    .sort((a, b) => a.diff - b.diff)
+                                                    .slice(0, 3);
+                                                if (decreases.length > 0) {
+                                                    result.push('▼ 감소 요인:');
+                                                    decreases.forEach(d => {
+                                                        const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                        result.push(`  • ${d.name}: ${formatCurrency(d.diff)} (${pct}%)`);
+                                                    });
+                                                }
+                                            }
+                                        }
+
+                                        return result;
                                     }
                                 }
                             }
@@ -4780,13 +4859,15 @@ HTML_TEMPLATE = '''
                 } else {
                     const monthMap = Object.fromEntries(currentData.by_month || []);
 
-                    // 현재 연도 데이터셋 (매출, 건수 포함)
+                    // 현재 연도 데이터셋 (매출, 건수, 검사목적 포함)
                     const datasets = selectedManagers.map((name, i) => {
                         const monthlyInfo = labels.map((_, mi) => {
                             const monthData = monthMap[mi+1];
-                            const sales = monthData?.byManager?.[name]?.sales || 0;
-                            const count = monthData?.byManager?.[name]?.count || 0;
-                            return { sales, count, perCase: count > 0 ? sales / count : 0 };
+                            const mgrData = monthData?.byManager?.[name];
+                            const sales = mgrData?.sales || 0;
+                            const count = mgrData?.count || 0;
+                            const byPurpose = mgrData?.byPurpose || {};
+                            return { sales, count, perCase: count > 0 ? sales / count : 0, byPurpose };
                         });
                         return {
                             label: name,
@@ -4797,7 +4878,27 @@ HTML_TEMPLATE = '''
                             fill: false,
                             tension: 0.4,
                             pointRadius: 5,
+                            isComparison: false,
                         };
+                    });
+
+                    // 담당자별 검사목적별 월평균 계산
+                    const managerPurposeAvg = {};
+                    datasets.forEach(ds => {
+                        managerPurposeAvg[ds.label] = {};
+                        const allPurposes = new Set();
+                        ds.monthlyInfo.forEach(m => Object.keys(m.byPurpose).forEach(p => allPurposes.add(p)));
+                        allPurposes.forEach(purpose => {
+                            const values = ds.monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
+                            const nonZero = values.filter(v => v > 0);
+                            managerPurposeAvg[ds.label][purpose] = nonZero.length > 0 ? nonZero.reduce((a,b) => a+b, 0) / nonZero.length : 0;
+                        });
+                    });
+
+                    // 월별 평균 계산
+                    const monthlyAvg = labels.map((_, mi) => {
+                        const sum = datasets.reduce((s, ds) => s + ds.data[mi], 0);
+                        return sum / (datasets.length || 1);
                     });
 
                     // 전년도 비교 데이터 추가
@@ -4806,9 +4907,11 @@ HTML_TEMPLATE = '''
                         selectedManagers.forEach((name, i) => {
                             const monthlyInfo = labels.map((_, mi) => {
                                 const monthData = compMonthMap[mi+1];
-                                const sales = monthData?.byManager?.[name]?.sales || 0;
-                                const count = monthData?.byManager?.[name]?.count || 0;
-                                return { sales, count, perCase: count > 0 ? sales / count : 0 };
+                                const mgrData = monthData?.byManager?.[name];
+                                const sales = mgrData?.sales || 0;
+                                const count = mgrData?.count || 0;
+                                const byPurpose = mgrData?.byPurpose || {};
+                                return { sales, count, perCase: count > 0 ? sales / count : 0, byPurpose };
                             });
                             datasets.push({
                                 label: name + ' (' + compareData.year + ')',
@@ -4820,6 +4923,7 @@ HTML_TEMPLATE = '''
                                 tension: 0.4,
                                 pointRadius: 3,
                                 borderDash: [5, 5],
+                                isComparison: true,
                             });
                         });
                     }
@@ -4836,13 +4940,57 @@ HTML_TEMPLATE = '''
                                     callbacks: {
                                         label: function(context) {
                                             const ds = context.dataset;
-                                            const info = ds.monthlyInfo?.[context.dataIndex];
+                                            const monthIdx = context.dataIndex;
+                                            const info = ds.monthlyInfo?.[monthIdx];
                                             if (!info) return ds.label + ': ' + formatCurrency(context.raw);
-                                            return [
+
+                                            let result = [
                                                 ds.label + ': ' + formatCurrency(info.sales),
                                                 '  건수: ' + info.count.toLocaleString() + '건',
                                                 '  건당: ' + formatCurrency(info.perCase)
                                             ];
+
+                                            // 평균 대비 및 검사목적별 증감 (현재 연도만)
+                                            if (!ds.isComparison) {
+                                                const avg = monthlyAvg[monthIdx];
+                                                const diff = info.sales - avg;
+                                                const diffPct = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+                                                result.push('─────────');
+                                                const mgrAvg = managerPurposeAvg[ds.label] || {};
+                                                if (diff >= 0) {
+                                                    result.push(`📈 평균 대비 +${diffPct}%`);
+                                                    const increases = Object.entries(info.byPurpose || {})
+                                                        .map(([p, d]) => ({ name: p, sales: d.sales, avg: mgrAvg[p] || 0, diff: d.sales - (mgrAvg[p] || 0) }))
+                                                        .filter(d => d.diff > 0)
+                                                        .sort((a, b) => b.diff - a.diff)
+                                                        .slice(0, 3);
+                                                    if (increases.length > 0) {
+                                                        result.push('▲ 증가 요인:');
+                                                        increases.forEach(d => {
+                                                            const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                            result.push(`  • ${d.name}: +${formatCurrency(d.diff)} (+${pct}%)`);
+                                                        });
+                                                    }
+                                                } else {
+                                                    result.push(`📉 평균 대비 ${diffPct}%`);
+                                                    const decreases = Object.entries(mgrAvg)
+                                                        .map(p => ({ name: p[0], avg: p[1], sales: info.byPurpose?.[p[0]]?.sales || 0 }))
+                                                        .map(d => ({ ...d, diff: d.sales - d.avg }))
+                                                        .filter(d => d.diff < 0)
+                                                        .sort((a, b) => a.diff - b.diff)
+                                                        .slice(0, 3);
+                                                    if (decreases.length > 0) {
+                                                        result.push('▼ 감소 요인:');
+                                                        decreases.forEach(d => {
+                                                            const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                            result.push(`  • ${d.name}: ${formatCurrency(d.diff)} (${pct}%)`);
+                                                        });
+                                                    }
+                                                }
+                                            }
+
+                                            return result;
                                         }
                                     }
                                 }
@@ -5572,16 +5720,31 @@ HTML_TEMPLATE = '''
                 branches = branches.filter(b => b[0] === branchMonthlySelected);
             }
 
-            // 팀별 월별 데이터 - 실제 byBranch 데이터 사용 (매출, 건수 포함)
+            // 팀별 월별 데이터 - 실제 byBranch 데이터 사용 (매출, 건수, 검사목적 포함)
             const branchMonthlyData = branches.map(b => {
                 const branchName = b[0];
                 const monthlyInfo = labels.map((_, mi) => {
                     const monthData = monthMap[mi+1];
-                    const sales = monthData?.byBranch?.[branchName]?.sales || 0;
-                    const count = monthData?.byBranch?.[branchName]?.count || 0;
-                    return { sales, count, perCase: count > 0 ? sales / count : 0 };
+                    const branchData = monthData?.byBranch?.[branchName];
+                    const sales = branchData?.sales || 0;
+                    const count = branchData?.count || 0;
+                    const byPurpose = branchData?.byPurpose || {};
+                    return { sales, count, perCase: count > 0 ? sales / count : 0, byPurpose };
                 });
-                return { name: branchName, data: monthlyInfo.map(d => d.sales), monthlyInfo, byPurpose: b[1].by_purpose || {} };
+                return { name: branchName, data: monthlyInfo.map(d => d.sales), monthlyInfo };
+            });
+
+            // 팀별 검사목적별 월평균 계산 (증감 비교용)
+            const branchPurposeAvg = {};
+            branchMonthlyData.forEach(b => {
+                branchPurposeAvg[b.name] = {};
+                const allPurposes = new Set();
+                b.monthlyInfo.forEach(m => Object.keys(m.byPurpose).forEach(p => allPurposes.add(p)));
+                allPurposes.forEach(purpose => {
+                    const values = b.monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
+                    const nonZero = values.filter(v => v > 0);
+                    branchPurposeAvg[b.name][purpose] = nonZero.length > 0 ? nonZero.reduce((a,b) => a+b, 0) / nonZero.length : 0;
+                });
             });
 
             // 월별 전체 평균 계산
@@ -5670,15 +5833,46 @@ HTML_TEMPLATE = '''
                                         result.push(`  건당: ${formatCurrency(info.perCase)}`);
                                     }
 
-                                    // 평균 대비 (현재 연도만)
-                                    if (!ds.isComparison) {
+                                    // 평균 대비 및 검사목적별 증감 (현재 연도만)
+                                    if (!ds.isComparison && info) {
                                         const avg = monthlyAvg[monthIdx];
                                         const diff = value - avg;
                                         const diffPct = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+                                        result.push('─────────');
                                         if (diff >= 0) {
                                             result.push(`📈 평균 대비 +${diffPct}%`);
+                                            // 평균보다 높은 검사목적 (증가 요인)
+                                            const branchAvg = branchPurposeAvg[label] || {};
+                                            const increases = Object.entries(info.byPurpose || {})
+                                                .map(([p, d]) => ({ name: p, sales: d.sales, avg: branchAvg[p] || 0, diff: d.sales - (branchAvg[p] || 0) }))
+                                                .filter(d => d.diff > 0)
+                                                .sort((a, b) => b.diff - a.diff)
+                                                .slice(0, 3);
+                                            if (increases.length > 0) {
+                                                result.push('▲ 증가 요인:');
+                                                increases.forEach(d => {
+                                                    const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                    result.push(`  • ${d.name}: +${formatCurrency(d.diff)} (+${pct}%)`);
+                                                });
+                                            }
                                         } else {
                                             result.push(`📉 평균 대비 ${diffPct}%`);
+                                            // 평균보다 낮은 검사목적 (감소 요인)
+                                            const branchAvg = branchPurposeAvg[label] || {};
+                                            const decreases = Object.entries(branchAvg)
+                                                .map(p => ({ name: p[0], avg: p[1], sales: info.byPurpose?.[p[0]]?.sales || 0 }))
+                                                .map(d => ({ ...d, diff: d.sales - d.avg }))
+                                                .filter(d => d.diff < 0)
+                                                .sort((a, b) => a.diff - b.diff)
+                                                .slice(0, 3);
+                                            if (decreases.length > 0) {
+                                                result.push('▼ 감소 요인:');
+                                                decreases.forEach(d => {
+                                                    const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                    result.push(`  • ${d.name}: ${formatCurrency(d.diff)} (${pct}%)`);
+                                                });
+                                            }
                                         }
                                     }
 

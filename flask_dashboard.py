@@ -1216,10 +1216,17 @@ def process_data(data, purpose_filter=None):
         # 지사별
         branch = MANAGER_TO_BRANCH.get(manager, '기타')
         if branch not in by_branch:
-            by_branch[branch] = {'sales': 0, 'count': 0, 'managers': set()}
+            by_branch[branch] = {'sales': 0, 'count': 0, 'managers': set(), 'by_purpose': {}}
         by_branch[branch]['sales'] += sales
         by_branch[branch]['count'] += 1
         by_branch[branch]['managers'].add(manager)
+
+        # 팀별 검사목적별 데이터
+        if purpose:
+            if purpose not in by_branch[branch]['by_purpose']:
+                by_branch[branch]['by_purpose'][purpose] = {'sales': 0, 'count': 0}
+            by_branch[branch]['by_purpose'][purpose]['sales'] += sales
+            by_branch[branch]['by_purpose'][purpose]['count'] += 1
 
         # 부서별 (본사, 마케팅, 영업부, 지사)
         department = MANAGER_TO_DEPARTMENT.get(manager, '기타')
@@ -5231,13 +5238,28 @@ HTML_TEMPLATE = '''
             if (!ctx) return;
             if (charts.branchPerCase) charts.branchPerCase.destroy();
 
+            const selectedPurpose = document.getElementById('branchPerCasePurposeSelect')?.value || '전체';
             const branches = currentData.by_branch || [];
             if (branches.length === 0) return;
 
-            const branchData = branches.map(b => ({
-                name: b[0],
-                avgPrice: b[1].count > 0 ? b[1].sales / b[1].count : 0
-            })).sort((a, b) => b.avgPrice - a.avgPrice);
+            // 검사목적별 필터 적용
+            const branchData = branches.map(b => {
+                let sales = 0, count = 0;
+                if (selectedPurpose === '전체') {
+                    sales = b[1].sales || 0;
+                    count = b[1].count || 0;
+                } else {
+                    const purposeData = b[1].by_purpose?.[selectedPurpose];
+                    if (purposeData) {
+                        sales = purposeData.sales || 0;
+                        count = purposeData.count || 0;
+                    }
+                }
+                const avgPrice = count > 0 ? sales / count : 0;
+                return { name: b[0], avgPrice, sales, count };
+            }).filter(d => d.avgPrice > 0).sort((a, b) => b.avgPrice - a.avgPrice);
+
+            const avgAll = branchData.reduce((s, d) => s + d.avgPrice, 0) / (branchData.length || 1);
 
             charts.branchPerCase = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
@@ -5246,7 +5268,7 @@ HTML_TEMPLATE = '''
                     datasets: [{
                         label: '건당 매출',
                         data: branchData.map(b => b.avgPrice),
-                        backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                        backgroundColor: branchData.map(d => d.avgPrice >= avgAll ? 'rgba(16, 185, 129, 0.7)' : 'rgba(245, 158, 11, 0.7)'),
                         borderRadius: 6
                     }]
                 },
@@ -5532,25 +5554,35 @@ HTML_TEMPLATE = '''
 
         function updateBranchChart() {
             const purposeFilter = document.getElementById('branchChartPurposeFilter')?.value || '전체';
-            let branches = currentData.by_branch || [];
-
-            // 검사목적 필터는 전체 데이터에서만 사용 (by_branch에는 목적별 데이터 없음)
-            // 추후 확장 가능
+            const branches = currentData.by_branch || [];
 
             const ctx = document.getElementById('branchChart').getContext('2d');
             if (charts.branch) charts.branch.destroy();
 
-            // 매출 기준 정렬
-            branches = [...branches].sort((a, b) => b[1].sales - a[1].sales);
+            // 검사목적 필터 적용
+            const branchData = branches.map(b => {
+                let sales = 0, count = 0;
+                if (purposeFilter === '전체') {
+                    sales = b[1].sales || 0;
+                    count = b[1].count || 0;
+                } else {
+                    const purposeData = b[1].by_purpose?.[purposeFilter];
+                    if (purposeData) {
+                        sales = purposeData.sales || 0;
+                        count = purposeData.count || 0;
+                    }
+                }
+                return { name: b[0], sales, count };
+            }).filter(d => d.sales > 0).sort((a, b) => b.sales - a.sales);
 
             if (compareData && purposeFilter === '전체') {
                 const compareMap = Object.fromEntries(compareData.by_branch || []);
                 document.getElementById('branchLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background: rgba(99, 102, 241, 0.8);"></div><span>${currentData.year}년</span></div><div class="legend-item"><div class="legend-color" style="background: rgba(139, 92, 246, 0.5);"></div><span>${compareData.year}년</span></div>`;
                 document.getElementById('branchLegend').style.display = 'flex';
-                charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branches.map(d => d[0]), datasets: [{ label: currentData.year + '년', data: branches.map(d => d[1].sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }, { label: compareData.year + '년', data: branches.map(d => compareMap[d[0]]?.sales || 0), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } } });
+                charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branchData.map(d => d.name), datasets: [{ label: currentData.year + '년', data: branchData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }, { label: compareData.year + '년', data: branchData.map(d => compareMap[d.name]?.sales || 0), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } } });
             } else {
                 document.getElementById('branchLegend').style.display = 'none';
-                charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branches.map(d => d[0]), datasets: [{ data: branches.map(d => d[1].sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } }, x: { grid: { display: false } } } } });
+                charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branchData.map(d => d.name), datasets: [{ data: branchData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } }, x: { grid: { display: false } } } } });
             }
         }
 
@@ -5995,27 +6027,41 @@ HTML_TEMPLATE = '''
         }
 
         function updateBranchTable() {
-            let branches = [...(currentData.by_branch || [])];
+            const purposeFilter = document.getElementById('branchTablePurposeFilter')?.value || '전체';
+            const branches = currentData.by_branch || [];
             const tbody = document.querySelector('#branchTable tbody');
-            const total = branches.reduce((sum, b) => sum + (b[1].sales || 0), 0) || 1;
 
-            // 매출 기준 정렬
-            branches.sort((a, b) => b[1].sales - a[1].sales);
+            // 검사목적 필터 적용
+            const branchData = branches.map(b => {
+                let sales = 0, count = 0;
+                if (purposeFilter === '전체') {
+                    sales = b[1].sales || 0;
+                    count = b[1].count || 0;
+                } else {
+                    const purposeData = b[1].by_purpose?.[purposeFilter];
+                    if (purposeData) {
+                        sales = purposeData.sales || 0;
+                        count = purposeData.count || 0;
+                    }
+                }
+                return { name: b[0], sales, count, managers: b[1].managers };
+            }).filter(d => d.sales > 0).sort((a, b) => b.sales - a.sales);
 
-            document.getElementById('branchTableBadge').textContent = branches.length + '개 팀';
+            const total = branchData.reduce((sum, b) => sum + b.sales, 0) || 1;
+            document.getElementById('branchTableBadge').textContent = branchData.length + '개 팀';
 
-            if (compareData) {
+            if (compareData && purposeFilter === '전체') {
                 document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">${currentData.year}년</th><th class="text-right">${compareData.year}년</th><th class="text-right">평균단가</th><th class="text-right">증감</th><th>비중</th></tr>`;
                 const compareMap = Object.fromEntries(compareData.by_branch || []);
-                tbody.innerHTML = branches.map(d => {
-                    const compSales = compareMap[d[0]]?.sales || 0;
-                    const diff = d[1].sales - compSales;
+                tbody.innerHTML = branchData.map(d => {
+                    const compSales = compareMap[d.name]?.sales || 0;
+                    const diff = d.sales - compSales;
                     const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : 0;
-                    const avgPrice = d[1].count > 0 ? d[1].sales / d[1].count : 0;
-                    const percent = (d[1].sales / total * 100).toFixed(1);
+                    const avgPrice = d.count > 0 ? d.sales / d.count : 0;
+                    const percent = (d.sales / total * 100).toFixed(1);
                     return `<tr>
-                        <td><strong>${d[0]}</strong></td>
-                        <td class="text-right">${formatCurrency(d[1].sales)}</td>
+                        <td><strong>${d.name}</strong></td>
+                        <td class="text-right">${formatCurrency(d.sales)}</td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
                         <td class="text-right">${formatCurrency(avgPrice)}</td>
                         <td class="text-right"><span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
@@ -6024,15 +6070,15 @@ HTML_TEMPLATE = '''
                 }).join('');
             } else {
                 document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">매출액</th><th class="text-right">건수</th><th class="text-right">평균단가</th><th class="text-right">담당자수</th><th>비중</th></tr>`;
-                tbody.innerHTML = branches.map(d => {
-                    const avgPrice = d[1].count > 0 ? d[1].sales / d[1].count : 0;
-                    const percent = (d[1].sales / total * 100).toFixed(1);
+                tbody.innerHTML = branchData.map(d => {
+                    const avgPrice = d.count > 0 ? d.sales / d.count : 0;
+                    const percent = (d.sales / total * 100).toFixed(1);
                     return `<tr>
-                        <td><strong>${d[0]}</strong></td>
-                        <td class="text-right">${formatCurrency(d[1].sales)}</td>
-                        <td class="text-right">${d[1].count.toLocaleString()}건</td>
+                        <td><strong>${d.name}</strong></td>
+                        <td class="text-right">${formatCurrency(d.sales)}</td>
+                        <td class="text-right">${d.count.toLocaleString()}건</td>
                         <td class="text-right">${formatCurrency(avgPrice)}</td>
-                        <td class="text-right">${d[1].managers?.size || d[1].managers || '-'}명</td>
+                        <td class="text-right">${d.managers?.size || d.managers || '-'}명</td>
                         <td><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div><span>${percent}%</span></div></td>
                     </tr>`;
                 }).join('');

@@ -6,6 +6,7 @@
 """
 from flask import Flask, render_template_string, jsonify, request
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -15,22 +16,30 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
+# config 모듈 경로 추가
+sys.path.insert(0, str(BASE_DIR))
+
 # 데이터 캐시 (메모리에 저장)
 DATA_CACHE = {}
 CACHE_TIME = {}
 
-# 설정
-MANAGER_TO_BRANCH = {
-    "장동욱": "충청지사", "지병훈": "충청지사", "박은태": "충청지사",
-    "도준구": "경북지사",
-    "이강현": "전북지사",
-    "엄은정": "경기지사", "정유경": "경기지사",
-    "이성복": "서울지사",
-    "조봉현": "서울센터", "오세중": "서울센터", "장동주": "서울센터", "오석현": "서울센터",
-    "엄상흠": "경북센터",
-    "마케팅": "마케팅",
-    "본사접수": "본사접수",
-}
+# settings.py에서 MANAGER_TO_BRANCH 가져오기
+try:
+    from config.settings import MANAGER_TO_BRANCH
+except ImportError:
+    # 설정 파일을 찾을 수 없는 경우 기본값 사용
+    MANAGER_TO_BRANCH = {
+        "장동욱": "충청지사", "지병훈": "충청지사", "박은태": "충청지사",
+        "도준구": "경북지사",
+        "이강현": "전북지사",
+        "엄은정": "경기지사", "정유경": "경기지사",
+        "이성복": "서울지사",
+        "조봉현": "서울센터", "오세중": "서울센터", "장동주": "서울센터", "오석현": "서울센터",
+        "엄상흠": "경북센터",
+        "ISA": "ISA지사",
+        "마케팅": "마케팅",
+        "본사접수": "본사접수",
+    }
 
 def load_excel_data(year, use_cache=True):
     """openpyxl로 직접 엑셀 로드 (캐시 사용)"""
@@ -598,7 +607,7 @@ HTML_TEMPLATE = '''
                     </select>
                 </div>
             </div>
-            <select id="purposeSelect">
+            <select id="purposeSelect" onchange="loadData()">
                 <option value="전체">검사목적: 전체</option>
             </select>
             <button id="btnSearch" class="btn-search" onclick="loadData()">조회하기</button>
@@ -639,14 +648,18 @@ HTML_TEMPLATE = '''
 
     <!-- 개인별 탭 -->
     <div id="personal" class="tab-content active">
+        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <span id="personalYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
+            <span id="personalPurposeLabel" style="font-weight: bold; color: #27ae60; font-size: 14px;">🎯 검사목적: 전체</span>
+        </div>
         <div class="charts">
             <div class="chart-container">
-                <h3>영업담당별 매출 TOP 15</h3>
+                <h3>영업담당별 매출 TOP 15 <span id="personalChartFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
                 <div id="managerLegend" class="legend-custom" style="display:none;"></div>
                 <canvas id="managerChart"></canvas>
             </div>
             <div class="chart-container">
-                <h3>영업담당별 상세</h3>
+                <h3>영업담당별 상세 <span id="personalTableFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
                 <div class="scroll-table">
                     <table id="managerTable">
                         <thead id="managerTableHead"><tr><th>담당자</th><th>매출액</th><th>건수</th><th>비중</th></tr></thead>
@@ -659,14 +672,18 @@ HTML_TEMPLATE = '''
 
     <!-- 팀별 탭 -->
     <div id="team" class="tab-content">
+        <div class="sub-select" style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <span id="teamYearLabel" style="font-weight: bold; color: #667eea; font-size: 16px;">📅 2025년</span>
+            <span id="teamPurposeLabel" style="font-weight: bold; color: #27ae60; font-size: 14px;">🎯 검사목적: 전체</span>
+        </div>
         <div class="charts">
             <div class="chart-container">
-                <h3>지사/센터별 매출</h3>
+                <h3>지사/센터별 매출 <span id="teamChartFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
                 <div id="branchLegend" class="legend-custom" style="display:none;"></div>
                 <canvas id="branchChart"></canvas>
             </div>
             <div class="chart-container">
-                <h3>지사/센터별 상세</h3>
+                <h3>지사/센터별 상세 <span id="teamTableFilterLabel" style="font-size: 12px; color: #667eea;"></span></h3>
                 <table id="branchTable">
                     <thead id="branchTableHead"><tr><th>지사/센터</th><th>매출액</th><th>건수</th><th>담당자수</th></tr></thead>
                     <tbody></tbody>
@@ -1225,6 +1242,8 @@ HTML_TEMPLATE = '''
         function updateAll() {
             const steps = [
                 ['updateSummary', updateSummary],
+                ['updatePersonalLabels', updatePersonalLabels],
+                ['updateTeamLabels', updateTeamLabels],
                 ['updateManagerChart', updateManagerChart],
                 ['updateBranchChart', updateBranchChart],
                 ['updateMonthlyChart', updateMonthlyChart],
@@ -1253,6 +1272,54 @@ HTML_TEMPLATE = '''
                 }
             }
             console.log('[UPDATE] 모든 업데이트 완료');
+        }
+
+        function updatePersonalLabels() {
+            const purpose = document.getElementById('purposeSelect').value;
+            const currLabel = currentData.dateLabel || currentData.year + '년';
+
+            // 연도 라벨 업데이트
+            const yearLabel = document.getElementById('personalYearLabel');
+            if (compareData) {
+                const compLabel = compareData.dateLabel || compareData.year + '년';
+                yearLabel.textContent = `📅 ${currLabel} vs ${compLabel}`;
+            } else {
+                yearLabel.textContent = `📅 ${currLabel}`;
+            }
+
+            // 검사목적 라벨 업데이트
+            const purposeLabel = document.getElementById('personalPurposeLabel');
+            if (purpose && purpose !== '전체') {
+                purposeLabel.textContent = `🎯 검사목적: ${purpose}`;
+                purposeLabel.style.display = 'inline';
+            } else {
+                purposeLabel.textContent = `🎯 검사목적: 전체`;
+                purposeLabel.style.display = 'inline';
+            }
+        }
+
+        function updateTeamLabels() {
+            const purpose = document.getElementById('purposeSelect').value;
+            const currLabel = currentData.dateLabel || currentData.year + '년';
+
+            // 연도 라벨 업데이트
+            const yearLabel = document.getElementById('teamYearLabel');
+            if (compareData) {
+                const compLabel = compareData.dateLabel || compareData.year + '년';
+                yearLabel.textContent = `📅 ${currLabel} vs ${compLabel}`;
+            } else {
+                yearLabel.textContent = `📅 ${currLabel}`;
+            }
+
+            // 검사목적 라벨 업데이트
+            const purposeLabel = document.getElementById('teamPurposeLabel');
+            if (purpose && purpose !== '전체') {
+                purposeLabel.textContent = `🎯 검사목적: ${purpose}`;
+                purposeLabel.style.display = 'inline';
+            } else {
+                purposeLabel.textContent = `🎯 검사목적: 전체`;
+                purposeLabel.style.display = 'inline';
+            }
         }
 
         function updateSummary() {

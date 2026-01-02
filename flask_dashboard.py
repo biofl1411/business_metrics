@@ -5662,25 +5662,86 @@ HTML_TEMPLATE = '''
             const selectedPurpose = document.getElementById('perCasePurposeSelect')?.value || '전체';
             const managers = currentData.by_manager || [];
 
-            // 검사목적별 필터 적용
+            // 검사목적별 필터 적용 + 검사목적별 데이터 포함
             let chartData = managers.map(m => {
                 let sales = 0, count = 0;
+                const byPurpose = m[1].by_purpose || {};
+
                 if (selectedPurpose === '전체') {
                     sales = m[1].sales || 0;
                     count = m[1].count || 0;
                 } else {
-                    const purposeData = m[1].by_purpose?.[selectedPurpose];
+                    const purposeData = byPurpose[selectedPurpose];
                     if (purposeData) {
                         sales = purposeData.sales || 0;
                         count = purposeData.count || 0;
                     }
                 }
                 const avgPrice = count > 0 ? sales / count : 0;
-                return { name: m[0], avgPrice, sales, count };
+
+                // 검사목적별 건당 매출 계산
+                const purposeAvgPrices = {};
+                Object.entries(byPurpose).forEach(([purpose, data]) => {
+                    if (data.count > 0) {
+                        purposeAvgPrices[purpose] = {
+                            avgPrice: data.sales / data.count,
+                            sales: data.sales,
+                            count: data.count
+                        };
+                    }
+                });
+
+                return {
+                    name: m[0],
+                    avgPrice,
+                    sales,
+                    count,
+                    byPurpose,
+                    purposeAvgPrices
+                };
             }).filter(d => d.avgPrice > 0);
 
             chartData.sort((a, b) => perCaseSortOrder === 'desc' ? b.avgPrice - a.avgPrice : a.avgPrice - b.avgPrice);
             const avgAll = chartData.reduce((s, d) => s + d.avgPrice, 0) / (chartData.length || 1);
+            const totalSalesAll = chartData.reduce((s, d) => s + d.sales, 0);
+            const totalCountAll = chartData.reduce((s, d) => s + d.count, 0);
+
+            // 전체 담당자 검사목적별 평균 건당 매출 계산
+            const purposeGlobalAvg = {};
+            const purposeTotals = {};
+            chartData.forEach(d => {
+                Object.entries(d.purposeAvgPrices).forEach(([purpose, data]) => {
+                    if (!purposeTotals[purpose]) {
+                        purposeTotals[purpose] = { totalSales: 0, totalCount: 0, managerCount: 0 };
+                    }
+                    purposeTotals[purpose].totalSales += data.sales;
+                    purposeTotals[purpose].totalCount += data.count;
+                    purposeTotals[purpose].managerCount++;
+                });
+            });
+            Object.entries(purposeTotals).forEach(([purpose, data]) => {
+                purposeGlobalAvg[purpose] = data.totalCount > 0 ? data.totalSales / data.totalCount : 0;
+            });
+
+            // 고단가/저단가 기준
+            const HIGH_PRICE_THRESHOLD = 150000; // 15만원
+            const LOW_PRICE_THRESHOLD = 50000;   // 5만원
+
+            // 전체 평균 고단가/저단가 비중 계산
+            let totalHighCount = 0, totalLowCount = 0, totalAllCount = 0;
+            chartData.forEach(d => {
+                Object.entries(d.purposeAvgPrices).forEach(([purpose, data]) => {
+                    totalAllCount += data.count;
+                    if (data.avgPrice >= HIGH_PRICE_THRESHOLD) {
+                        totalHighCount += data.count;
+                    }
+                    if (data.avgPrice <= LOW_PRICE_THRESHOLD) {
+                        totalLowCount += data.count;
+                    }
+                });
+            });
+            const avgHighRatio = totalAllCount > 0 ? (totalHighCount / totalAllCount * 100) : 0;
+            const avgLowRatio = totalAllCount > 0 ? (totalLowCount / totalAllCount * 100) : 0;
 
             // 데이터셋 구성 (현재 연도)
             const datasets = [{
@@ -5736,20 +5797,114 @@ HTML_TEMPLATE = '''
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#e2e8f0',
+                            borderColor: 'rgba(99, 102, 241, 0.5)',
+                            borderWidth: 1,
+                            padding: 16,
+                            cornerRadius: 12,
+                            displayColors: false,
+                            bodyFont: { size: 12 },
+                            titleFont: { size: 14, weight: 'bold' },
                             callbacks: {
+                                title: (ctx) => {
+                                    const idx = ctx[0].dataIndex;
+                                    const d = chartData[idx];
+                                    return '👤 ' + d.name;
+                                },
                                 label: (ctx) => {
                                     const idx = ctx.dataIndex;
                                     const dsIdx = ctx.datasetIndex;
                                     const d = chartData[idx];
 
-                                    if (dsIdx === 0) {
-                                        // 현재 연도 데이터
-                                        return [currentData.year + '년 건당: ' + formatCurrency(Math.round(d.avgPrice)), '건수: ' + d.count.toLocaleString() + '건'];
-                                    } else {
-                                        // 전년도 데이터
+                                    if (dsIdx !== 0) {
+                                        // 전년도 데이터 - 간단히 표시
                                         const compD = compChartData[idx];
-                                        return [compareData.year + '년 건당: ' + formatCurrency(Math.round(compD.avgPrice)), '건수: ' + compD.count.toLocaleString() + '건'];
+                                        return compareData.year + '년 건당: ' + formatCurrency(Math.round(compD.avgPrice));
                                     }
+
+                                    // 현재 연도 데이터 - 상세 오버레이
+                                    const lines = [];
+
+                                    // 1. 기본 지표
+                                    lines.push('');
+                                    lines.push('💰 건당 매출: ' + formatCurrency(Math.round(d.avgPrice)));
+                                    lines.push('📋 총 거래 건수: ' + d.count.toLocaleString() + '건');
+                                    lines.push('📊 총 매출액: ' + (d.sales / 100000000).toFixed(2) + '억');
+
+                                    // 전체 평균 대비
+                                    const diffFromAvg = ((d.avgPrice - avgAll) / avgAll * 100);
+                                    const diffColor = diffFromAvg >= 0 ? '📈' : '📉';
+                                    const diffSign = diffFromAvg >= 0 ? '+' : '';
+                                    lines.push(diffColor + ' 전체 평균(' + formatCurrency(Math.round(avgAll)) + ') 대비: ' + diffSign + diffFromAvg.toFixed(1) + '%');
+
+                                    // 2. 단가 효율성 분석
+                                    lines.push('');
+                                    lines.push('── 단가 구성 분석 ──');
+
+                                    // 담당자별 고단가/저단가 비중 계산
+                                    let mgrHighCount = 0, mgrLowCount = 0, mgrTotalCount = 0;
+                                    Object.entries(d.purposeAvgPrices).forEach(([purpose, data]) => {
+                                        mgrTotalCount += data.count;
+                                        if (data.avgPrice >= HIGH_PRICE_THRESHOLD) {
+                                            mgrHighCount += data.count;
+                                        }
+                                        if (data.avgPrice <= LOW_PRICE_THRESHOLD) {
+                                            mgrLowCount += data.count;
+                                        }
+                                    });
+                                    const mgrHighRatio = mgrTotalCount > 0 ? (mgrHighCount / mgrTotalCount * 100) : 0;
+                                    const mgrLowRatio = mgrTotalCount > 0 ? (mgrLowCount / mgrTotalCount * 100) : 0;
+                                    const highDiff = mgrHighRatio - avgHighRatio;
+                                    const lowDiff = mgrLowRatio - avgLowRatio;
+
+                                    const highDiffStr = highDiff >= 0 ? '+' + highDiff.toFixed(1) : highDiff.toFixed(1);
+                                    const lowDiffStr = lowDiff >= 0 ? '+' + lowDiff.toFixed(1) : lowDiff.toFixed(1);
+
+                                    lines.push('🔺 고단가(15만↑) 비중: ' + mgrHighRatio.toFixed(1) + '% (평균 대비 ' + highDiffStr + '%p)');
+                                    lines.push('🔻 저단가(5만↓) 비중: ' + mgrLowRatio.toFixed(1) + '% (평균 대비 ' + lowDiffStr + '%p)');
+
+                                    // 3. 강점 검사목적 (평균 대비 높은 항목)
+                                    const strengths = Object.entries(d.purposeAvgPrices)
+                                        .map(([purpose, data]) => {
+                                            const globalAvg = purposeGlobalAvg[purpose] || 0;
+                                            const diff = globalAvg > 0 ? ((data.avgPrice - globalAvg) / globalAvg * 100) : 0;
+                                            return { purpose, avgPrice: data.avgPrice, globalAvg, diff, count: data.count };
+                                        })
+                                        .filter(item => item.diff > 0 && item.count >= 3)
+                                        .sort((a, b) => b.diff - a.diff)
+                                        .slice(0, 3);
+
+                                    if (strengths.length > 0) {
+                                        lines.push('');
+                                        lines.push('▲ 강점 검사목적 (평균 대비 높음)');
+                                        strengths.forEach(s => {
+                                            lines.push('  • ' + s.purpose + ': ' + formatCurrency(Math.round(s.avgPrice)) + ' (+' + s.diff.toFixed(0) + '%)');
+                                        });
+                                    }
+
+                                    // 4. 개선 기회 (평균 대비 낮은 항목)
+                                    const improvements = Object.entries(d.purposeAvgPrices)
+                                        .map(([purpose, data]) => {
+                                            const globalAvg = purposeGlobalAvg[purpose] || 0;
+                                            const diff = globalAvg > 0 ? ((data.avgPrice - globalAvg) / globalAvg * 100) : 0;
+                                            return { purpose, avgPrice: data.avgPrice, globalAvg, diff, count: data.count };
+                                        })
+                                        .filter(item => item.diff < -10 && item.count >= 3)
+                                        .sort((a, b) => a.diff - b.diff)
+                                        .slice(0, 3);
+
+                                    if (improvements.length > 0) {
+                                        lines.push('');
+                                        lines.push('▼ 개선 기회');
+                                        improvements.forEach(s => {
+                                            lines.push('  • ' + s.purpose + ': ' + formatCurrency(Math.round(s.avgPrice)) + ' (' + s.diff.toFixed(0) + '%)');
+                                        });
+                                    }
+
+                                    return lines;
                                 }
                             }
                         }

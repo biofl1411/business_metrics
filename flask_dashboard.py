@@ -4040,8 +4040,10 @@ HTML_TEMPLATE = '''
 
         // 유틸리티 함수
         function formatCurrency(value) {
-            if (value >= 100000000) return (value/100000000).toFixed(1) + '억';
-            if (value >= 10000) return (value/10000).toFixed(0) + '만';
+            const sign = value < 0 ? '-' : '';
+            const absValue = Math.abs(value);
+            if (absValue >= 100000000) return sign + (absValue/100000000).toFixed(1) + '억';
+            if (absValue >= 10000) return sign + (absValue/10000).toFixed(0) + '만';
             return Math.round(value).toLocaleString();
         }
 

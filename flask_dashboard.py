@@ -3611,6 +3611,7 @@ HTML_TEMPLATE = '''
                         </div>
                     </div>
                     <div class="card-body">
+                        <div class="chart-legend" id="perCaseLegend" style="display: none;"></div>
                         <div class="chart-container"><canvas id="perCaseChart"></canvas></div>
                     </div>
                 </div>
@@ -6876,6 +6877,30 @@ HTML_TEMPLATE = '''
                     backgroundColor: 'rgba(156, 163, 175, 0.5)',
                     borderRadius: 6,
                 });
+            }
+
+            // Legend에 요약 정보 표시
+            const legendEl = document.getElementById('perCaseLegend');
+            if (legendEl) {
+                if (compareData) {
+                    legendEl.innerHTML = `
+                        <div class="legend-item"><div class="legend-color" style="background: rgba(16, 185, 129, 0.7);"></div><span>${currentData.year}년</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background: rgba(156, 163, 175, 0.5);"></div><span>${compareData.year}년</span></div>
+                        <div style="margin-left: auto; display: flex; gap: 20px; font-size: 12px; color: #666;">
+                            <span>총매출: <strong>${formatCurrency(totalSalesAll)}</strong></span>
+                            <span>총건수: <strong>${totalCountAll.toLocaleString()}건</strong></span>
+                            <span>평균단가: <strong>${formatCurrency(Math.round(avgAll))}</strong></span>
+                        </div>`;
+                    legendEl.style.display = 'flex';
+                } else {
+                    legendEl.innerHTML = `
+                        <div style="display: flex; gap: 20px; font-size: 12px; color: #666;">
+                            <span>총매출: <strong>${formatCurrency(totalSalesAll)}</strong></span>
+                            <span>총건수: <strong>${totalCountAll.toLocaleString()}건</strong></span>
+                            <span>평균단가: <strong>${formatCurrency(Math.round(avgAll))}</strong></span>
+                        </div>`;
+                    legendEl.style.display = 'flex';
+                }
             }
 
             // 외부 HTML 툴팁 생성 함수
@@ -10243,12 +10268,23 @@ HTML_TEMPLATE = '''
 
             const datasets = [{ label: currentData.year + '년', data: chartData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }];
 
+            // 요약 정보 계산
+            const summaryTotalSales = chartData.reduce((s, d) => s + d.sales, 0);
+            const summaryTotalCount = chartData.reduce((s, d) => s + d.count, 0);
+            const summaryAvgPrice = summaryTotalCount > 0 ? summaryTotalSales / summaryTotalCount : 0;
+            const summaryHtml = `<div style="margin-left: auto; display: flex; gap: 20px; font-size: 12px; color: #666;">
+                <span>총매출: <strong>${formatCurrency(summaryTotalSales)}</strong></span>
+                <span>총건수: <strong>${summaryTotalCount.toLocaleString()}건</strong></span>
+                <span>평균단가: <strong>${formatCurrency(Math.round(summaryAvgPrice))}</strong></span>
+            </div>`;
+
             if (compareData && purposeFilter === '전체') {
                 datasets.push({ label: compareData.year + '년', data: chartData.map(d => d.compSales), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 });
-                document.getElementById('managerLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background: rgba(99, 102, 241, 0.8);"></div><span>${currentData.year}년</span></div><div class="legend-item"><div class="legend-color" style="background: rgba(139, 92, 246, 0.5);"></div><span>${compareData.year}년</span></div>`;
+                document.getElementById('managerLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background: rgba(99, 102, 241, 0.8);"></div><span>${currentData.year}년</span></div><div class="legend-item"><div class="legend-color" style="background: rgba(139, 92, 246, 0.5);"></div><span>${compareData.year}년</span></div>${summaryHtml}`;
                 document.getElementById('managerLegend').style.display = 'flex';
             } else {
-                document.getElementById('managerLegend').style.display = 'none';
+                document.getElementById('managerLegend').innerHTML = summaryHtml;
+                document.getElementById('managerLegend').style.display = 'flex';
             }
 
             // 외부 HTML 툴팁 생성 함수

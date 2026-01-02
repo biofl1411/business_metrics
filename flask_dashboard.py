@@ -3372,7 +3372,12 @@ HTML_TEMPLATE = '''
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📊 영업담당별 매출 TOP 15</div>
-                        <div class="card-badge" id="managerChartBadge">2025년</div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <select id="managerChartPurposeFilter" class="filter-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0;" onchange="updateManagerChart()">
+                                <option value="전체">전체 검사목적</option>
+                            </select>
+                            <div class="card-badge" id="managerChartBadge">2025년</div>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-legend" id="managerLegend" style="display: none;"></div>
@@ -4340,6 +4345,7 @@ HTML_TEMPLATE = '''
             initPerCasePurposeSelect();
             initUrgentPurposeSelect();
             initManagerPurposeFilter();
+            initManagerChartPurposeFilter();
 
             // 차트들 업데이트
             updateEfficiencyChart();
@@ -5366,14 +5372,24 @@ HTML_TEMPLATE = '''
         }
 
         function updateManagerChart() {
-            const managers = currentData.by_manager || [];
+            const purposeFilter = document.getElementById('managerChartPurposeFilter')?.value || '전체';
+            let managers = [];
+
+            // 검사목적 필터 적용
+            if (purposeFilter === '전체') {
+                managers = currentData.by_manager || [];
+            } else {
+                const purposeManagerData = currentData.purpose_managers?.[purposeFilter] || [];
+                managers = purposeManagerData.map(m => [m.name, { sales: m.sales, count: m.count }]);
+            }
+
             const top15 = managers.slice(0, 15);
             const ctx = document.getElementById('managerChart').getContext('2d');
             if (charts.manager) charts.manager.destroy();
 
             const datasets = [{ label: currentData.year + '년', data: top15.map(d => d[1].sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }];
 
-            if (compareData) {
+            if (compareData && purposeFilter === '전체') {
                 const compareMap = Object.fromEntries(compareData.by_manager || []);
                 datasets.push({ label: compareData.year + '년', data: top15.map(d => compareMap[d[0]]?.sales || 0), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 });
                 document.getElementById('managerLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background: rgba(99, 102, 241, 0.8);"></div><span>${currentData.year}년</span></div><div class="legend-item"><div class="legend-color" style="background: rgba(139, 92, 246, 0.5);"></div><span>${compareData.year}년</span></div>`;
@@ -5383,6 +5399,20 @@ HTML_TEMPLATE = '''
             }
 
             charts.manager = new Chart(ctx, { type: 'bar', data: { labels: top15.map(d => d[0]), datasets }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } }, x: { grid: { display: false } } } } });
+        }
+
+        function initManagerChartPurposeFilter() {
+            const purposes = new Set(['전체']);
+            (currentData.by_purpose || []).forEach(p => {
+                if (p[0] !== '접수취소') purposes.add(p[0]);
+            });
+            const select = document.getElementById('managerChartPurposeFilter');
+            if (select) {
+                select.innerHTML = '<option value="전체">전체 검사목적</option>' +
+                    Array.from(purposes).filter(p => p !== '전체').map(p =>
+                        `<option value="${p}">${p}</option>`
+                    ).join('');
+            }
         }
 
         function updateBranchChart() {

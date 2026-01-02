@@ -4684,7 +4684,7 @@ HTML_TEMPLATE = '''
                     }
                 });
             } else if (monthlyPreset === 'top3') {
-                // TOP 3 - by_month_by_manager 데이터가 없으면 전체 월별 데이터로 대체
+                // TOP 3 - by_month의 byManager 실제 데이터 사용
                 const monthMap = Object.fromEntries(currentData.by_month || []);
                 const top3Labels = managers.slice(0, 3).map(m => m[0]);
 
@@ -4695,18 +4695,15 @@ HTML_TEMPLATE = '''
                         datasets: top3Labels.map((name, i) => ({
                             label: name,
                             data: labels.map((_, mi) => {
-                                // 개별 담당자 월별 데이터가 없으면 전체 월별 데이터의 비율로 추정
-                                const managerData = managers.find(m => m[0] === name);
-                                const totalSales = managerData ? managerData[1].sales : 0;
-                                const totalMonthly = Object.values(monthMap).reduce((s, m) => s + (m.sales || 0), 0) || 1;
-                                const monthSales = monthMap[mi+1]?.sales || 0;
-                                return totalSales * (monthSales / totalMonthly);
+                                // 실제 담당자별 월별 데이터 사용
+                                const monthData = monthMap[mi+1];
+                                return monthData?.byManager?.[name]?.sales || 0;
                             }),
                             borderColor: colors[i],
                             backgroundColor: colors[i] + '20',
                             fill: false,
                             tension: 0.4,
-                            pointRadius: 3,
+                            pointRadius: 5,
                         }))
                     },
                     options: {
@@ -4729,28 +4726,24 @@ HTML_TEMPLATE = '''
                     });
                 } else {
                     const monthMap = Object.fromEntries(currentData.by_month || []);
-                    const selectedData = selectedManagers.map(name => managers.find(m => m[0] === name)).filter(Boolean);
 
                     charts.managerMonthly = new Chart(ctx.getContext('2d'), {
                         type: 'line',
                         data: {
                             labels,
-                            datasets: selectedData.map((m, i) => {
-                                const totalSales = m[1].sales || 0;
-                                const totalMonthly = Object.values(monthMap).reduce((s, mo) => s + (mo.sales || 0), 0) || 1;
-                                return {
-                                    label: m[0],
-                                    data: labels.map((_, mi) => {
-                                        const monthSales = monthMap[mi+1]?.sales || 0;
-                                        return totalSales * (monthSales / totalMonthly);
-                                    }),
-                                    borderColor: colors[i % colors.length],
-                                    backgroundColor: colors[i % colors.length] + '20',
-                                    fill: false,
-                                    tension: 0.4,
-                                    pointRadius: 4,
-                                };
-                            })
+                            datasets: selectedManagers.map((name, i) => ({
+                                label: name,
+                                data: labels.map((_, mi) => {
+                                    // 실제 담당자별 월별 데이터 사용
+                                    const monthData = monthMap[mi+1];
+                                    return monthData?.byManager?.[name]?.sales || 0;
+                                }),
+                                borderColor: colors[i % colors.length],
+                                backgroundColor: colors[i % colors.length] + '20',
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 5,
+                            }))
                         },
                         options: {
                             responsive: true,

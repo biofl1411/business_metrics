@@ -5261,27 +5261,68 @@ HTML_TEMPLATE = '''
 
             const avgAll = branchData.reduce((s, d) => s + d.avgPrice, 0) / (branchData.length || 1);
 
-            charts.branchPerCase = new Chart(ctx.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: branchData.map(b => b.name),
-                    datasets: [{
-                        label: '건당 매출',
-                        data: branchData.map(b => b.avgPrice),
-                        backgroundColor: branchData.map(d => d.avgPrice >= avgAll ? 'rgba(16, 185, 129, 0.7)' : 'rgba(245, 158, 11, 0.7)'),
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } },
-                        x: { grid: { display: false } }
+            if (compareData) {
+                // 비교 데이터 처리 (검사목적 필터 적용)
+                const compareBranches = compareData.by_branch || [];
+                const compareMap = {};
+                compareBranches.forEach(b => {
+                    let sales = 0, count = 0;
+                    if (selectedPurpose === '전체') {
+                        sales = b[1].sales || 0;
+                        count = b[1].count || 0;
+                    } else {
+                        const purposeData = b[1].by_purpose?.[selectedPurpose];
+                        if (purposeData) {
+                            sales = purposeData.sales || 0;
+                            count = purposeData.count || 0;
+                        }
                     }
-                }
-            });
+                    const avgPrice = count > 0 ? sales / count : 0;
+                    compareMap[b[0]] = { avgPrice };
+                });
+
+                charts.branchPerCase = new Chart(ctx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: branchData.map(b => b.name),
+                        datasets: [
+                            { label: currentData.year + '년', data: branchData.map(b => b.avgPrice), backgroundColor: 'rgba(16, 185, 129, 0.8)', borderRadius: 6 },
+                            { label: compareData.year + '년', data: branchData.map(b => compareMap[b.name]?.avgPrice || 0), backgroundColor: 'rgba(245, 158, 11, 0.6)', borderRadius: 6 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            } else {
+                charts.branchPerCase = new Chart(ctx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: branchData.map(b => b.name),
+                        datasets: [{
+                            label: '건당 매출',
+                            data: branchData.map(b => b.avgPrice),
+                            backgroundColor: branchData.map(d => d.avgPrice >= avgAll ? 'rgba(16, 185, 129, 0.7)' : 'rgba(245, 158, 11, 0.7)'),
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
         }
 
         // 지사별 효율성 분석 산점도
@@ -5578,11 +5619,36 @@ HTML_TEMPLATE = '''
                 return { name: b[0], sales, count };
             }).filter(d => d.sales > 0).sort((a, b) => b.sales - a.sales);
 
-            if (compareData && purposeFilter === '전체') {
-                const compareMap = Object.fromEntries(compareData.by_branch || []);
+            if (compareData) {
+                // 비교 데이터 처리 (검사목적 필터 적용)
+                const compareBranches = compareData.by_branch || [];
+                const compareMap = {};
+                compareBranches.forEach(b => {
+                    let sales = 0;
+                    if (purposeFilter === '전체') {
+                        sales = b[1].sales || 0;
+                    } else {
+                        const purposeData = b[1].by_purpose?.[purposeFilter];
+                        if (purposeData) {
+                            sales = purposeData.sales || 0;
+                        }
+                    }
+                    compareMap[b[0]] = { sales };
+                });
+
                 document.getElementById('branchLegend').innerHTML = `<div class="legend-item"><div class="legend-color" style="background: rgba(99, 102, 241, 0.8);"></div><span>${currentData.year}년</span></div><div class="legend-item"><div class="legend-color" style="background: rgba(139, 92, 246, 0.5);"></div><span>${compareData.year}년</span></div>`;
                 document.getElementById('branchLegend').style.display = 'flex';
-                charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branchData.map(d => d.name), datasets: [{ label: currentData.year + '년', data: branchData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }, { label: compareData.year + '년', data: branchData.map(d => compareMap[d.name]?.sales || 0), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } } });
+                charts.branch = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: branchData.map(d => d.name),
+                        datasets: [
+                            { label: currentData.year + '년', data: branchData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 },
+                            { label: compareData.year + '년', data: branchData.map(d => compareMap[d.name]?.sales || 0), backgroundColor: 'rgba(139, 92, 246, 0.5)', borderRadius: 6 }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } }
+                });
             } else {
                 document.getElementById('branchLegend').style.display = 'none';
                 charts.branch = new Chart(ctx, { type: 'bar', data: { labels: branchData.map(d => d.name), datasets: [{ data: branchData.map(d => d.sales), backgroundColor: 'rgba(99, 102, 241, 0.8)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } }, x: { grid: { display: false } } } } });
@@ -6053,9 +6119,26 @@ HTML_TEMPLATE = '''
             const total = branchData.reduce((sum, b) => sum + b.sales, 0) || 1;
             document.getElementById('branchTableBadge').textContent = branchData.length + '개 팀';
 
-            if (compareData && purposeFilter === '전체') {
+            if (compareData) {
+                // 비교 데이터 처리 (검사목적 필터 적용)
+                const compareBranches = compareData.by_branch || [];
+                const compareMap = {};
+                compareBranches.forEach(b => {
+                    let sales = 0, count = 0;
+                    if (purposeFilter === '전체') {
+                        sales = b[1].sales || 0;
+                        count = b[1].count || 0;
+                    } else {
+                        const purposeData = b[1].by_purpose?.[purposeFilter];
+                        if (purposeData) {
+                            sales = purposeData.sales || 0;
+                            count = purposeData.count || 0;
+                        }
+                    }
+                    compareMap[b[0]] = { sales, count };
+                });
+
                 document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">${currentData.year}년</th><th class="text-right">${compareData.year}년</th><th class="text-right">평균단가</th><th class="text-right">증감</th><th>비중</th></tr>`;
-                const compareMap = Object.fromEntries(compareData.by_branch || []);
                 tbody.innerHTML = branchData.map(d => {
                     const compSales = compareMap[d.name]?.sales || 0;
                     const diff = d.sales - compSales;

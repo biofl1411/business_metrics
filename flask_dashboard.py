@@ -669,21 +669,17 @@ MANAGER_TO_BRANCH = {
 MANAGER_TO_DEPARTMENT = {
     "본사접수": "본사",
     "마케팅": "마케팅",
-    # 지사 소속 영업담당자들은 영업부로 분류
-    "장동욱": "영업부", "박은태": "영업부", "지병훈": "영업부",
-    "도준구": "영업부",
-    "심태보": "영업부", "정유경": "영업부",
-    "이강현": "영업부",
-    "이성복": "영업부",
-    # 센터 소속 영업담당자들도 영업부로 분류
-    "조봉현": "영업부", "오세중": "영업부", "오석현": "영업부", "장동주": "영업부",
-    "엄상흠": "영업부",
-    # 기타 영업
-    "ISA": "영업부",
+    # 직영(영업부)
+    "오세중": "영업부", "장동주": "영업부", "조봉현": "영업부", "오석현": "영업부", "엄상흠": "영업부",
+    # 지사
+    "장동욱": "지사", "박은태": "지사", "지병훈": "지사",
+    "엄은정": "지사", "정유경": "지사",
+    "이강현": "지사", "도준구": "지사", "이성복": "지사",
+    "ISA": "지사",
 }
 
 # 지사에 포함될 담당자 목록 (지사 카드용)
-BRANCH_MEMBERS = {"장동욱", "박은태", "지병훈", "도준구", "심태보", "정유경", "이강현", "이성복", "ISA"}
+BRANCH_MEMBERS = {"장동욱", "박은태", "지병훈", "엄은정", "정유경", "이강현", "도준구", "이성복", "ISA"}
 
 # 개인별 분석에서 제외할 영업담당 (외부 기관 등)
 EXCLUDED_MANAGERS = {"IBK", "미지정"}
@@ -1232,13 +1228,6 @@ def process_data(data, purpose_filter=None):
             by_department[department] = {'sales': 0, 'count': 0}
         by_department[department]['sales'] += sales
         by_department[department]['count'] += 1
-
-        # 지사 카드용 (영업부 소속 담당자들의 합계)
-        if manager in BRANCH_MEMBERS:
-            if '지사' not in by_department:
-                by_department['지사'] = {'sales': 0, 'count': 0}
-            by_department['지사']['sales'] += sales
-            by_department['지사']['count'] += 1
 
         # 월별
         month = 0

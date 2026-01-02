@@ -4658,29 +4658,64 @@ HTML_TEMPLATE = '''
             const managers = currentData.by_manager || [];
 
             if (monthlyPreset === 'all') {
-                // 전체 합계 - 월별 데이터 사용
+                // 전체 합계 - 월별 데이터 사용 (매출, 건수, 검사목적 포함)
                 const monthMap = Object.fromEntries(currentData.by_month || []);
-                const totalMonthly = labels.map((_, i) => monthMap[i+1]?.sales || 0);
+                const monthlyInfo = labels.map((_, i) => {
+                    const m = monthMap[i+1] || {};
+                    return {
+                        sales: m.sales || 0,
+                        count: m.count || 0,
+                        perCase: (m.count > 0) ? (m.sales / m.count) : 0,
+                        byPurpose: m.byPurpose || {}
+                    };
+                });
+                const totalMonthly = monthlyInfo.map(m => m.sales);
+                const nonZeroSales = totalMonthly.filter(v => v > 0);
+                const ownAvg = nonZeroSales.length > 0 ? nonZeroSales.reduce((a,b) => a+b, 0) / nonZeroSales.length : 0;
+
+                // 검사목적별 월평균 계산
+                const purposeAvg = {};
+                const allPurposes = new Set();
+                monthlyInfo.forEach(m => Object.keys(m.byPurpose).forEach(p => allPurposes.add(p)));
+                allPurposes.forEach(purpose => {
+                    const values = monthlyInfo.map(m => m.byPurpose[purpose]?.sales || 0);
+                    const nonZero = values.filter(v => v > 0);
+                    purposeAvg[purpose] = nonZero.length > 0 ? nonZero.reduce((a,b) => a+b, 0) / nonZero.length : 0;
+                });
 
                 // 데이터셋 구성
                 const datasets = [{
                     label: currentData.year + '년 전체',
                     data: totalMonthly,
+                    monthlyInfo,
+                    ownAvg,
                     borderColor: '#6366f1',
                     backgroundColor: 'rgba(99, 102, 241, 0.2)',
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 5,
-                    pointBackgroundColor: '#6366f1',
+                    pointRadius: 8,
+                    pointHoverRadius: 12,
+                    pointStyle: totalMonthly.map(v => v < ownAvg ? 'triangle' : 'circle'),
+                    pointBackgroundColor: totalMonthly.map(v => v < ownAvg ? '#ef4444' : '#6366f1'),
+                    isComparison: false,
                 }];
 
                 // 전년도 비교 데이터 추가
                 if (compareData && compareData.by_month) {
                     const compMonthMap = Object.fromEntries(compareData.by_month || []);
-                    const compMonthly = labels.map((_, i) => compMonthMap[i+1]?.sales || 0);
+                    const compMonthlyInfo = labels.map((_, i) => {
+                        const m = compMonthMap[i+1] || {};
+                        return {
+                            sales: m.sales || 0,
+                            count: m.count || 0,
+                            perCase: (m.count > 0) ? (m.sales / m.count) : 0,
+                            byPurpose: m.byPurpose || {}
+                        };
+                    });
                     datasets.push({
                         label: compareData.year + '년 전체',
-                        data: compMonthly,
+                        data: compMonthlyInfo.map(m => m.sales),
+                        monthlyInfo: compMonthlyInfo,
                         borderColor: 'rgba(156, 163, 175, 0.8)',
                         backgroundColor: 'rgba(156, 163, 175, 0.1)',
                         fill: false,
@@ -4688,6 +4723,7 @@ HTML_TEMPLATE = '''
                         pointRadius: 4,
                         pointBackgroundColor: 'rgba(156, 163, 175, 0.8)',
                         borderDash: [5, 5],
+                        isComparison: true,
                     });
                 }
 
@@ -4697,7 +4733,67 @@ HTML_TEMPLATE = '''
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: { legend: { display: compareData ? true : false, position: 'top' } },
+                        plugins: {
+                            legend: { display: compareData ? true : false, position: 'top' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const ds = context.dataset;
+                                        const monthIdx = context.dataIndex;
+                                        const info = ds.monthlyInfo?.[monthIdx];
+                                        if (!info) return ds.label + ': ' + formatCurrency(context.raw);
+
+                                        let result = [
+                                            ds.label + ': ' + formatCurrency(info.sales),
+                                            '  건수: ' + info.count.toLocaleString() + '건',
+                                            '  건당: ' + formatCurrency(info.perCase)
+                                        ];
+
+                                        // 자체 월평균 대비 및 검사목적별 증감 (현재 연도만)
+                                        if (!ds.isComparison && ds.ownAvg) {
+                                            const avg = ds.ownAvg;
+                                            const diff = info.sales - avg;
+                                            const diffPct = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+                                            result.push('─────────');
+                                            result.push(`월평균: ${formatCurrency(avg)}`);
+                                            if (diff >= 0) {
+                                                result.push(`📈 월평균 대비 +${diffPct}%`);
+                                                const increases = Object.entries(info.byPurpose || {})
+                                                    .map(([p, d]) => ({ name: p, sales: d.sales, avg: purposeAvg[p] || 0, diff: d.sales - (purposeAvg[p] || 0) }))
+                                                    .filter(d => d.diff > 0)
+                                                    .sort((a, b) => b.diff - a.diff)
+                                                    .slice(0, 3);
+                                                if (increases.length > 0) {
+                                                    result.push('▲ 증가 요인:');
+                                                    increases.forEach(d => {
+                                                        const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                        result.push(`  • ${d.name}: +${formatCurrency(d.diff)} (+${pct}%)`);
+                                                    });
+                                                }
+                                            } else {
+                                                result.push(`📉 월평균 대비 ${diffPct}%`);
+                                                const decreases = Object.entries(purposeAvg)
+                                                    .map(p => ({ name: p[0], avg: p[1], sales: info.byPurpose?.[p[0]]?.sales || 0 }))
+                                                    .map(d => ({ ...d, diff: d.sales - d.avg }))
+                                                    .filter(d => d.diff < 0)
+                                                    .sort((a, b) => a.diff - b.diff)
+                                                    .slice(0, 3);
+                                                if (decreases.length > 0) {
+                                                    result.push('▼ 감소 요인:');
+                                                    decreases.forEach(d => {
+                                                        const pct = d.avg > 0 ? ((d.diff / d.avg) * 100).toFixed(0) : 0;
+                                                        result.push(`  • ${d.name}: ${formatCurrency(d.diff)} (${pct}%)`);
+                                                    });
+                                                }
+                                            }
+                                        }
+
+                                        return result;
+                                    }
+                                }
+                            }
+                        },
                         scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
                     }
                 });

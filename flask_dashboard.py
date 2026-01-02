@@ -9122,7 +9122,7 @@ HTML_TEMPLATE = '''
                 document.getElementById('monthlyLegend').style.display = 'none';
             }
 
-            // 외부 HTML 툴팁 생성 함수
+            // 외부 HTML 툴팁 생성 함수 (v2 - 2026-01-02 업데이트)
             const getOrCreateMonthlyTooltip = (chart) => {
                 let tooltipEl = document.getElementById('monthlyChartTooltip');
                 if (!tooltipEl) {
@@ -9135,11 +9135,13 @@ HTML_TEMPLATE = '''
                         padding: 16px;
                         pointer-events: none;
                         z-index: 99999;
-                        font-size: 12px;
+                        font-size: 13px;
                         color: #e2e8f0;
-                        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-                        max-width: 360px;
-                        transition: opacity 0.2s ease;
+                        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                        min-width: 340px;
+                        max-width: 380px;
+                        transition: opacity 0.15s ease;
+                        line-height: 1.5;
                     `;
                     document.body.appendChild(tooltipEl);
                 }

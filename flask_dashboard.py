@@ -1283,12 +1283,24 @@ def process_data(data, purpose_filter=None):
                 by_month[month]['byBranch'][branch]['byPurpose'][purpose]['sales'] += sales
                 by_month[month]['byBranch'][branch]['byPurpose'][purpose]['count'] += 1
 
-            # 월별 긴급 데이터
+            # 월별 긴급 데이터 (담당자별, 검사목적별 세분화)
             if month not in by_urgent_month:
-                by_urgent_month[month] = {'sales': 0, 'count': 0}
+                by_urgent_month[month] = {'sales': 0, 'count': 0, 'byManager': {}, 'byPurpose': {}}
             if is_urgent:
                 by_urgent_month[month]['sales'] += sales
                 by_urgent_month[month]['count'] += 1
+                # 긴급 담당자별
+                if manager and manager != '미지정':
+                    if manager not in by_urgent_month[month]['byManager']:
+                        by_urgent_month[month]['byManager'][manager] = {'sales': 0, 'count': 0}
+                    by_urgent_month[month]['byManager'][manager]['sales'] += sales
+                    by_urgent_month[month]['byManager'][manager]['count'] += 1
+                # 긴급 검사목적별
+                if purpose:
+                    if purpose not in by_urgent_month[month]['byPurpose']:
+                        by_urgent_month[month]['byPurpose'][purpose] = {'sales': 0, 'count': 0}
+                    by_urgent_month[month]['byPurpose'][purpose]['sales'] += sales
+                    by_urgent_month[month]['byPurpose'][purpose]['count'] += 1
 
             # 지사별 월별 거래처 (중복 분석용)
             if branch not in by_branch_month_clients:
@@ -6490,6 +6502,32 @@ HTML_TEMPLATE = '''
             });
         }
 
+        // 긴급 월별 추이 차트 - 외부 HTML 툴팁 생성 함수
+        const getOrCreateUrgentMonthlyTooltip = (chart) => {
+            let tooltipEl = document.getElementById('urgentMonthlyChartTooltip');
+            if (!tooltipEl) {
+                tooltipEl = document.createElement('div');
+                tooltipEl.id = 'urgentMonthlyChartTooltip';
+                tooltipEl.style.cssText = `
+                    position: fixed;
+                    background: rgba(30, 41, 59, 0.97);
+                    border-radius: 12px;
+                    padding: 16px;
+                    pointer-events: none;
+                    z-index: 99999;
+                    font-size: 13px;
+                    color: #e2e8f0;
+                    min-width: 320px;
+                    max-width: 380px;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                    transition: opacity 0.15s ease;
+                    line-height: 1.5;
+                `;
+                document.body.appendChild(tooltipEl);
+            }
+            return tooltipEl;
+        };
+
         // 긴급 월별 추이 차트
         function updateUrgentMonthlyChart() {
             const ctx = document.getElementById('urgentMonthlyChart');
@@ -6498,31 +6536,84 @@ HTML_TEMPLATE = '''
 
             const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
             const urgentMonthMap = Object.fromEntries(currentData.by_urgent_month || []);
-            const urgentMonthly = labels.map((_, i) => urgentMonthMap[i+1]?.count || 0);
+            const totalMonthMap = Object.fromEntries(currentData.by_month || []);
+
+            // 월별 상세 데이터 구성
+            const monthlyData = labels.map((label, i) => {
+                const month = i + 1;
+                const urgentData = urgentMonthMap[month] || { count: 0, sales: 0, byManager: {}, byPurpose: {} };
+                const totalData = totalMonthMap[month] || { count: 0, sales: 0 };
+                return {
+                    month,
+                    label,
+                    urgentCount: urgentData.count || 0,
+                    urgentSales: urgentData.sales || 0,
+                    totalCount: totalData.count || 0,
+                    totalSales: totalData.sales || 0,
+                    byManager: urgentData.byManager || {},
+                    byPurpose: urgentData.byPurpose || {}
+                };
+            });
+
+            // 월평균 계산 (0이 아닌 월만)
+            const nonZeroMonths = monthlyData.filter(m => m.urgentCount > 0);
+            const avgUrgentCount = nonZeroMonths.length > 0 ? nonZeroMonths.reduce((sum, m) => sum + m.urgentCount, 0) / nonZeroMonths.length : 0;
+            const avgUrgentRatio = nonZeroMonths.length > 0 ? nonZeroMonths.reduce((sum, m) => sum + (m.totalCount > 0 ? m.urgentCount / m.totalCount : 0), 0) / nonZeroMonths.length : 0;
+
+            // 전년도 비교 데이터
+            const compUrgentMonthMap = compareData ? Object.fromEntries(compareData.by_urgent_month || []) : {};
+            const compTotalMonthMap = compareData ? Object.fromEntries(compareData.by_month || []) : {};
+
+            const compMonthlyData = labels.map((_, i) => {
+                const month = i + 1;
+                const urgentData = compUrgentMonthMap[month] || { count: 0, sales: 0, byManager: {}, byPurpose: {} };
+                const totalData = compTotalMonthMap[month] || { count: 0, sales: 0 };
+                return {
+                    month,
+                    urgentCount: urgentData.count || 0,
+                    urgentSales: urgentData.sales || 0,
+                    totalCount: totalData.count || 0,
+                    byManager: urgentData.byManager || {},
+                    byPurpose: urgentData.byPurpose || {}
+                };
+            });
+
+            // YoY 증감율 순위 계산
+            const yoyChanges = monthlyData.map((m, i) => {
+                const comp = compMonthlyData[i];
+                const change = m.urgentCount - comp.urgentCount;
+                const changePct = comp.urgentCount > 0 ? (change / comp.urgentCount * 100) : (m.urgentCount > 0 ? 100 : 0);
+                return { month: m.month, change, changePct };
+            });
+            const sortedByChange = [...yoyChanges].sort((a, b) => b.changePct - a.changePct);
+            const yoyRankMap = {};
+            sortedByChange.forEach((item, idx) => { yoyRankMap[item.month] = idx + 1; });
 
             const datasets = [{
                 label: currentData.year + '년 긴급',
-                data: urgentMonthly,
+                data: monthlyData.map(m => m.urgentCount),
                 borderColor: '#ef4444',
                 backgroundColor: 'rgba(239, 68, 68, 0.2)',
                 fill: true,
                 tension: 0.4,
-                pointRadius: 5,
+                pointRadius: 6,
+                pointHoverRadius: 10,
                 pointBackgroundColor: '#ef4444',
+                customData: monthlyData,
             }];
 
             // 전년도 비교 데이터
             if (compareData && compareData.by_urgent_month) {
-                const compMap = Object.fromEntries(compareData.by_urgent_month || []);
                 datasets.push({
                     label: compareData.year + '년 긴급',
-                    data: labels.map((_, i) => compMap[i+1]?.count || 0),
+                    data: compMonthlyData.map(m => m.urgentCount),
                     borderColor: 'rgba(156, 163, 175, 0.8)',
                     backgroundColor: 'rgba(156, 163, 175, 0.1)',
                     fill: false,
                     tension: 0.4,
                     pointRadius: 4,
                     borderDash: [5, 5],
+                    customData: compMonthlyData,
                 });
             }
 
@@ -6532,7 +6623,385 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: compareData ? true : false, position: 'top' } },
+                    plugins: {
+                        legend: { display: compareData ? true : false, position: 'top' },
+                        tooltip: {
+                            enabled: false,
+                            external: function(context) {
+                                const tooltipEl = getOrCreateUrgentMonthlyTooltip(context.chart);
+                                const tooltipModel = context.tooltip;
+
+                                if (tooltipModel.opacity === 0) {
+                                    tooltipEl.style.opacity = 0;
+                                    return;
+                                }
+
+                                if (tooltipModel.dataPoints && tooltipModel.dataPoints.length > 0) {
+                                    const dataPoint = tooltipModel.dataPoints[0];
+                                    const monthIdx = dataPoint.dataIndex;
+                                    const d = monthlyData[monthIdx];
+                                    const comp = compMonthlyData[monthIdx];
+
+                                    // 시즌 태그 판정
+                                    let seasonTag, seasonIcon, seasonColor, borderColor;
+                                    if (d.urgentCount > avgUrgentCount * 1.15) {
+                                        seasonTag = '성수기'; seasonIcon = '📈';
+                                        seasonColor = '#ef4444'; borderColor = '#ef4444';
+                                    } else if (d.urgentCount < avgUrgentCount * 0.85) {
+                                        seasonTag = '비수기'; seasonIcon = '📉';
+                                        seasonColor = '#60a5fa'; borderColor = '#3b82f6';
+                                    } else {
+                                        seasonTag = '평시'; seasonIcon = '📊';
+                                        seasonColor = '#94a3b8'; borderColor = 'rgba(99, 102, 241, 0.5)';
+                                    }
+                                    tooltipEl.style.border = `2px solid ${borderColor}`;
+
+                                    let html = '';
+
+                                    // === 1. 헤더 영역 ===
+                                    html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                        <div style="font-size: 18px; font-weight: bold; color: #fff;">${d.label}</div>
+                                        <div style="display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+                                            background: ${seasonTag === '성수기' ? 'rgba(239, 68, 68, 0.2)' : seasonTag === '비수기' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.2)'};
+                                            color: ${seasonColor};">
+                                            ${seasonIcon} ${seasonTag}
+                                        </div>
+                                    </div>`;
+
+                                    // === 2. 기본 지표 ===
+                                    html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+                                    html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: #ef4444;">■ ${currentData.year}년 긴급:</span>
+                                        <span style="font-weight: 600;">${d.urgentCount.toLocaleString()}건</span>
+                                    </div>`;
+                                    if (compareData) {
+                                        html += `<div style="display: flex; justify-content: space-between;">
+                                            <span style="color: #9ca3af;">□ ${compareData.year}년 긴급:</span>
+                                            <span style="font-weight: 600; color: #9ca3af;">${comp.urgentCount.toLocaleString()}건</span>
+                                        </div>`;
+                                    }
+                                    html += `</div>`;
+
+                                    // === 3. 전년 동월 비교 ===
+                                    if (compareData && comp.urgentCount > 0) {
+                                        const yoyChange = d.urgentCount - comp.urgentCount;
+                                        const yoyChangePct = (yoyChange / comp.urgentCount * 100);
+                                        const yoyRank = yoyRankMap[d.month];
+                                        const isIncrease = yoyChange >= 0;
+                                        const isMaxDecrease = yoyRank === 12;
+
+                                        html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 전년 동월 비교 ──</div>`;
+                                        html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+                                        html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                            <span style="color: #94a3b8;">전년 대비:</span>
+                                            <span style="color: ${isIncrease ? '#10b981' : '#ef4444'}; font-weight: 600;">
+                                                ${isIncrease ? '+' : ''}${yoyChange.toLocaleString()}건 (${isIncrease ? '+' : ''}${yoyChangePct.toFixed(1)}%)
+                                            </span>
+                                        </div>`;
+                                        html += `<div style="display: flex; justify-content: space-between;">
+                                            <span style="color: #94a3b8;">${isIncrease ? '증가율' : '감소율'} 순위:</span>
+                                            <span style="font-weight: 600;">
+                                                ${isMaxDecrease ? '⚠️ ' : isIncrease ? '📈 ' : '📉 '}${yoyRank}위 / 12개월
+                                            </span>
+                                        </div>`;
+                                        html += `</div>`;
+                                    }
+
+                                    // === 4. 월별 추세 ===
+                                    html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 월별 추세 ──</div>`;
+                                    html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+
+                                    // 전월 대비
+                                    if (monthIdx > 0) {
+                                        const prevMonth = monthlyData[monthIdx - 1];
+                                        const momChange = d.urgentCount - prevMonth.urgentCount;
+                                        const momChangePct = prevMonth.urgentCount > 0 ? (momChange / prevMonth.urgentCount * 100) : 0;
+                                        html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                            <span style="color: #94a3b8;">전월 대비:</span>
+                                            <span style="color: ${momChange >= 0 ? '#10b981' : '#ef4444'};">
+                                                ${momChange >= 0 ? '+' : ''}${momChange.toLocaleString()}건 (${momChange >= 0 ? '+' : ''}${momChangePct.toFixed(1)}%)
+                                            </span>
+                                        </div>`;
+                                    }
+
+                                    // 추세 계산 (연속 상승/하락)
+                                    let trendCount = 0;
+                                    let trendDir = null;
+                                    for (let i = monthIdx; i >= 1; i--) {
+                                        const curr = monthlyData[i].urgentCount;
+                                        const prev = monthlyData[i - 1].urgentCount;
+                                        if (prev === 0) break;
+                                        const changePct = ((curr - prev) / prev) * 100;
+
+                                        if (Math.abs(changePct) <= 5) {
+                                            // 횡보 판정
+                                            if (trendDir === null) {
+                                                trendDir = 'flat';
+                                                trendCount = 1;
+                                            } else if (trendDir === 'flat') {
+                                                trendCount++;
+                                            } else {
+                                                break;
+                                            }
+                                        } else if (changePct > 5) {
+                                            if (trendDir === null) {
+                                                trendDir = 'up';
+                                                trendCount = 1;
+                                            } else if (trendDir === 'up') {
+                                                trendCount++;
+                                            } else {
+                                                break;
+                                            }
+                                        } else {
+                                            if (trendDir === null) {
+                                                trendDir = 'down';
+                                                trendCount = 1;
+                                            } else if (trendDir === 'down') {
+                                                trendCount++;
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    let trendText, trendColor, trendArrow;
+                                    if (trendDir === 'up') {
+                                        trendArrow = '↗'; trendText = `${trendCount}개월 연속 상승`; trendColor = '#10b981';
+                                    } else if (trendDir === 'down') {
+                                        trendArrow = '↘'; trendText = `${trendCount}개월 연속 하락`; trendColor = '#ef4444';
+                                    } else {
+                                        trendArrow = '→'; trendText = '횡보'; trendColor = '#94a3b8';
+                                    }
+                                    html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: #94a3b8;">추세:</span>
+                                        <span style="color: ${trendColor}; font-weight: 600;">${trendArrow} ${trendText}</span>
+                                    </div>`;
+
+                                    // 월평균 대비
+                                    const avgDiff = d.urgentCount - avgUrgentCount;
+                                    const avgDiffPct = avgUrgentCount > 0 ? (avgDiff / avgUrgentCount * 100) : 0;
+                                    html += `<div style="display: flex; justify-content: space-between;">
+                                        <span style="color: #94a3b8;">월평균(${Math.round(avgUrgentCount).toLocaleString()}건) 대비:</span>
+                                        <span style="color: ${avgDiff >= 0 ? '#10b981' : '#ef4444'};">
+                                            ${avgDiff >= 0 ? '+' : ''}${Math.round(avgDiff).toLocaleString()}건 (${avgDiff >= 0 ? '+' : ''}${avgDiffPct.toFixed(1)}%)
+                                        </span>
+                                    </div>`;
+                                    html += `</div>`;
+
+                                    // === 5. 긴급 비율 분석 ===
+                                    html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 긴급 비율 분석 ──</div>`;
+                                    html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+
+                                    const urgentRatio = d.totalCount > 0 ? (d.urgentCount / d.totalCount * 100) : 0;
+                                    const avgRatioPct = avgUrgentRatio * 100;
+                                    const ratioDiff = urgentRatio - avgRatioPct;
+
+                                    html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: #94a3b8;">해당 월 전체 건수:</span>
+                                        <span style="font-weight: 600;">${d.totalCount.toLocaleString()}건</span>
+                                    </div>`;
+                                    html += `<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                                        <span style="color: #94a3b8;">긴급 비율:</span>
+                                        <span style="font-weight: 600; color: #ef4444;">
+                                            ${urgentRatio.toFixed(1)}%
+                                            <span style="color: ${ratioDiff >= 0 ? '#10b981' : '#60a5fa'}; font-size: 11px;">
+                                                (평균 ${avgRatioPct.toFixed(1)}% 대비 ${ratioDiff >= 0 ? '+' : ''}${ratioDiff.toFixed(1)}%p)
+                                            </span>
+                                        </span>
+                                    </div>`;
+
+                                    const ratioInsight = urgentRatio > avgRatioPct ? '🔥 긴급 수요 집중 시기' : '📋 일반 건수 중심 시기';
+                                    html += `<div style="text-align: center; padding: 4px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px;">${ratioInsight}</div>`;
+                                    html += `</div>`;
+
+                                    // === 6. 긴급 매출 기여 ===
+                                    html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 긴급 매출 기여 ──</div>`;
+                                    html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px;">`;
+
+                                    const urgentSalesRatio = d.totalSales > 0 ? (d.urgentSales / d.totalSales * 100) : 0;
+                                    const urgentPerCase = d.urgentCount > 0 ? d.urgentSales / d.urgentCount : 0;
+
+                                    html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: #94a3b8;">긴급 매출:</span>
+                                        <span style="font-weight: 600;">
+                                            ${(d.urgentSales / 100000000).toFixed(2)}억
+                                            <span style="color: #94a3b8; font-size: 11px;">(전체 ${(d.totalSales / 100000000).toFixed(2)}억의 ${urgentSalesRatio.toFixed(1)}%)</span>
+                                        </span>
+                                    </div>`;
+                                    html += `<div style="display: flex; justify-content: space-between;">
+                                        <span style="color: #94a3b8;">긴급 건당 단가:</span>
+                                        <span style="font-weight: 600; color: #f59e0b;">${(urgentPerCase / 10000).toFixed(1)}만</span>
+                                    </div>`;
+                                    html += `</div>`;
+
+                                    // === 7. 주요 기여자 / 감소 원인 (조건부) ===
+                                    const yoyChange = d.urgentCount - (comp?.urgentCount || 0);
+                                    const isIncrease = yoyChange >= 0;
+
+                                    if (isIncrease && Object.keys(d.byManager).length > 0) {
+                                        // 증가 월 - 주요 기여자 TOP 3
+                                        html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 주요 기여자 TOP 3 ──</div>`;
+                                        html += `<div style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(16, 185, 129, 0.3);">`;
+
+                                        const topManagers = Object.entries(d.byManager)
+                                            .map(([name, data]) => ({ name, count: data.count, ratio: d.urgentCount > 0 ? (data.count / d.urgentCount * 100) : 0 }))
+                                            .sort((a, b) => b.count - a.count)
+                                            .slice(0, 3);
+
+                                        const medals = ['🥇', '🥈', '🥉'];
+                                        topManagers.forEach((m, i) => {
+                                            html += `<div style="display: flex; justify-content: space-between; margin-bottom: ${i < 2 ? '4px' : '0'};">
+                                                <span>${medals[i]} ${m.name}:</span>
+                                                <span style="font-weight: 600;">${m.count.toLocaleString()}건 (${m.ratio.toFixed(1)}%)</span>
+                                            </div>`;
+                                        });
+                                        html += `</div>`;
+                                    } else if (!isIncrease && compareData) {
+                                        // 감소 월 - 감소 원인 분석
+                                        html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 감소 원인 분석 ──</div>`;
+                                        html += `<div style="background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(239, 68, 68, 0.3);">`;
+
+                                        // 검사목적별 감소 분석
+                                        const purposeChanges = [];
+                                        const allPurposes = new Set([...Object.keys(d.byPurpose), ...Object.keys(comp.byPurpose || {})]);
+                                        allPurposes.forEach(purpose => {
+                                            const curr = d.byPurpose[purpose]?.count || 0;
+                                            const prev = comp.byPurpose?.[purpose]?.count || 0;
+                                            if (prev > curr) {
+                                                purposeChanges.push({ name: purpose, change: curr - prev });
+                                            }
+                                        });
+                                        purposeChanges.sort((a, b) => a.change - b.change);
+
+                                        if (purposeChanges.length > 0) {
+                                            html += `<div style="margin-bottom: 6px; color: #94a3b8; font-size: 11px;">▼ 감소 검사목적:</div>`;
+                                            purposeChanges.slice(0, 2).forEach(p => {
+                                                html += `<div style="margin-left: 12px; margin-bottom: 2px;">
+                                                    • ${p.name}: <span style="color: #ef4444;">${p.change.toLocaleString()}건</span>
+                                                </div>`;
+                                            });
+                                        }
+
+                                        // 담당자별 감소 분석
+                                        const managerChanges = [];
+                                        const allManagers = new Set([...Object.keys(d.byManager), ...Object.keys(comp.byManager || {})]);
+                                        allManagers.forEach(manager => {
+                                            const curr = d.byManager[manager]?.count || 0;
+                                            const prev = comp.byManager?.[manager]?.count || 0;
+                                            if (prev > curr) {
+                                                managerChanges.push({ name: manager, change: curr - prev });
+                                            }
+                                        });
+                                        managerChanges.sort((a, b) => a.change - b.change);
+
+                                        if (managerChanges.length > 0) {
+                                            html += `<div style="margin-top: 8px; margin-bottom: 6px; color: #94a3b8; font-size: 11px;">▼ 감소 담당자:</div>`;
+                                            managerChanges.slice(0, 2).forEach(m => {
+                                                html += `<div style="margin-left: 12px; margin-bottom: 2px;">
+                                                    • ${m.name}: <span style="color: #ef4444;">${m.change.toLocaleString()}건</span>
+                                                </div>`;
+                                            });
+                                        }
+                                        html += `</div>`;
+                                    }
+
+                                    // === 8. YTD 누적 현황 / 계절성 인사이트 (조건부) ===
+                                    if (isIncrease) {
+                                        // YTD 누적 현황
+                                        html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── YTD 누적 현황 ──</div>`;
+                                        html += `<div style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">`;
+
+                                        const ytdCurrent = monthlyData.slice(0, monthIdx + 1).reduce((sum, m) => sum + m.urgentCount, 0);
+                                        const ytdCompare = compMonthlyData.slice(0, monthIdx + 1).reduce((sum, m) => sum + m.urgentCount, 0);
+                                        const ytdChangePct = ytdCompare > 0 ? ((ytdCurrent - ytdCompare) / ytdCompare * 100) : 0;
+
+                                        html += `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                            <span style="color: #94a3b8;">1~${d.month}월 누적:</span>
+                                            <span style="font-weight: 600;">${ytdCurrent.toLocaleString()}건</span>
+                                        </div>`;
+                                        if (compareData) {
+                                            html += `<div style="display: flex; justify-content: space-between;">
+                                                <span style="color: #94a3b8;">전년 동기 대비:</span>
+                                                <span style="color: ${ytdChangePct >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+                                                    ${ytdChangePct >= 0 ? '+' : ''}${ytdChangePct.toFixed(1)}%
+                                                </span>
+                                            </div>`;
+                                        }
+                                        html += `</div>`;
+                                    } else {
+                                        // 계절성 인사이트
+                                        html += `<div style="color: #64748b; font-size: 11px; margin: 12px 0 8px 0; text-align: center;">── 계절성 인사이트 ──</div>`;
+                                        html += `<div style="background: rgba(59, 130, 246, 0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">`;
+
+                                        // 해당 월 특성 (연중 최저/최고)
+                                        const sortedByCount = [...monthlyData].sort((a, b) => a.urgentCount - b.urgentCount);
+                                        const isLowest = sortedByCount[0].month === d.month;
+                                        const isHighest = sortedByCount[sortedByCount.length - 1].month === d.month;
+                                        const compSameMonth = comp?.urgentCount || 0;
+                                        const isNormalPattern = compSameMonth > 0 && Math.abs((d.urgentCount - compSameMonth) / compSameMonth) < 0.3;
+
+                                        let seasonInsight;
+                                        if (isLowest) seasonInsight = '연중 최저 시기';
+                                        else if (isHighest) seasonInsight = '연중 최고 시기';
+                                        else seasonInsight = '중간 수준';
+
+                                        html += `<div style="margin-bottom: 6px;">
+                                            해당 월 특성: <strong>${seasonInsight}</strong>
+                                            <span style="color: ${isNormalPattern ? '#10b981' : '#f59e0b'}; font-size: 11px;">(${isNormalPattern ? '정상 패턴' : '이상 패턴'})</span>
+                                        </div>`;
+
+                                        // 평균 대비
+                                        if (compareData && compSameMonth > 0) {
+                                            const twoYearAvg = (d.urgentCount + compSameMonth) / 2;
+                                            const avgDiff = d.urgentCount - twoYearAvg;
+                                            const avgDiffPct = (avgDiff / twoYearAvg * 100);
+                                            html += `<div style="margin-bottom: 8px;">
+                                                2년 평균: ${Math.round(twoYearAvg).toLocaleString()}건
+                                                <span style="color: ${avgDiff >= 0 ? '#10b981' : '#ef4444'}; font-size: 11px;">
+                                                    (올해 대비 ${avgDiff >= 0 ? '+' : ''}${avgDiffPct.toFixed(1)}%)
+                                                </span>
+                                            </div>`;
+                                        }
+
+                                        // 대응 제안
+                                        let suggestion;
+                                        if (isLowest) {
+                                            suggestion = '💡 비수기 활용: 일반 건수 영업 강화 권장';
+                                        } else if (d.urgentCount < avgUrgentCount * 0.85) {
+                                            suggestion = '💡 대응: 긴급 수요 촉진 프로모션 검토';
+                                        } else {
+                                            suggestion = '💡 대응: 현 수준 유지 및 효율 개선 집중';
+                                        }
+                                        html += `<div style="font-size: 12px;">${suggestion}</div>`;
+                                        html += `</div>`;
+                                    }
+
+                                    tooltipEl.innerHTML = html;
+                                }
+
+                                // 위치 조정
+                                const position = context.chart.canvas.getBoundingClientRect();
+                                let left = position.left + window.scrollX + tooltipModel.caretX + 15;
+                                let top = position.top + window.scrollY + tooltipModel.caretY - 20;
+
+                                const tooltipWidth = 380;
+                                if (left + tooltipWidth > window.innerWidth - 20) {
+                                    left = position.left + window.scrollX + tooltipModel.caretX - tooltipWidth - 15;
+                                }
+                                const tooltipHeight = tooltipEl.offsetHeight || 600;
+                                if (top + tooltipHeight > window.innerHeight + window.scrollY - 20) {
+                                    top = window.innerHeight + window.scrollY - tooltipHeight - 20;
+                                }
+                                if (top < window.scrollY + 10) {
+                                    top = window.scrollY + 10;
+                                }
+
+                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.left = left + 'px';
+                                tooltipEl.style.top = top + 'px';
+                            }
+                        }
+                    },
                     scales: { y: { beginAtZero: true } }
                 }
             });

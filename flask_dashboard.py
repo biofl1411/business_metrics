@@ -427,6 +427,17 @@ def process_data(data, purpose_filter=None):
             for p, d in sorted_stp[:20]
         ]
 
+    # 활동 담당자 수 (매출이 있는 담당자만)
+    active_managers = [m for m, d in sorted_managers if d['sales'] > 0]
+    active_manager_count = len(active_managers)
+
+    # 담당자당 평균 매출
+    avg_sales_per_manager = total_sales / active_manager_count if active_manager_count > 0 else 0
+
+    # 건수 기준 TOP 5 담당자
+    top_count_managers = sorted(by_manager.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
+    top_count_list = [{'name': m, 'count': d['count'], 'sales': d['sales']} for m, d in top_count_managers]
+
     return {
         'by_manager': [(m, {'sales': d['sales'], 'count': d['count']}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
@@ -456,7 +467,10 @@ def process_data(data, purpose_filter=None):
         'sample_type_purposes': sample_type_purposes,
         'sample_types': sorted(list(sample_types)),
         'total_sales': total_sales,
-        'total_count': total_count
+        'total_count': total_count,
+        'active_manager_count': active_manager_count,
+        'avg_sales_per_manager': avg_sales_per_manager,
+        'top_count_managers': top_count_list
     }
 
 HTML_TEMPLATE = '''
@@ -530,6 +544,77 @@ HTML_TEMPLATE = '''
         .sub-select { margin-bottom: 15px; }
         .sub-select select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ddd; }
         .scroll-table { max-height: 400px; overflow-y: auto; }
+
+        /* 개인별 탭 요약 카드 */
+        .personal-summary {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 20px;
+        }
+        @media (max-width: 1200px) { .personal-summary { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .personal-summary { grid-template-columns: 1fr; } }
+        .summary-card {
+            background: white; border-radius: 15px; padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: relative; overflow: hidden;
+        }
+        .summary-card .icon {
+            width: 50px; height: 50px; border-radius: 12px; display: flex;
+            align-items: center; justify-content: center; font-size: 24px; margin-bottom: 15px;
+        }
+        .summary-card .icon.purple { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .summary-card .icon.green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .summary-card .icon.yellow { background: linear-gradient(135deg, #f1c40f, #f39c12); }
+        .summary-card .icon.red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .summary-card .label { font-size: 13px; color: #7f8c8d; margin-bottom: 5px; }
+        .summary-card .value { font-size: 28px; font-weight: bold; color: #2c3e50; }
+        .summary-card .sub-label { font-size: 11px; color: #95a5a6; margin-top: 5px; }
+        .summary-card .badge {
+            position: absolute; top: 15px; right: 15px; padding: 4px 10px;
+            background: #e8f8f0; color: #27ae60; border-radius: 20px; font-size: 12px; font-weight: bold;
+        }
+        .summary-card .badge.negative { background: #fde8e8; color: #e74c3c; }
+        .summary-card .top-list { margin-top: 10px; }
+        .summary-card .top-list-item {
+            display: flex; justify-content: space-between; font-size: 13px;
+            padding: 3px 0; border-bottom: 1px solid #f0f0f0;
+        }
+        .summary-card .top-list-item:last-child { border-bottom: none; }
+        .summary-card .top-list-item .rank { color: #667eea; font-weight: bold; margin-right: 8px; }
+        .summary-card .top-list-item .count { color: #27ae60; font-weight: bold; }
+        .summary-card.clickable { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .summary-card.clickable:hover { transform: translateY(-3px); box-shadow: 0 5px 20px rgba(0,0,0,0.15); }
+
+        /* 오버레이/모달 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: none; justify-content: center;
+            align-items: center; z-index: 2000;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: white; border-radius: 15px; padding: 30px;
+            max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; font-size: 20px; color: #2c3e50; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #95a5a6; }
+        .modal-close:hover { color: #e74c3c; }
+        .growth-detail { margin-bottom: 20px; }
+        .growth-detail .year-compare {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;
+        }
+        .growth-detail .year-box {
+            background: #f8f9fa; border-radius: 10px; padding: 15px; text-align: center;
+        }
+        .growth-detail .year-box.current { border: 2px solid #667eea; }
+        .growth-detail .year-box.prev { border: 2px solid #95a5a6; }
+        .growth-detail .year-box .year-label { font-size: 14px; color: #7f8c8d; margin-bottom: 5px; }
+        .growth-detail .year-box .year-value { font-size: 24px; font-weight: bold; }
+        .growth-detail .growth-rate {
+            text-align: center; font-size: 28px; font-weight: bold; padding: 15px;
+            background: linear-gradient(135deg, #e8f8f0, #d4edda); border-radius: 10px;
+        }
+        .growth-detail .growth-rate.negative { background: linear-gradient(135deg, #fde8e8, #f8d7da); }
+        .growth-detail .monthly-chart { margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -637,8 +722,73 @@ HTML_TEMPLATE = '''
         <button class="tab" onclick="showTab('defect')">⚠️ 부적합</button>
     </div>
 
+    <!-- 최고 성장자 모달 -->
+    <div id="growthModal" class="modal-overlay" onclick="closeGrowthModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>📈 <span id="growthModalName">담당자</span> 상세 정보</h2>
+                <button class="modal-close" onclick="closeGrowthModal()">&times;</button>
+            </div>
+            <div class="growth-detail">
+                <div class="year-compare">
+                    <div class="year-box current">
+                        <div class="year-label" id="growthCurrentYearLabel">2025년</div>
+                        <div class="year-value" id="growthCurrentSales">-</div>
+                        <div style="font-size: 12px; color: #95a5a6; margin-top: 5px;">
+                            <span id="growthCurrentCount">-</span>건
+                        </div>
+                    </div>
+                    <div class="year-box prev">
+                        <div class="year-label" id="growthPrevYearLabel">2024년</div>
+                        <div class="year-value" id="growthPrevSales">-</div>
+                        <div style="font-size: 12px; color: #95a5a6; margin-top: 5px;">
+                            <span id="growthPrevCount">-</span>건
+                        </div>
+                    </div>
+                </div>
+                <div id="growthRateBox" class="growth-rate">
+                    <span id="growthRateValue">+0%</span> 성장
+                </div>
+                <div class="monthly-chart">
+                    <h4 style="margin-bottom: 10px;">📊 월별 매출 추이</h4>
+                    <canvas id="growthMonthlyChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 개인별 탭 -->
     <div id="personal" class="tab-content active">
+        <!-- 요약 카드 -->
+        <div class="personal-summary">
+            <div class="summary-card">
+                <div class="icon purple">👥</div>
+                <div class="label">총 영업담당자</div>
+                <div class="value" id="activeManagerCount">-</div>
+                <div class="sub-label">활동 중인 담당자</div>
+            </div>
+            <div class="summary-card">
+                <div class="icon green">💰</div>
+                <div class="label">평균 매출</div>
+                <div class="value" id="avgManagerSales">-</div>
+                <div class="sub-label" id="avgManagerPeriod">담당자당 평균</div>
+            </div>
+            <div class="summary-card clickable" id="topGrowthCard" onclick="showGrowthModal()">
+                <div class="badge" id="topGrowthBadge">+0%</div>
+                <div class="icon yellow">🏆</div>
+                <div class="label">최고 성장자</div>
+                <div class="value" id="topGrowthName">-</div>
+                <div class="sub-label" id="topGrowthDetail">전년 대비</div>
+            </div>
+            <div class="summary-card">
+                <div class="icon red">🔥</div>
+                <div class="label">건수 TOP 5</div>
+                <div class="top-list" id="topCountList">
+                    <div class="top-list-item"><span>-</span><span class="count">-</span></div>
+                </div>
+            </div>
+        </div>
+
         <div class="charts">
             <div class="chart-container">
                 <h3>영업담당별 매출 TOP 15</h3>
@@ -1225,6 +1375,7 @@ HTML_TEMPLATE = '''
         function updateAll() {
             const steps = [
                 ['updateSummary', updateSummary],
+                ['updatePersonalSummary', updatePersonalSummary],
                 ['updateManagerChart', updateManagerChart],
                 ['updateBranchChart', updateBranchChart],
                 ['updateMonthlyChart', updateMonthlyChart],
@@ -1253,6 +1404,203 @@ HTML_TEMPLATE = '''
                 }
             }
             console.log('[UPDATE] 모든 업데이트 완료');
+        }
+
+        // 개인별 탭 요약 카드 업데이트
+        let topGrowthManager = null;
+        let growthModalChart = null;
+
+        function updatePersonalSummary() {
+            // 1. 활동 담당자 수
+            const activeCount = currentData.active_manager_count || currentData.by_manager.length;
+            document.getElementById('activeManagerCount').textContent = activeCount + '명';
+
+            // 2. 담당자당 평균 매출 (기간 표시)
+            const avgSales = currentData.avg_sales_per_manager || (currentData.total_sales / activeCount);
+            document.getElementById('avgManagerSales').textContent = formatCurrency(avgSales);
+
+            // 기간 라벨 생성
+            let periodLabel = '담당자당 평균';
+            if (currentData.dateLabel) {
+                periodLabel = currentData.dateLabel + ' 기준';
+            } else {
+                const year = currentData.year || document.getElementById('yearSelect').value;
+                const month = document.getElementById('monthSelect').value;
+                const day = document.getElementById('daySelect').value;
+                if (day) {
+                    periodLabel = `${year}년 ${month}월 ${day}일 기준`;
+                } else if (month) {
+                    periodLabel = `${year}년 ${month}월 기준`;
+                } else {
+                    periodLabel = `${year}년 연간 기준`;
+                }
+            }
+            document.getElementById('avgManagerPeriod').textContent = periodLabel;
+
+            // 3. 최고 성장자 계산 (전년 대비)
+            updateTopGrowthManager();
+
+            // 4. 건수 TOP 5
+            const topList = currentData.top_count_managers || [];
+            const topListHtml = topList.map((m, i) => `
+                <div class="top-list-item">
+                    <span><span class="rank">${i+1}.</span> ${m.name}</span>
+                    <span class="count">${m.count.toLocaleString()}건</span>
+                </div>
+            `).join('');
+            document.getElementById('topCountList').innerHTML = topListHtml || '<div class="top-list-item"><span>데이터 없음</span></div>';
+        }
+
+        function updateTopGrowthManager() {
+            // 비교 데이터가 없으면 기본값
+            if (!compareData) {
+                document.getElementById('topGrowthName').textContent = '-';
+                document.getElementById('topGrowthBadge').textContent = '-';
+                document.getElementById('topGrowthBadge').className = 'badge';
+                document.getElementById('topGrowthDetail').textContent = '비교 데이터 없음';
+                document.getElementById('topGrowthCard').style.pointerEvents = 'none';
+                topGrowthManager = null;
+                return;
+            }
+
+            document.getElementById('topGrowthCard').style.pointerEvents = 'auto';
+
+            // 현재 데이터와 비교 데이터의 담당자별 매출 맵 생성
+            const currentMap = Object.fromEntries(currentData.by_manager);
+            const compareMap = Object.fromEntries(compareData.by_manager);
+
+            // 성장률 계산
+            let maxGrowth = -Infinity;
+            let topManager = null;
+
+            for (const [name, data] of currentData.by_manager) {
+                const prevData = compareMap[name];
+                if (prevData && prevData.sales > 0) {
+                    const growth = ((data.sales - prevData.sales) / prevData.sales) * 100;
+                    if (growth > maxGrowth) {
+                        maxGrowth = growth;
+                        topManager = {
+                            name,
+                            currentSales: data.sales,
+                            currentCount: data.count,
+                            prevSales: prevData.sales,
+                            prevCount: prevData.count,
+                            growth
+                        };
+                    }
+                }
+            }
+
+            if (topManager) {
+                topGrowthManager = topManager;
+                document.getElementById('topGrowthName').textContent = topManager.name;
+                const growthText = topManager.growth >= 0 ? `+${topManager.growth.toFixed(1)}%` : `${topManager.growth.toFixed(1)}%`;
+                document.getElementById('topGrowthBadge').textContent = growthText;
+                document.getElementById('topGrowthBadge').className = 'badge' + (topManager.growth < 0 ? ' negative' : '');
+                document.getElementById('topGrowthDetail').textContent = `전년 대비 ${growthText}`;
+            } else {
+                document.getElementById('topGrowthName').textContent = '-';
+                document.getElementById('topGrowthBadge').textContent = '-';
+                document.getElementById('topGrowthDetail').textContent = '비교 가능한 데이터 없음';
+                topGrowthManager = null;
+            }
+        }
+
+        function showGrowthModal() {
+            if (!topGrowthManager) return;
+
+            const m = topGrowthManager;
+            document.getElementById('growthModalName').textContent = m.name;
+            document.getElementById('growthCurrentYearLabel').textContent = (currentData.year || '현재') + '년';
+            document.getElementById('growthPrevYearLabel').textContent = (compareData.year || '전년') + '년';
+            document.getElementById('growthCurrentSales').textContent = formatCurrency(m.currentSales);
+            document.getElementById('growthPrevSales').textContent = formatCurrency(m.prevSales);
+            document.getElementById('growthCurrentCount').textContent = m.currentCount.toLocaleString();
+            document.getElementById('growthPrevCount').textContent = m.prevCount.toLocaleString();
+
+            const growthText = m.growth >= 0 ? `+${m.growth.toFixed(1)}%` : `${m.growth.toFixed(1)}%`;
+            document.getElementById('growthRateValue').textContent = growthText;
+            document.getElementById('growthRateBox').className = 'growth-rate' + (m.growth < 0 ? ' negative' : '');
+
+            // 월별 차트 그리기
+            drawGrowthMonthlyChart(m.name);
+
+            document.getElementById('growthModal').classList.add('active');
+        }
+
+        function closeGrowthModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('growthModal').classList.remove('active');
+        }
+
+        function drawGrowthMonthlyChart(managerName) {
+            const ctx = document.getElementById('growthMonthlyChart').getContext('2d');
+            if (growthModalChart) growthModalChart.destroy();
+
+            const labels = [];
+            for (let i = 1; i <= 12; i++) labels.push(i + '월');
+
+            // 현재 데이터 월별
+            const currentMonthMap = Object.fromEntries(currentData.by_month || []);
+            const compareMonthMap = compareData ? Object.fromEntries(compareData.by_month || []) : {};
+
+            // 담당자별 월별 데이터 추출 (by_purpose_month 에서 집계)
+            const currentMonthly = labels.map((_, i) => {
+                let total = 0;
+                if (currentData.by_purpose_month) {
+                    Object.values(currentData.by_purpose_month).forEach(months => {
+                        const monthData = months[i + 1];
+                        if (monthData && monthData.by_manager && monthData.by_manager[managerName]) {
+                            total += monthData.by_manager[managerName].sales || 0;
+                        }
+                    });
+                }
+                return total;
+            });
+
+            const compareMonthly = labels.map((_, i) => {
+                let total = 0;
+                if (compareData && compareData.by_purpose_month) {
+                    Object.values(compareData.by_purpose_month).forEach(months => {
+                        const monthData = months[i + 1];
+                        if (monthData && monthData.by_manager && monthData.by_manager[managerName]) {
+                            total += monthData.by_manager[managerName].sales || 0;
+                        }
+                    });
+                }
+                return total;
+            });
+
+            growthModalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: (currentData.year || '현재') + '년',
+                            data: currentMonthly,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: (compareData?.year || '전년') + '년',
+                            data: compareMonthly,
+                            borderColor: '#95a5a6',
+                            backgroundColor: 'rgba(149, 165, 166, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
+                }
+            });
         }
 
         function updateSummary() {

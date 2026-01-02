@@ -7564,22 +7564,21 @@ HTML_TEMPLATE = '''
                                     tooltipEl.innerHTML = html;
                                 }
 
-                                // 위치 조정
-                                const position = context.chart.canvas.getBoundingClientRect();
-                                let left = position.left + window.scrollX + tooltipModel.caretX + 15;
-                                let top = position.top + window.scrollY + tooltipModel.caretY - 20;
+                                // 위치 조정 (position: fixed 사용 - 스크롤 오프셋 불필요)
+                                const canvasRect = context.chart.canvas.getBoundingClientRect();
+                                let left = canvasRect.left + tooltipModel.caretX + 15;
+                                let top = canvasRect.top + tooltipModel.caretY - 10;
 
-                                const tooltipWidth = 380;
+                                const tooltipWidth = tooltipEl.offsetWidth || 380;
                                 if (left + tooltipWidth > window.innerWidth - 20) {
-                                    left = position.left + window.scrollX + tooltipModel.caretX - tooltipWidth - 15;
+                                    left = canvasRect.left + tooltipModel.caretX - tooltipWidth - 15;
                                 }
+
                                 const tooltipHeight = tooltipEl.offsetHeight || 600;
-                                if (top + tooltipHeight > window.innerHeight + window.scrollY - 20) {
-                                    top = window.innerHeight + window.scrollY - tooltipHeight - 20;
+                                if (top + tooltipHeight > window.innerHeight - 20) {
+                                    top = window.innerHeight - tooltipHeight - 20;
                                 }
-                                if (top < window.scrollY + 10) {
-                                    top = window.scrollY + 10;
-                                }
+                                if (top < 10) top = 10;
 
                                 tooltipEl.style.opacity = 1;
                                 tooltipEl.style.left = left + 'px';
@@ -8089,22 +8088,21 @@ HTML_TEMPLATE = '''
                                     tooltipEl.innerHTML = html;
                                 }
 
-                                // 위치 조정
-                                const position = context.chart.canvas.getBoundingClientRect();
-                                let left = position.left + window.scrollX + tooltipModel.caretX + 15;
-                                let top = position.top + window.scrollY + tooltipModel.caretY - 20;
+                                // 위치 조정 (position: fixed 사용 - 스크롤 오프셋 불필요)
+                                const canvasRect = context.chart.canvas.getBoundingClientRect();
+                                let left = canvasRect.left + tooltipModel.caretX + 15;
+                                let top = canvasRect.top + tooltipModel.caretY - 10;
 
-                                const tooltipWidth = 400;
+                                const tooltipWidth = tooltipEl.offsetWidth || 400;
                                 if (left + tooltipWidth > window.innerWidth - 20) {
-                                    left = position.left + window.scrollX + tooltipModel.caretX - tooltipWidth - 15;
+                                    left = canvasRect.left + tooltipModel.caretX - tooltipWidth - 15;
                                 }
+
                                 const tooltipHeight = tooltipEl.offsetHeight || 700;
-                                if (top + tooltipHeight > window.innerHeight + window.scrollY - 20) {
-                                    top = window.innerHeight + window.scrollY - tooltipHeight - 20;
+                                if (top + tooltipHeight > window.innerHeight - 20) {
+                                    top = window.innerHeight - tooltipHeight - 20;
                                 }
-                                if (top < window.scrollY + 10) {
-                                    top = window.scrollY + 10;
-                                }
+                                if (top < 10) top = 10;
 
                                 tooltipEl.style.opacity = 1;
                                 tooltipEl.style.left = left + 'px';

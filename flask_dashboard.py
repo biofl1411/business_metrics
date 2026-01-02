@@ -1192,9 +1192,15 @@ def process_data(data, purpose_filter=None):
 
         # 매니저별
         if manager not in by_manager:
-            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}, 'urgent': 0, 'urgent_by_purpose': {}}
+            by_manager[manager] = {'sales': 0, 'count': 0, 'clients': {}, 'urgent': 0, 'urgent_by_purpose': {}, 'by_purpose': {}}
         by_manager[manager]['sales'] += sales
         by_manager[manager]['count'] += 1
+        # 검사목적별 매출/건수 추가
+        if purpose:
+            if purpose not in by_manager[manager]['by_purpose']:
+                by_manager[manager]['by_purpose'][purpose] = {'sales': 0, 'count': 0}
+            by_manager[manager]['by_purpose'][purpose]['sales'] += sales
+            by_manager[manager]['by_purpose'][purpose]['count'] += 1
         if is_urgent:
             by_manager[manager]['urgent'] += 1
             # 검사목적별 긴급 건수 추가
@@ -1566,7 +1572,7 @@ def process_data(data, purpose_filter=None):
         cumulative_clients.update(clients)
 
     return {
-        'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0), 'urgent_by_purpose': d.get('urgent_by_purpose', {})}) for m, d in sorted_managers],
+        'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0), 'urgent_by_purpose': d.get('urgent_by_purpose', {}), 'by_purpose': d.get('by_purpose', {})}) for m, d in sorted_managers],
         'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers'])})
                       for k, v in sorted_branches],
         'by_month': sorted(by_month.items()),
@@ -4557,10 +4563,24 @@ HTML_TEMPLATE = '''
             if (!ctx) return;
             if (charts.perCase) charts.perCase.destroy();
 
+            const selectedPurpose = document.getElementById('perCasePurposeSelect')?.value || '전체';
             const managers = currentData.by_manager || [];
+
+            // 검사목적별 필터 적용
             let chartData = managers.map(m => {
-                const avgPrice = (m[1].count || 0) > 0 ? (m[1].sales || 0) / m[1].count : 0;
-                return { name: m[0], avgPrice };
+                let sales = 0, count = 0;
+                if (selectedPurpose === '전체') {
+                    sales = m[1].sales || 0;
+                    count = m[1].count || 0;
+                } else {
+                    const purposeData = m[1].by_purpose?.[selectedPurpose];
+                    if (purposeData) {
+                        sales = purposeData.sales || 0;
+                        count = purposeData.count || 0;
+                    }
+                }
+                const avgPrice = count > 0 ? sales / count : 0;
+                return { name: m[0], avgPrice, sales, count };
             }).filter(d => d.avgPrice > 0);
 
             chartData.sort((a, b) => perCaseSortOrder === 'desc' ? b.avgPrice - a.avgPrice : a.avgPrice - b.avgPrice);
@@ -4574,17 +4594,35 @@ HTML_TEMPLATE = '''
                 borderRadius: 6,
             }];
 
-            // 전년도 비교 데이터 추가
+            // 전년도 데이터 맵
+            const compManagerMap = compareData ? Object.fromEntries((compareData.by_manager || []).map(m => [m[0], m[1]])) : {};
+
+            // 전년도 비교 데이터 추가 (검사목적 필터 적용)
+            const compChartData = [];
             if (compareData && compareData.by_manager) {
-                const compManagerMap = Object.fromEntries((compareData.by_manager || []).map(m => [m[0], m[1]]));
-                const compData = chartData.map(d => {
+                chartData.forEach(d => {
                     const comp = compManagerMap[d.name];
-                    if (comp && comp.count > 0) return comp.sales / comp.count;
-                    return 0;
+                    if (!comp) {
+                        compChartData.push({ avgPrice: 0, count: 0 });
+                        return;
+                    }
+                    let compSales = 0, compCount = 0;
+                    if (selectedPurpose === '전체') {
+                        compSales = comp.sales || 0;
+                        compCount = comp.count || 0;
+                    } else {
+                        const purposeData = comp.by_purpose?.[selectedPurpose];
+                        if (purposeData) {
+                            compSales = purposeData.sales || 0;
+                            compCount = purposeData.count || 0;
+                        }
+                    }
+                    compChartData.push({ avgPrice: compCount > 0 ? compSales / compCount : 0, count: compCount });
                 });
+
                 datasets.push({
                     label: compareData.year + '년 건당 매출',
-                    data: compData,
+                    data: compChartData.map(d => d.avgPrice),
                     backgroundColor: 'rgba(156, 163, 175, 0.5)',
                     borderRadius: 6,
                 });
@@ -4599,7 +4637,27 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: compareData ? true : false, position: 'top' } },
+                    plugins: {
+                        legend: { display: compareData ? true : false, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    const idx = ctx.dataIndex;
+                                    const dsIdx = ctx.datasetIndex;
+                                    const d = chartData[idx];
+
+                                    if (dsIdx === 0) {
+                                        // 현재 연도 데이터
+                                        return [currentData.year + '년 건당: ' + formatCurrency(Math.round(d.avgPrice)), '건수: ' + d.count.toLocaleString() + '건'];
+                                    } else {
+                                        // 전년도 데이터
+                                        const compD = compChartData[idx];
+                                        return [compareData.year + '년 건당: ' + formatCurrency(Math.round(compD.avgPrice)), '건수: ' + compD.count.toLocaleString() + '건'];
+                                    }
+                                }
+                            }
+                        }
+                    },
                     scales: { y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } } }
                 }
             });

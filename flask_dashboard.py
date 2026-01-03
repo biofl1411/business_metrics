@@ -3870,6 +3870,19 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
 
+            <!-- 거래처 중복 분석 필터 -->
+            <div class="card" style="margin-bottom: 16px; padding: 12px 16px;">
+                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                    <span style="font-weight: 600; color: #64748b;">📊 거래처 분석 필터</span>
+                    <select id="clientChartPurposeFilter" class="filter-select" style="min-width: 150px;" onchange="updateClientRetentionCharts()">
+                        <option value="전체">전체 검사목적</option>
+                    </select>
+                    <select id="clientChartBranchFilter" class="filter-select" style="min-width: 120px;" onchange="updateClientRetentionCharts()">
+                        <option value="전체">전체 팀</option>
+                    </select>
+                </div>
+            </div>
+
             <!-- 거래처 중복 분석 -->
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card">
@@ -4634,6 +4647,17 @@ HTML_TEMPLATE = '''
         let managerTableSort = { column: null, direction: 'desc' };
         let branchTableSort = { column: null, direction: 'desc' };
         const availableYears = [2025, 2024];  // 사용 가능한 연도 목록
+
+        // 담당자-팀 매핑 (JavaScript용)
+        const MANAGER_TO_BRANCH_JS = {
+            "장동욱": "충청지사", "지병훈": "충청지사", "박은태": "충청지사",
+            "도준구": "기타지사", "정유경": "기타지사", "엄은정": "기타지사", "ISA": "기타지사",
+            "이강현": "전라지사",
+            "조봉현": "서울센터", "오세중": "서울센터", "장동주": "서울센터", "오석현": "서울센터",
+            "엄상흠": "경북센터",
+            "마케팅": "마케팅팀", "마케팅팀": "마케팅팀",
+            "본사접수": "본사접수", "본사": "본사접수"
+        };
 
         // 툴팁 hover 상태 관리 (스크롤 가능하도록)
         const tooltipHoverState = {};
@@ -9278,8 +9302,7 @@ HTML_TEMPLATE = '''
             updateBranchEfficiencyChart();
             updateBranchMonthlyChart();
             updateBranchTable();
-            updateClientRetentionChart();
-            updateRetentionRateChart();
+            updateClientRetentionCharts();
             updateBranchRetentionTable();
         }
 
@@ -10557,16 +10580,175 @@ HTML_TEMPLATE = '''
             });
         }
 
+        // 거래처 차트 필터 초기화
+        function initClientChartFilters() {
+            const purposeSelect = document.getElementById('clientChartPurposeFilter');
+            const branchSelect = document.getElementById('clientChartBranchFilter');
+            if (!purposeSelect || !branchSelect) return;
+
+            // 검사목적 드롭다운
+            const purposes = currentData.purposes || [];
+            purposeSelect.innerHTML = '<option value="전체">전체 검사목적</option>' +
+                purposes.map(p => `<option value="${p}">${p}</option>`).join('');
+
+            // 팀 드롭다운
+            const branches = (currentData.by_branch || []).map(b => b[0]);
+            branchSelect.innerHTML = '<option value="전체">전체 팀</option>' +
+                branches.map(b => `<option value="${b}">${b}</option>`).join('');
+        }
+
+        // 거래처 차트 통합 업데이트
+        function updateClientRetentionCharts() {
+            initClientChartFilters();
+            updateClientRetentionChart();
+            updateRetentionRateChart();
+        }
+
+        // 필터링된 거래처 데이터 계산
+        function getFilteredClientRetention() {
+            const purposeFilter = document.getElementById('clientChartPurposeFilter')?.value || '전체';
+            const branchFilter = document.getElementById('clientChartBranchFilter')?.value || '전체';
+
+            // 필터가 전체이면 기존 데이터 사용
+            if (purposeFilter === '전체' && branchFilter === '전체') {
+                return currentData.total_client_retention || [];
+            }
+
+            // by_month 데이터에서 필터링된 거래처 계산
+            const monthMap = Object.fromEntries(currentData.by_month || []);
+            const seenClients = new Set();
+            const result = [];
+
+            for (let month = 1; month <= 12; month++) {
+                const monthData = monthMap[month];
+                if (!monthData) {
+                    result.push({ month, total: 0, overlap: 0, new: 0, retention: 0 });
+                    continue;
+                }
+
+                // 해당 월의 거래처들
+                let clients = {};
+                if (monthData.byClient) {
+                    Object.entries(monthData.byClient).forEach(([clientName, clientData]) => {
+                        // 팀 필터
+                        if (branchFilter !== '전체') {
+                            const manager = clientData.manager || '';
+                            const branch = MANAGER_TO_BRANCH_JS[manager] || '기타';
+                            if (branch !== branchFilter) return;
+                        }
+                        // 검사목적 필터
+                        if (purposeFilter !== '전체') {
+                            const purposeData = clientData.byPurpose?.[purposeFilter];
+                            if (!purposeData || purposeData.count === 0) return;
+                        }
+                        clients[clientName] = clientData;
+                    });
+                }
+
+                const clientNames = Object.keys(clients);
+                const total = clientNames.length;
+                let overlap = 0, newCount = 0;
+
+                clientNames.forEach(name => {
+                    if (seenClients.has(name)) {
+                        overlap++;
+                    } else {
+                        newCount++;
+                        seenClients.add(name);
+                    }
+                });
+
+                const prevMonth = result[result.length - 1];
+                const retention = prevMonth && prevMonth.total > 0 ? (overlap / prevMonth.total * 100).toFixed(1) : 0;
+
+                result.push({ month, total, overlap, new: newCount, retention: parseFloat(retention) });
+            }
+            return result;
+        }
+
         // 월별 거래처 중복 현황 (Stacked Bar: 기존 vs 신규)
         function updateClientRetentionChart() {
             const ctx = document.getElementById('clientRetentionChart');
             if (!ctx) return;
             if (charts.clientRetention) charts.clientRetention.destroy();
 
-            const retention = currentData.total_client_retention || [];
+            const retention = getFilteredClientRetention();
             const labels = retention.map(d => d.month + '월');
             const overlap = retention.map(d => d.overlap);
             const newClients = retention.map(d => d.new);
+            const totals = retention.map(d => d.total);
+
+            // 외부 HTML 툴팁
+            const getOrCreateTooltip = (chart) => {
+                let tooltipEl = document.getElementById('clientRetentionTooltip');
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement('div');
+                    tooltipEl.id = 'clientRetentionTooltip';
+                    tooltipEl.style.cssText = `
+                        position: fixed; background: rgba(30, 41, 59, 0.98); border-radius: 12px;
+                        padding: 16px; pointer-events: auto; z-index: 99999; font-size: 13px;
+                        color: #e2e8f0; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 280px;
+                        max-width: 360px; transition: opacity 0.15s ease; line-height: 1.6;
+                    `;
+                    document.body.appendChild(tooltipEl);
+                    setupTooltipHover(tooltipEl);
+                }
+                return tooltipEl;
+            };
+
+            const tooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip(chart);
+
+                if (tooltip.opacity === 0 && !isTooltipHovered(tooltipEl)) {
+                    hideTooltipWithDelay(tooltipEl);
+                    return;
+                }
+
+                if (tooltip.body) {
+                    const dataIndex = tooltip.dataPoints?.[0]?.dataIndex;
+                    const month = dataIndex + 1;
+                    const d = retention[dataIndex];
+                    const prevD = dataIndex > 0 ? retention[dataIndex - 1] : null;
+
+                    let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${currentData.year}년 ${month}월</div>`;
+
+                    html += `<div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 12px;">`;
+                    html += `<div style="margin-bottom: 8px;">📊 <strong>총 거래처:</strong> <span style="color: #fbbf24; font-size: 18px; font-weight: bold;">${d.total}개</span></div>`;
+                    html += `<div style="display: flex; gap: 16px;">`;
+                    html += `<div>🔵 기존: <span style="color: #6366f1; font-weight: 600;">${d.overlap}개</span></div>`;
+                    html += `<div>🟢 신규: <span style="color: #10b981; font-weight: 600;">${d.new}개</span></div>`;
+                    html += `</div></div>`;
+
+                    // 비율 분석
+                    const existingRate = d.total > 0 ? (d.overlap / d.total * 100).toFixed(1) : 0;
+                    const newRate = d.total > 0 ? (d.new / d.total * 100).toFixed(1) : 0;
+                    html += `<div style="color: #94a3b8; margin-bottom: 8px;">── 구성 비율 ──</div>`;
+                    html += `<div style="margin-bottom: 4px;">기존 거래처 비율: <span style="color: #6366f1;">${existingRate}%</span></div>`;
+                    html += `<div style="margin-bottom: 8px;">신규 거래처 비율: <span style="color: #10b981;">${newRate}%</span></div>`;
+
+                    // 전월 대비
+                    if (prevD && prevD.total > 0) {
+                        const totalDiff = d.total - prevD.total;
+                        const totalDiffPct = (totalDiff / prevD.total * 100).toFixed(1);
+                        const diffColor = totalDiff >= 0 ? '#10b981' : '#ef4444';
+                        const diffSign = totalDiff >= 0 ? '+' : '';
+                        html += `<div style="color: #94a3b8; margin: 8px 0;">── 전월 대비 ──</div>`;
+                        html += `<div>거래처 수 변화: <span style="color: ${diffColor}; font-weight: 600;">${diffSign}${totalDiff}개 (${diffSign}${totalDiffPct}%)</span></div>`;
+                    }
+
+                    tooltipEl.innerHTML = html;
+                }
+
+                const canvasRect = chart.canvas.getBoundingClientRect();
+                let left = canvasRect.left + tooltip.caretX + 15;
+                let top = canvasRect.top + tooltip.caretY - 10;
+                if (left + 300 > window.innerWidth) left = canvasRect.left + tooltip.caretX - 300 - 15;
+                if (top + 200 > window.innerHeight) top = window.innerHeight - 220;
+                tooltipEl.style.opacity = 1;
+                tooltipEl.style.left = left + 'px';
+                tooltipEl.style.top = top + 'px';
+            };
 
             charts.clientRetention = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
@@ -10580,8 +10762,11 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { intersect: true },
-                    plugins: { legend: { position: 'top' } },
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { enabled: false, external: tooltipHandler }
+                    },
                     scales: {
                         x: { stacked: true },
                         y: { stacked: true, title: { display: true, text: '거래처 수' } }
@@ -10596,10 +10781,88 @@ HTML_TEMPLATE = '''
             if (!ctx) return;
             if (charts.retentionRate) charts.retentionRate.destroy();
 
-            const retention = currentData.total_client_retention || [];
+            const retention = getFilteredClientRetention();
             const labels = retention.map(d => d.month + '월');
             const rates = retention.map(d => d.retention);
             const totals = retention.map(d => d.total);
+
+            // 외부 HTML 툴팁
+            const getOrCreateTooltip = (chart) => {
+                let tooltipEl = document.getElementById('retentionRateTooltip');
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement('div');
+                    tooltipEl.id = 'retentionRateTooltip';
+                    tooltipEl.style.cssText = `
+                        position: fixed; background: rgba(30, 41, 59, 0.98); border-radius: 12px;
+                        padding: 16px; pointer-events: auto; z-index: 99999; font-size: 13px;
+                        color: #e2e8f0; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 300px;
+                        max-width: 380px; transition: opacity 0.15s ease; line-height: 1.6;
+                    `;
+                    document.body.appendChild(tooltipEl);
+                    setupTooltipHover(tooltipEl);
+                }
+                return tooltipEl;
+            };
+
+            const tooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip(chart);
+
+                if (tooltip.opacity === 0 && !isTooltipHovered(tooltipEl)) {
+                    hideTooltipWithDelay(tooltipEl);
+                    return;
+                }
+
+                if (tooltip.body) {
+                    const dataIndex = tooltip.dataPoints?.[0]?.dataIndex;
+                    const month = dataIndex + 1;
+                    const d = retention[dataIndex];
+                    const prevD = dataIndex > 0 ? retention[dataIndex - 1] : null;
+
+                    // 평균 리텐션율 계산
+                    const avgRetention = rates.filter(r => r > 0).reduce((a, b) => a + b, 0) / (rates.filter(r => r > 0).length || 1);
+
+                    let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${currentData.year}년 ${month}월</div>`;
+
+                    html += `<div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 12px;">`;
+                    const retentionColor = d.retention >= avgRetention ? '#10b981' : '#ef4444';
+                    html += `<div style="margin-bottom: 8px;">📈 <strong>리텐션율:</strong> <span style="color: ${retentionColor}; font-size: 20px; font-weight: bold;">${d.retention.toFixed(1)}%</span></div>`;
+                    html += `<div>📊 월별 거래처 수: <span style="color: #fbbf24; font-weight: 600;">${d.total}개</span></div>`;
+                    html += `</div>`;
+
+                    // 비교 분석
+                    html += `<div style="color: #94a3b8; margin-bottom: 8px;">── 비교 분석 ──</div>`;
+                    const avgDiff = d.retention - avgRetention;
+                    const avgDiffColor = avgDiff >= 0 ? '#10b981' : '#ef4444';
+                    const avgDiffSign = avgDiff >= 0 ? '+' : '';
+                    html += `<div style="margin-bottom: 4px;">평균 대비: <span style="color: ${avgDiffColor}; font-weight: 600;">${avgDiffSign}${avgDiff.toFixed(1)}%p</span> <span style="color: #64748b;">(평균 ${avgRetention.toFixed(1)}%)</span></div>`;
+
+                    if (prevD && prevD.retention > 0) {
+                        const momDiff = d.retention - prevD.retention;
+                        const momColor = momDiff >= 0 ? '#10b981' : '#ef4444';
+                        const momSign = momDiff >= 0 ? '+' : '';
+                        html += `<div style="margin-bottom: 8px;">전월 대비: <span style="color: ${momColor}; font-weight: 600;">${momSign}${momDiff.toFixed(1)}%p</span></div>`;
+                    }
+
+                    // 리텐션 의미 해석
+                    html += `<div style="color: #94a3b8; margin: 8px 0;">── 해석 ──</div>`;
+                    if (prevD && prevD.total > 0) {
+                        const retained = Math.round(prevD.total * d.retention / 100);
+                        html += `<div style="font-size: 12px; color: #94a3b8;">전월 ${prevD.total}개 거래처 중 <span style="color: #6366f1;">${retained}개</span>가 이번 달에도 거래</div>`;
+                    }
+
+                    tooltipEl.innerHTML = html;
+                }
+
+                const canvasRect = chart.canvas.getBoundingClientRect();
+                let left = canvasRect.left + tooltip.caretX + 15;
+                let top = canvasRect.top + tooltip.caretY - 10;
+                if (left + 320 > window.innerWidth) left = canvasRect.left + tooltip.caretX - 320 - 15;
+                if (top + 250 > window.innerHeight) top = window.innerHeight - 270;
+                tooltipEl.style.opacity = 1;
+                tooltipEl.style.left = left + 'px';
+                tooltipEl.style.top = top + 'px';
+            };
 
             charts.retentionRate = new Chart(ctx.getContext('2d'), {
                 type: 'line',
@@ -10613,6 +10876,8 @@ HTML_TEMPLATE = '''
                             backgroundColor: 'rgba(99, 102, 241, 0.1)',
                             fill: true,
                             tension: 0.4,
+                            pointRadius: 6,
+                            pointHoverRadius: 10,
                             yAxisID: 'y'
                         },
                         {
@@ -10622,6 +10887,8 @@ HTML_TEMPLATE = '''
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             fill: false,
                             tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 8,
                             yAxisID: 'y1'
                         }
                     ]
@@ -10629,8 +10896,11 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { intersect: true },
-                    plugins: { legend: { position: 'top' } },
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { enabled: false, external: tooltipHandler }
+                    },
                     scales: {
                         y: {
                             type: 'linear',

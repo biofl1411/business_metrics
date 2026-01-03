@@ -4021,37 +4021,37 @@ HTML_TEMPLATE = '''
             <!-- 매출/건수 추이 차트 -->
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
                         <div class="card-title">📈 월별 매출 추이</div>
-                        <div class="chart-controls" style="display: flex; gap: 8px;">
-                            <select id="monthlySalesPurposeFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                        <div class="chart-controls" style="display: flex; gap: 8px; align-items: center;">
+                            <select id="monthlySalesPurposeFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; background: #fff; cursor: pointer;">
                                 <option value="전체">전체 목적</option>
                             </select>
-                            <select id="monthlySalesManagerFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                            <select id="monthlySalesManagerFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; background: #fff; cursor: pointer;">
                                 <option value="전체">전체 담당</option>
                             </select>
                         </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-legend" id="monthlyLegend" style="display: none;"></div>
-                        <div class="chart-summary" id="monthlySalesSummary" style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
+                        <div class="chart-summary" id="monthlySalesSummary" style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
                         <div class="chart-container" style="height: 350px;"><canvas id="monthlyChart"></canvas></div>
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
                         <div class="card-title">📊 월별 건수 추이</div>
-                        <div class="chart-controls" style="display: flex; gap: 8px;">
-                            <select id="monthlyCountPurposeFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                        <div class="chart-controls" style="display: flex; gap: 8px; align-items: center;">
+                            <select id="monthlyCountPurposeFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; background: #fff; cursor: pointer;">
                                 <option value="전체">전체 목적</option>
                             </select>
-                            <select id="monthlyCountManagerFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                            <select id="monthlyCountManagerFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; background: #fff; cursor: pointer;">
                                 <option value="전체">전체 담당</option>
                             </select>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="chart-summary" id="monthlyCountSummary" style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
+                        <div class="chart-summary" id="monthlyCountSummary" style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
                         <div class="chart-container" style="height: 350px;"><canvas id="monthlyCountChart"></canvas></div>
                     </div>
                 </div>
@@ -12400,20 +12400,52 @@ HTML_TEMPLATE = '''
         function updateMonthlyChartWithFilter() {
             const purposeFilter = document.getElementById('monthlySalesPurposeFilter')?.value || '전체';
             const managerFilter = document.getElementById('monthlySalesManagerFilter')?.value || '전체';
-            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
 
-            // 요약 정보 계산
+            // 원본 데이터에서 요약 정보 계산
+            const monthly = currentData.by_month || [];
+            const monthMap = Object.fromEntries(monthly);
+
             let totalSales = 0, totalCount = 0, monthCount = 0;
-            for (let m = 1; m <= 12; m++) {
-                const data = filteredMap[m];
-                if (data && data.sales > 0) {
-                    totalSales += data.sales;
-                    totalCount += data.count;
-                    monthCount++;
+
+            if (purposeFilter === '전체' && managerFilter === '전체') {
+                // 전체 데이터 사용
+                for (let m = 1; m <= 12; m++) {
+                    const data = monthMap[m];
+                    if (data && data.sales > 0) {
+                        totalSales += data.sales;
+                        totalCount += data.count || 0;
+                        monthCount++;
+                    }
+                }
+            } else {
+                // 필터된 데이터 계산
+                for (let m = 1; m <= 12; m++) {
+                    const data = monthMap[m];
+                    if (data) {
+                        let sales = 0, count = 0;
+                        if (purposeFilter !== '전체' && managerFilter === '전체') {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            if (purposeData) { sales = purposeData.sales || 0; count = purposeData.count || 0; }
+                        } else if (purposeFilter === '전체' && managerFilter !== '전체') {
+                            const managerData = data.byManager?.[managerFilter];
+                            if (managerData) { sales = managerData.sales || 0; count = managerData.count || 0; }
+                        } else {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            const managerData = data.byManager?.[managerFilter];
+                            if (purposeData && managerData) {
+                                sales = Math.min(purposeData.sales || 0, managerData.sales || 0);
+                                count = Math.min(purposeData.count || 0, managerData.count || 0);
+                            }
+                        }
+                        if (sales > 0) {
+                            totalSales += sales;
+                            totalCount += count;
+                            monthCount++;
+                        }
+                    }
                 }
             }
-            const avgSales = monthCount > 0 ? totalSales / monthCount : 0;
-            const avgCount = monthCount > 0 ? totalCount / monthCount : 0;
+
             const avgPrice = totalCount > 0 ? totalSales / totalCount : 0;
 
             // 요약 정보 표시
@@ -12901,18 +12933,52 @@ HTML_TEMPLATE = '''
         function updateMonthlyCountChartWithFilter() {
             const purposeFilter = document.getElementById('monthlyCountPurposeFilter')?.value || '전체';
             const managerFilter = document.getElementById('monthlyCountManagerFilter')?.value || '전체';
-            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
 
-            // 요약 정보 계산
+            // 원본 데이터에서 요약 정보 계산
+            const monthly = currentData.by_month || [];
+            const monthMap = Object.fromEntries(monthly);
+
             let totalSales = 0, totalCount = 0, monthCount = 0;
-            for (let m = 1; m <= 12; m++) {
-                const data = filteredMap[m];
-                if (data && data.count > 0) {
-                    totalSales += data.sales || 0;
-                    totalCount += data.count;
-                    monthCount++;
+
+            if (purposeFilter === '전체' && managerFilter === '전체') {
+                // 전체 데이터 사용
+                for (let m = 1; m <= 12; m++) {
+                    const data = monthMap[m];
+                    if (data && data.count > 0) {
+                        totalSales += data.sales || 0;
+                        totalCount += data.count;
+                        monthCount++;
+                    }
+                }
+            } else {
+                // 필터된 데이터 계산
+                for (let m = 1; m <= 12; m++) {
+                    const data = monthMap[m];
+                    if (data) {
+                        let sales = 0, count = 0;
+                        if (purposeFilter !== '전체' && managerFilter === '전체') {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            if (purposeData) { sales = purposeData.sales || 0; count = purposeData.count || 0; }
+                        } else if (purposeFilter === '전체' && managerFilter !== '전체') {
+                            const managerData = data.byManager?.[managerFilter];
+                            if (managerData) { sales = managerData.sales || 0; count = managerData.count || 0; }
+                        } else {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            const managerData = data.byManager?.[managerFilter];
+                            if (purposeData && managerData) {
+                                sales = Math.min(purposeData.sales || 0, managerData.sales || 0);
+                                count = Math.min(purposeData.count || 0, managerData.count || 0);
+                            }
+                        }
+                        if (count > 0) {
+                            totalSales += sales;
+                            totalCount += count;
+                            monthCount++;
+                        }
+                    }
                 }
             }
+
             const avgCount = monthCount > 0 ? totalCount / monthCount : 0;
             const avgPrice = totalCount > 0 ? totalSales / totalCount : 0;
 

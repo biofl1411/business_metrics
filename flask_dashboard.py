@@ -5323,6 +5323,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
@@ -6022,6 +6023,7 @@ HTML_TEMPLATE = '''
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                    interaction: { intersect: true },
                         plugins: {
                             legend: { display: compareData ? true : false, position: 'top' },
                             tooltip: {
@@ -6407,6 +6409,7 @@ HTML_TEMPLATE = '''
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                    interaction: { intersect: true },
                         plugins: {
                             legend: { position: 'top' },
                             tooltip: {
@@ -6425,6 +6428,7 @@ HTML_TEMPLATE = '''
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                    interaction: { intersect: true },
                             plugins: { title: { display: true, text: '담당자를 선택해주세요', font: { size: 14 } } }
                         }
                     });
@@ -6799,6 +6803,7 @@ HTML_TEMPLATE = '''
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                    interaction: { intersect: true },
                             plugins: {
                                 legend: { position: 'top' },
                                 tooltip: {
@@ -7229,6 +7234,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
@@ -7532,6 +7538,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
@@ -7691,6 +7698,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
@@ -8265,6 +8273,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: compareData ? true : false, position: 'top' },
                         tooltip: {
@@ -8883,6 +8892,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -9430,6 +9440,7 @@ HTML_TEMPLATE = '''
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                    interaction: { intersect: true },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -9466,6 +9477,7 @@ HTML_TEMPLATE = '''
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                    interaction: { intersect: true },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -9791,6 +9803,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -10195,6 +10208,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { position: 'top', labels: { usePointStyle: true } },
                         tooltip: {
@@ -10236,6 +10250,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: { legend: { position: 'top' } },
                     scales: {
                         x: { stacked: true },
@@ -10284,6 +10299,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: { legend: { position: 'top' } },
                     scales: {
                         y: {
@@ -10717,6 +10733,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -11639,6 +11656,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -11689,6 +11707,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -11795,6 +11814,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -11892,6 +11912,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -11999,6 +12020,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -12815,6 +12837,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -12916,6 +12939,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -13499,6 +13523,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     indexAxis: 'y',
                     plugins: {
                         legend: { display: false },
@@ -13590,6 +13615,7 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: true },
                     indexAxis: 'y',
                     plugins: {
                         legend: { display: false },

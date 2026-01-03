@@ -4618,14 +4618,15 @@ HTML_TEMPLATE = '''
             if (!tooltipEl || tooltipEl._hoverSetup) return;
             tooltipEl._hoverSetup = true;
             tooltipEl.addEventListener('mouseenter', () => {
+                // 이미 보이는 상태일 때만 반응 (숨겨진 상태에서는 무시)
+                if (parseFloat(tooltipEl.style.opacity) === 0) return;
+
                 // 숨김 타이머 취소
                 if (tooltipHideTimers[tooltipEl.id]) {
                     clearTimeout(tooltipHideTimers[tooltipEl.id]);
                     tooltipHideTimers[tooltipEl.id] = null;
                 }
                 tooltipHoverState[tooltipEl.id] = true;
-                tooltipEl.style.opacity = 1;
-                tooltipEl.style.pointerEvents = 'auto';
             });
             tooltipEl.addEventListener('mouseleave', () => {
                 tooltipHoverState[tooltipEl.id] = false;
@@ -4633,6 +4634,7 @@ HTML_TEMPLATE = '''
                 tooltipHideTimers[tooltipEl.id] = setTimeout(() => {
                     if (!tooltipHoverState[tooltipEl.id]) {
                         tooltipEl.style.opacity = 0;
+                        tooltipEl.style.pointerEvents = 'none'; // 숨김 시 이벤트 차단
                     }
                     tooltipHideTimers[tooltipEl.id] = null;
                 }, TOOLTIP_HIDE_DELAY);
@@ -4654,8 +4656,16 @@ HTML_TEMPLATE = '''
                 tooltipHideTimers[tooltipEl.id] = null;
             }
 
-            // 즉시 숨김
+            // 즉시 숨김 + 이벤트 차단
             tooltipEl.style.opacity = 0;
+            tooltipEl.style.pointerEvents = 'none';
+        }
+
+        // 툴팁 표시 (차트에서 호출)
+        function showTooltipElement(tooltipEl) {
+            if (!tooltipEl) return;
+            tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
+            tooltipEl.style.pointerEvents = 'auto'; // 표시 시 이벤트 허용
         }
 
         // 유틸리티 함수
@@ -5614,7 +5624,7 @@ HTML_TEMPLATE = '''
                                     top = window.scrollY + 10;
                                 }
 
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 tooltipEl.style.left = left + 'px';
                                 tooltipEl.style.top = top + 'px';
                             }
@@ -6001,7 +6011,7 @@ HTML_TEMPLATE = '''
                     }
                     if (top < 10) top = 10;
 
-                    tooltipEl.style.opacity = 1;
+                    tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                     tooltipEl.style.left = left + 'px';
                     tooltipEl.style.top = top + 'px';
                 };
@@ -6386,7 +6396,7 @@ HTML_TEMPLATE = '''
                     }
                     if (top < 10) top = 10;
 
-                    tooltipEl.style.opacity = 1;
+                    tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                     tooltipEl.style.left = left + 'px';
                     tooltipEl.style.top = top + 'px';
                 };
@@ -6778,7 +6788,7 @@ HTML_TEMPLATE = '''
                         }
                         if (top < 10) top = 10;
 
-                        tooltipEl.style.opacity = 1;
+                        tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                         tooltipEl.style.left = left + 'px';
                         tooltipEl.style.top = top + 'px';
                     };
@@ -7205,7 +7215,7 @@ HTML_TEMPLATE = '''
                 // 상단 경계 체크
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -7508,7 +7518,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -8053,7 +8063,7 @@ HTML_TEMPLATE = '''
                                 }
                                 if (top < 10) top = 10;
 
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 tooltipEl.style.left = left + 'px';
                                 tooltipEl.style.top = top + 'px';
                             }
@@ -8602,7 +8612,7 @@ HTML_TEMPLATE = '''
                                 }
                                 if (top < 10) top = 10;
 
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 tooltipEl.style.left = left + 'px';
                                 tooltipEl.style.top = top + 'px';
                             }
@@ -8859,7 +8869,7 @@ HTML_TEMPLATE = '''
                 // 상단 경계 체크
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -9390,7 +9400,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -9763,7 +9773,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -10174,7 +10184,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -10696,7 +10706,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -11073,7 +11083,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -11618,7 +11628,7 @@ HTML_TEMPLATE = '''
                 }
                 if (top < 10) top = 10;
 
-                tooltipEl.style.opacity = 1;
+                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                 tooltipEl.style.left = left + 'px';
                 tooltipEl.style.top = top + 'px';
             };
@@ -11729,7 +11739,7 @@ HTML_TEMPLATE = '''
                                 }
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 360) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 300) + 'px';
@@ -11829,7 +11839,7 @@ HTML_TEMPLATE = '''
                                 }
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 360) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 300) + 'px';
@@ -11930,7 +11940,7 @@ HTML_TEMPLATE = '''
                                 }
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 360) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 300) + 'px';
@@ -12044,7 +12054,7 @@ HTML_TEMPLATE = '''
                                 </div>`;
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 350) + 'px';
@@ -12852,7 +12862,7 @@ HTML_TEMPLATE = '''
                                 html += `</div>`;
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 350) + 'px';
@@ -12955,7 +12965,7 @@ HTML_TEMPLATE = '''
                                 html += `</div>`;
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 350) + 'px';
@@ -13531,7 +13541,7 @@ HTML_TEMPLATE = '''
                                 </div>`;
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 360) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 300) + 'px';
@@ -13631,7 +13641,7 @@ HTML_TEMPLATE = '''
                                 </div>`;
 
                                 tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
                                 tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
                                 tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 380) + 'px';

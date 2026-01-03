@@ -3761,6 +3761,7 @@ HTML_TEMPLATE = '''
                     <div class="kpi-compare" id="teamTopGrowthRate">전년 대비</div>
                     <div class="kpi-compare" id="teamTopGrowthDetail" style="font-size: 10px; color: #f59e0b; margin-top: 2px;"></div>
                     <div class="kpi-compare" id="teamTopGrowthPurposes" style="font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.4; max-height: 36px; overflow: hidden;"></div>
+                    <div class="kpi-compare-overlay" id="teamTopGrowthCompare" style="display: none; position: absolute; top: 8px; right: 8px; background: rgba(99,102,241,0.1); padding: 4px 8px; border-radius: 6px; font-size: 11px; color: #6366f1;"></div>
                 </div>
             </div>
 
@@ -9154,7 +9155,8 @@ HTML_TEMPLATE = '''
             if (compareData && compareData.by_branch) {
                 const compSorted = [...compareData.by_branch].filter(b => b[0] !== '기타').sort((a, b) => (b[1].sales || 0) - (a[1].sales || 0));
                 if (compSorted.length > 0) {
-                    document.getElementById('teamTopBranchCompare').textContent = `${compareData.year}년: ${compSorted[0][0]}`;
+                    const compTopSales = compSorted[0][1].sales || 0;
+                    document.getElementById('teamTopBranchCompare').textContent = `${compareData.year}년: ${compSorted[0][0]} (${formatCurrency(compTopSales)})`;
                     document.getElementById('teamTopBranchCompare').style.display = 'block';
                 }
             } else {
@@ -9235,12 +9237,21 @@ HTML_TEMPLATE = '''
                     } else {
                         document.getElementById('teamTopGrowthPurposes').textContent = '';
                     }
+
+                    // 비교년도 최고 매출 팀 표시 (성장 비교 기준)
+                    const compSortedForGrowth = [...compareData.by_branch].filter(b => b[0] !== '기타').sort((a, b) => (b[1].sales || 0) - (a[1].sales || 0));
+                    if (compSortedForGrowth.length > 0) {
+                        const compTopSales = compSortedForGrowth[0][1].sales || 0;
+                        document.getElementById('teamTopGrowthCompare').textContent = `${compareData.year}년: ${compSortedForGrowth[0][0]} (${formatCurrency(compTopSales)})`;
+                        document.getElementById('teamTopGrowthCompare').style.display = 'block';
+                    }
                 } else {
                     document.getElementById('teamTopGrowth').textContent = '-';
                     document.getElementById('teamTopGrowthRate').textContent = '성장팀 없음';
                     document.getElementById('teamTopGrowthTrend').style.visibility = 'hidden';
                     document.getElementById('teamTopGrowthDetail').textContent = '';
                     document.getElementById('teamTopGrowthPurposes').textContent = '';
+                    document.getElementById('teamTopGrowthCompare').style.display = 'none';
                 }
             } else {
                 document.getElementById('teamTopGrowth').textContent = '-';
@@ -9248,6 +9259,7 @@ HTML_TEMPLATE = '''
                 document.getElementById('teamTopGrowthTrend').style.visibility = 'hidden';
                 document.getElementById('teamTopGrowthDetail').textContent = '';
                 document.getElementById('teamTopGrowthPurposes').textContent = '';
+                document.getElementById('teamTopGrowthCompare').style.display = 'none';
             }
 
             // 드롭다운 초기화

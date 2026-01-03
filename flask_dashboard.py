@@ -4632,6 +4632,7 @@ HTML_TEMPLATE = '''
         let compareData = null;
         let currentTab = 'main';
         let managerTableSort = { column: null, direction: 'desc' };
+        let branchTableSort = { column: null, direction: 'desc' };
         const availableYears = [2025, 2024];  // 사용 가능한 연도 목록
 
         // 툴팁 hover 상태 관리 (스크롤 가능하도록)
@@ -12601,6 +12602,16 @@ HTML_TEMPLATE = '''
             updateManagerTable();
         }
 
+        function sortBranchTable(column) {
+            if (branchTableSort.column === column) {
+                branchTableSort.direction = branchTableSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                branchTableSort.column = column;
+                branchTableSort.direction = 'desc';
+            }
+            updateBranchTable();
+        }
+
         function updateManagerTable() {
             const purposeFilter = document.getElementById('managerPurposeFilter')?.value || '전체';
             let managers = [];
@@ -12806,29 +12817,34 @@ HTML_TEMPLATE = '''
             const branches = currentData.by_branch || [];
             const tbody = document.querySelector('#branchTable tbody');
 
+            // 원본 by_branch 데이터 맵 (긴급 데이터 참조용)
+            const originalBranchMap = Object.fromEntries((currentData.by_branch || []).map(b => [b[0], b[1]]));
+
             // 검사목적 필터 적용
-            const branchData = branches.map(b => {
-                let sales = 0, count = 0;
+            let branchData = branches.map(b => {
+                let sales = 0, count = 0, urgent = 0;
                 if (purposeFilter === '전체') {
                     sales = b[1].sales || 0;
                     count = b[1].count || 0;
+                    urgent = b[1].urgent || 0;
                 } else {
                     const purposeData = b[1].by_purpose?.[purposeFilter];
                     if (purposeData) {
                         sales = purposeData.sales || 0;
                         count = purposeData.count || 0;
                     }
+                    // 긴급 건수는 원본에서
+                    const originalData = originalBranchMap[b[0]] || {};
+                    const urgentByPurpose = originalData.urgent_by_purpose || {};
+                    urgent = urgentByPurpose[purposeFilter] || 0;
                 }
-                return { name: b[0], sales, count, managers: b[1].managers };
-            }).filter(d => d.sales > 0).sort((a, b) => b.sales - a.sales);
+                return { name: b[0], sales, count, urgent, managers: b[1].managers };
+            }).filter(d => d.sales > 0);
 
-            const total = branchData.reduce((sum, b) => sum + b.sales, 0) || 1;
-            document.getElementById('branchTableBadge').textContent = branchData.length + '개 팀';
-
+            // 비교 데이터 맵 생성
+            const compareMap = {};
             if (compareData) {
-                // 비교 데이터 처리 (검사목적 필터 적용)
                 const compareBranches = compareData.by_branch || [];
-                const compareMap = {};
                 compareBranches.forEach(b => {
                     let sales = 0, count = 0;
                     if (purposeFilter === '전체') {
@@ -12843,18 +12859,75 @@ HTML_TEMPLATE = '''
                     }
                     compareMap[b[0]] = { sales, count };
                 });
+            }
 
-                document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">${currentData.year}년</th><th class="text-right">${compareData.year}년</th><th class="text-right">평균단가</th><th class="text-right">증감</th><th>비중</th></tr>`;
+            // 정렬 적용
+            if (branchTableSort.column) {
+                const col = branchTableSort.column;
+                const dir = branchTableSort.direction === 'asc' ? 1 : -1;
+                branchData.sort((a, b) => {
+                    let aVal, bVal;
+                    const aComp = compareMap[a.name] || {};
+                    const bComp = compareMap[b.name] || {};
+                    switch(col) {
+                        case 'name': aVal = a.name; bVal = b.name; return dir * aVal.localeCompare(bVal);
+                        case 'sales': aVal = a.sales || 0; bVal = b.sales || 0; break;
+                        case 'avgPrice': aVal = (a.count > 0 ? a.sales / a.count : 0); bVal = (b.count > 0 ? b.sales / b.count : 0); break;
+                        case 'compSales': aVal = aComp.sales || 0; bVal = bComp.sales || 0; break;
+                        case 'compAvgPrice': aVal = aComp.count > 0 ? aComp.sales / aComp.count : 0; bVal = bComp.count > 0 ? bComp.sales / bComp.count : 0; break;
+                        case 'urgent': aVal = a.urgent || 0; bVal = b.urgent || 0; break;
+                        case 'change':
+                            const aCompS = aComp.sales || 0;
+                            const bCompS = bComp.sales || 0;
+                            aVal = aCompS > 0 ? ((a.sales - aCompS) / aCompS * 100) : 0;
+                            bVal = bCompS > 0 ? ((b.sales - bCompS) / bCompS * 100) : 0;
+                            break;
+                        case 'percent':
+                            const totalA = branchData.reduce((sum, x) => sum + x.sales, 0) || 1;
+                            aVal = a.sales / totalA; bVal = b.sales / totalA;
+                            break;
+                        default: aVal = a.sales || 0; bVal = b.sales || 0;
+                    }
+                    return dir * (aVal - bVal);
+                });
+            } else {
+                // 기본 정렬: 매출 내림차순
+                branchData.sort((a, b) => b.sales - a.sales);
+            }
+
+            const total = branchData.reduce((sum, b) => sum + b.sales, 0) || 1;
+            document.getElementById('branchTableBadge').textContent = branchData.length + '개 팀';
+
+            // 정렬 클래스 헬퍼
+            const sortClass = (col) => {
+                if (branchTableSort.column === col) return `sortable ${branchTableSort.direction}`;
+                return 'sortable';
+            };
+
+            if (compareData) {
+                document.getElementById('branchTableHead').innerHTML = `<tr>
+                    <th class="${sortClass('name')}" onclick="sortBranchTable('name')">팀명</th>
+                    <th class="text-right ${sortClass('sales')}" onclick="sortBranchTable('sales')">${currentData.year}년</th>
+                    <th class="text-right ${sortClass('avgPrice')}" onclick="sortBranchTable('avgPrice')">${currentData.year}년 평균단가</th>
+                    <th class="text-right ${sortClass('compSales')}" onclick="sortBranchTable('compSales')">${compareData.year}년</th>
+                    <th class="text-right ${sortClass('compAvgPrice')}" onclick="sortBranchTable('compAvgPrice')">${compareData.year}년 평균단가</th>
+                    <th class="text-right ${sortClass('urgent')}" onclick="sortBranchTable('urgent')">긴급</th>
+                    <th class="text-right ${sortClass('change')}" onclick="sortBranchTable('change')">증감</th>
+                    <th class="${sortClass('percent')}" onclick="sortBranchTable('percent')">비중</th>
+                </tr>`;
 
                 // 평균 계산
                 const avgBranchSales = branchData.reduce((s, b) => s + b.sales, 0) / (branchData.length || 1);
                 const avgBranchPrice = branchData.reduce((s, b) => s + (b.count > 0 ? b.sales / b.count : 0), 0) / (branchData.length || 1);
 
                 tbody.innerHTML = branchData.map((d, idx) => {
-                    const compSales = compareMap[d.name]?.sales || 0;
+                    const compData = compareMap[d.name] || {};
+                    const compSales = compData.sales || 0;
+                    const compCount = compData.count || 0;
                     const diff = d.sales - compSales;
                     const diffRate = compSales > 0 ? ((diff / compSales) * 100).toFixed(1) : 0;
                     const avgPrice = d.count > 0 ? d.sales / d.count : 0;
+                    const compAvgPrice = compCount > 0 ? compSales / compCount : 0;
                     const percent = (d.sales / total * 100).toFixed(1);
 
                     // 순위 배지 & 행 스타일
@@ -12886,14 +12959,23 @@ HTML_TEMPLATE = '''
                     return `<tr style="${rowStyle}">
                         <td>${rankBadge}<strong>${d.name}</strong></td>
                         <td class="text-right" style="${salesStyle}">${formatCurrency(d.sales)}</td>
-                        <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
                         <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
+                        <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
+                        <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compAvgPrice)}</td>
+                        <td class="text-right"><span class="urgent-badge">🚨 ${d.urgent}건</span></td>
                         <td class="text-right">${trendIcon}<span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>
-                        <td><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div><span>${percent}%</span></div></td>
+                        <td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td>
                     </tr>`;
                 }).join('');
             } else {
-                document.getElementById('branchTableHead').innerHTML = `<tr><th>팀명</th><th class="text-right">매출액</th><th class="text-right">건수</th><th class="text-right">평균단가</th><th class="text-right">담당자수</th><th>비중</th></tr>`;
+                document.getElementById('branchTableHead').innerHTML = `<tr>
+                    <th class="${sortClass('name')}" onclick="sortBranchTable('name')">팀명</th>
+                    <th class="text-right ${sortClass('sales')}" onclick="sortBranchTable('sales')">매출액</th>
+                    <th class="text-right" onclick="sortBranchTable('count')">건수</th>
+                    <th class="text-right ${sortClass('avgPrice')}" onclick="sortBranchTable('avgPrice')">평균단가</th>
+                    <th class="text-right ${sortClass('urgent')}" onclick="sortBranchTable('urgent')">긴급</th>
+                    <th class="${sortClass('percent')}" onclick="sortBranchTable('percent')">비중</th>
+                </tr>`;
 
                 // 평균 계산
                 const avgBranchSalesNo = branchData.reduce((s, b) => s + b.sales, 0) / (branchData.length || 1);
@@ -12931,8 +13013,8 @@ HTML_TEMPLATE = '''
                         <td class="text-right" style="${salesStyle}">${formatCurrency(d.sales)}</td>
                         <td class="text-right">${d.count.toLocaleString()}건</td>
                         <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
-                        <td class="text-right">${d.managers?.size || d.managers || '-'}명</td>
-                        <td><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div><span>${percent}%</span></div></td>
+                        <td class="text-right"><span class="urgent-badge">🚨 ${d.urgent}건</span></td>
+                        <td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td>
                     </tr>`;
                 }).join('');
             }

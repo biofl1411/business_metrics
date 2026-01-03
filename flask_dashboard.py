@@ -1540,6 +1540,58 @@ def process_data(data, purpose_filter=None):
             for m, d in managers[:5]
         ]
 
+    # 계층적 지역 데이터 (시도 > 시군구 > 업체/담당자)
+    by_sido = {}
+    for region, data in by_region.items():
+        sido = data['sido']
+        sigungu = data['sigungu']
+        if sido not in by_sido:
+            by_sido[sido] = {'sales': 0, 'count': 0, 'sigungu': {}, 'managers': {}, 'clients': set()}
+        by_sido[sido]['sales'] += data['sales']
+        by_sido[sido]['count'] += data['count']
+
+        # 시군구별 집계
+        if sigungu:
+            if sigungu not in by_sido[sido]['sigungu']:
+                by_sido[sido]['sigungu'][sigungu] = {'sales': 0, 'count': 0, 'managers': {}, 'clients': set()}
+            by_sido[sido]['sigungu'][sigungu]['sales'] += data['sales']
+            by_sido[sido]['sigungu'][sigungu]['count'] += data['count']
+            # 시군구별 담당자
+            for mgr, mgr_data in data['managers'].items():
+                if mgr not in by_sido[sido]['sigungu'][sigungu]['managers']:
+                    by_sido[sido]['sigungu'][sigungu]['managers'][mgr] = {'sales': 0, 'count': 0}
+                by_sido[sido]['sigungu'][sigungu]['managers'][mgr]['sales'] += mgr_data['sales']
+                by_sido[sido]['sigungu'][sigungu]['managers'][mgr]['count'] += mgr_data['count']
+
+        # 시도별 담당자 합계
+        for mgr, mgr_data in data['managers'].items():
+            if mgr not in by_sido[sido]['managers']:
+                by_sido[sido]['managers'][mgr] = {'sales': 0, 'count': 0}
+            by_sido[sido]['managers'][mgr]['sales'] += mgr_data['sales']
+            by_sido[sido]['managers'][mgr]['count'] += mgr_data['count']
+
+    # 계층 데이터 정리 (JSON 직렬화를 위해 set 제거)
+    sido_hierarchy = {}
+    for sido, data in by_sido.items():
+        sido_hierarchy[sido] = {
+            'sales': data['sales'],
+            'count': data['count'],
+            'clientCount': len([sg for sg in data['sigungu'].values()]),
+            'managers': sorted([{'name': m, 'sales': d['sales'], 'count': d['count']}
+                              for m, d in data['managers'].items()],
+                             key=lambda x: x['sales'], reverse=True)[:10],
+            'sigungu': {
+                sg: {
+                    'sales': sg_data['sales'],
+                    'count': sg_data['count'],
+                    'managers': sorted([{'name': m, 'sales': d['sales'], 'count': d['count']}
+                                       for m, d in sg_data['managers'].items()],
+                                      key=lambda x: x['sales'], reverse=True)[:10]
+                }
+                for sg, sg_data in data['sigungu'].items()
+            }
+        }
+
     # 담당자별 지역 분포
     manager_regions = {}
     for mgr, regions in by_region_manager.items():
@@ -1703,6 +1755,7 @@ def process_data(data, purpose_filter=None):
         'by_region': [(r, {'sales': d['sales'], 'count': d['count'], 'sido': d['sido'], 'sigungu': d['sigungu']})
                       for r, d in sorted_regions[:50]],
         'region_top_managers': region_top_managers,
+        'sido_hierarchy': sido_hierarchy,
         'manager_regions': manager_regions,
         'purpose_managers': purpose_managers,
         'purpose_regions': purpose_regions,
@@ -1728,6 +1781,8 @@ HTML_TEMPLATE = '''
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>경영지표 대시보드</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -4886,110 +4941,29 @@ HTML_TEMPLATE = '''
                 </div>
             </section>
 
-            <!-- 지도 + 상세 패널 -->
+            <!-- 드릴다운 지도 + 상세 패널 -->
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card" style="min-height: 500px;">
                     <div class="card-header">
-                        <div class="card-title">🗺️ 전국 지역별 매출 현황</div>
-                        <div style="display: flex; gap: 8px;">
-                            <span style="font-size: 11px; color: #94a3b8;">클릭하면 상세 정보</span>
+                        <div class="card-title" id="mapTitle">🗺️ 전국 시도별 업체 현황</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button id="mapBackBtn" onclick="mapDrillUp()" style="display: none; padding: 4px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; cursor: pointer; font-size: 12px;">← 뒤로</button>
+                            <span id="mapBreadcrumb" style="font-size: 12px; color: #64748b;">전국</span>
                         </div>
                     </div>
-                    <div class="card-body" style="display: flex; justify-content: center; align-items: center;">
-                        <div id="koreaMapContainer" style="width: 100%; max-width: 450px; position: relative;">
-                            <!-- SVG Korea Map -->
-                            <svg id="koreaMap" viewBox="0 0 400 550" style="width: 100%; height: auto;">
-                                <!-- 강원 -->
-                                <path id="map-강원" d="M250,80 L320,60 L350,100 L340,160 L290,180 L240,160 L230,120 Z"
-                                    class="region-path" data-region="강원"/>
-                                <!-- 경기 -->
-                                <path id="map-경기" d="M160,100 L230,120 L240,160 L220,200 L170,210 L130,180 L140,130 Z"
-                                    class="region-path" data-region="경기"/>
-                                <!-- 서울 -->
-                                <path id="map-서울" d="M170,140 L200,135 L205,165 L175,170 Z"
-                                    class="region-path" data-region="서울"/>
-                                <!-- 인천 -->
-                                <path id="map-인천" d="M120,140 L145,135 L150,170 L125,175 Z"
-                                    class="region-path" data-region="인천"/>
-                                <!-- 충북 -->
-                                <path id="map-충북" d="M220,200 L290,180 L300,230 L260,270 L200,260 L190,220 Z"
-                                    class="region-path" data-region="충북"/>
-                                <!-- 세종 -->
-                                <path id="map-세종" d="M165,235 L185,230 L190,255 L170,260 Z"
-                                    class="region-path" data-region="세종"/>
-                                <!-- 대전 -->
-                                <path id="map-대전" d="M185,265 L210,260 L215,290 L190,295 Z"
-                                    class="region-path" data-region="대전"/>
-                                <!-- 충남 -->
-                                <path id="map-충남" d="M100,200 L170,210 L190,220 L200,260 L170,290 L100,280 L80,240 Z"
-                                    class="region-path" data-region="충남"/>
-                                <!-- 전북 -->
-                                <path id="map-전북" d="M100,290 L180,295 L200,340 L160,380 L90,360 L70,320 Z"
-                                    class="region-path" data-region="전북"/>
-                                <!-- 경북 -->
-                                <path id="map-경북" d="M260,270 L300,230 L360,250 L370,330 L310,370 L250,350 L240,300 Z"
-                                    class="region-path" data-region="경북"/>
-                                <!-- 대구 -->
-                                <path id="map-대구" d="M275,340 L305,335 L310,365 L280,370 Z"
-                                    class="region-path" data-region="대구"/>
-                                <!-- 울산 -->
-                                <path id="map-울산" d="M340,380 L370,375 L375,410 L345,415 Z"
-                                    class="region-path" data-region="울산"/>
-                                <!-- 경남 -->
-                                <path id="map-경남" d="M200,380 L250,350 L310,370 L340,420 L280,460 L200,440 L180,400 Z"
-                                    class="region-path" data-region="경남"/>
-                                <!-- 부산 -->
-                                <path id="map-부산" d="M300,450 L340,440 L355,480 L310,490 Z"
-                                    class="region-path" data-region="부산"/>
-                                <!-- 광주 -->
-                                <path id="map-광주" d="M105,385 L135,380 L140,410 L110,415 Z"
-                                    class="region-path" data-region="광주"/>
-                                <!-- 전남 -->
-                                <path id="map-전남" d="M60,360 L160,380 L180,430 L150,480 L60,470 L40,420 Z"
-                                    class="region-path" data-region="전남"/>
-                                <!-- 제주 -->
-                                <path id="map-제주" d="M60,520 L150,515 L155,545 L55,550 Z"
-                                    class="region-path" data-region="제주"/>
-
-                                <!-- Region Labels -->
-                                <text x="290" y="120" class="map-label" data-region="강원">강원</text>
-                                <text x="185" y="165" class="map-label" data-region="경기">경기</text>
-                                <text x="183" y="155" class="map-label small" data-region="서울">서울</text>
-                                <text x="130" y="160" class="map-label small" data-region="인천">인천</text>
-                                <text x="245" y="230" class="map-label" data-region="충북">충북</text>
-                                <text x="173" y="250" class="map-label small" data-region="세종">세종</text>
-                                <text x="195" y="282" class="map-label small" data-region="대전">대전</text>
-                                <text x="130" y="250" class="map-label" data-region="충남">충남</text>
-                                <text x="130" y="340" class="map-label" data-region="전북">전북</text>
-                                <text x="305" y="300" class="map-label" data-region="경북">경북</text>
-                                <text x="288" y="357" class="map-label small" data-region="대구">대구</text>
-                                <text x="352" y="400" class="map-label small" data-region="울산">울산</text>
-                                <text x="255" y="410" class="map-label" data-region="경남">경남</text>
-                                <text x="318" y="472" class="map-label small" data-region="부산">부산</text>
-                                <text x="117" y="402" class="map-label small" data-region="광주">광주</text>
-                                <text x="100" y="430" class="map-label" data-region="전남">전남</text>
-                                <text x="100" y="535" class="map-label" data-region="제주">제주</text>
-                            </svg>
-                            <!-- 범례 -->
-                            <div id="mapLegend" style="position: absolute; bottom: 10px; right: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
-                                <div style="font-weight: 600; margin-bottom: 6px;">매출 규모</div>
-                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                                    <div style="width: 16px; height: 16px; background: #1e3a8a; border-radius: 3px;"></div>
-                                    <span>10억 이상</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                                    <div style="width: 16px; height: 16px; background: #3b82f6; border-radius: 3px;"></div>
-                                    <span>5억 ~ 10억</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                                    <div style="width: 16px; height: 16px; background: #93c5fd; border-radius: 3px;"></div>
-                                    <span>1억 ~ 5억</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 4px;">
-                                    <div style="width: 16px; height: 16px; background: #dbeafe; border-radius: 3px;"></div>
-                                    <span>1억 미만</span>
-                                </div>
-                            </div>
+                    <div class="card-body" style="padding: 16px;">
+                        <div id="mapSummary" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px;"></div>
+                        <div id="d3MapContainer" style="width: 100%; height: 420px; position: relative;">
+                            <svg id="d3KoreaMap" style="width: 100%; height: 100%;"></svg>
+                            <!-- 툴팁 -->
+                            <div id="mapTooltip" style="position: absolute; display: none; background: rgba(30,41,59,0.95); color: #e2e8f0; padding: 12px 16px; border-radius: 8px; font-size: 12px; pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 250px;"></div>
+                        </div>
+                        <!-- 범례 -->
+                        <div id="mapLegend" style="display: flex; gap: 16px; margin-top: 12px; font-size: 11px; flex-wrap: wrap; justify-content: center;">
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #1e3a8a; border-radius: 3px;"></div><span>100건+</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px;"></div><span>50~100건</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #93c5fd; border-radius: 3px;"></div><span>10~50건</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #dbeafe; border-radius: 3px;"></div><span>10건 미만</span></div>
                         </div>
                     </div>
                 </div>
@@ -4998,7 +4972,7 @@ HTML_TEMPLATE = '''
                         <div class="card-title" id="regionDetailTitle">📍 지역 상세 정보</div>
                         <div class="card-badge" id="regionDetailBadge">지역 선택</div>
                     </div>
-                    <div class="card-body" id="regionDetailBody" style="padding: 16px;">
+                    <div class="card-body" id="regionDetailBody" style="padding: 16px; overflow-y: auto; max-height: 440px;">
                         <div style="text-align: center; color: #94a3b8; padding: 60px 20px;">
                             <div style="font-size: 48px; margin-bottom: 16px;">🗺️</div>
                             <div style="font-size: 14px;">좌측 지도에서 지역을 클릭하면<br>상세 정보가 표시됩니다.</div>
@@ -17960,90 +17934,399 @@ HTML_TEMPLATE = '''
             });
         }
 
+        // D3.js 드릴다운 지도 관련 변수
+        let currentMapLevel = 'sido'; // 'sido' | 'sigungu' | 'detail'
+        let currentSido = null;
+        let currentSigungu = null;
+
+        // 한국 시도 GeoJSON (간소화 버전)
+        const koreaGeoData = {
+            type: "FeatureCollection",
+            features: [
+                { type: "Feature", properties: { name: "서울", nameEn: "Seoul" }, geometry: { type: "Polygon", coordinates: [[[126.8,37.7],[127.2,37.7],[127.2,37.4],[126.8,37.4],[126.8,37.7]]] }},
+                { type: "Feature", properties: { name: "경기", nameEn: "Gyeonggi" }, geometry: { type: "Polygon", coordinates: [[[126.3,38.0],[127.8,38.0],[128.0,37.3],[127.5,36.9],[126.5,36.9],[126.0,37.3],[126.3,38.0]]] }},
+                { type: "Feature", properties: { name: "인천", nameEn: "Incheon" }, geometry: { type: "Polygon", coordinates: [[[126.2,37.7],[126.8,37.7],[126.8,37.3],[126.2,37.3],[126.2,37.7]]] }},
+                { type: "Feature", properties: { name: "강원", nameEn: "Gangwon" }, geometry: { type: "Polygon", coordinates: [[[127.5,38.5],[129.3,38.5],[129.0,37.5],[128.5,37.0],[127.5,37.0],[127.5,38.5]]] }},
+                { type: "Feature", properties: { name: "충북", nameEn: "Chungbuk" }, geometry: { type: "Polygon", coordinates: [[[127.2,37.2],[128.2,37.2],[128.0,36.4],[127.0,36.4],[127.2,37.2]]] }},
+                { type: "Feature", properties: { name: "충남", nameEn: "Chungnam" }, geometry: { type: "Polygon", coordinates: [[[126.0,37.0],[127.2,37.0],[127.2,36.2],[126.0,36.2],[125.8,36.6],[126.0,37.0]]] }},
+                { type: "Feature", properties: { name: "대전", nameEn: "Daejeon" }, geometry: { type: "Polygon", coordinates: [[[127.2,36.5],[127.6,36.5],[127.6,36.2],[127.2,36.2],[127.2,36.5]]] }},
+                { type: "Feature", properties: { name: "세종", nameEn: "Sejong" }, geometry: { type: "Polygon", coordinates: [[[127.0,36.7],[127.3,36.7],[127.3,36.4],[127.0,36.4],[127.0,36.7]]] }},
+                { type: "Feature", properties: { name: "전북", nameEn: "Jeonbuk" }, geometry: { type: "Polygon", coordinates: [[[126.3,36.2],[127.5,36.2],[127.5,35.4],[126.3,35.4],[126.0,35.8],[126.3,36.2]]] }},
+                { type: "Feature", properties: { name: "전남", nameEn: "Jeonnam" }, geometry: { type: "Polygon", coordinates: [[[126.0,35.5],[127.5,35.5],[127.8,34.5],[126.5,34.2],[125.5,34.5],[126.0,35.5]]] }},
+                { type: "Feature", properties: { name: "광주", nameEn: "Gwangju" }, geometry: { type: "Polygon", coordinates: [[[126.7,35.3],[127.0,35.3],[127.0,35.0],[126.7,35.0],[126.7,35.3]]] }},
+                { type: "Feature", properties: { name: "경북", nameEn: "Gyeongbuk" }, geometry: { type: "Polygon", coordinates: [[[128.0,37.0],[129.5,37.0],[129.8,36.0],[129.5,35.5],[128.5,35.5],[128.0,36.0],[128.0,37.0]]] }},
+                { type: "Feature", properties: { name: "경남", nameEn: "Gyeongnam" }, geometry: { type: "Polygon", coordinates: [[[127.8,35.5],[129.3,35.5],[129.3,34.8],[128.5,34.8],[127.5,35.0],[127.8,35.5]]] }},
+                { type: "Feature", properties: { name: "대구", nameEn: "Daegu" }, geometry: { type: "Polygon", coordinates: [[[128.4,36.0],[128.8,36.0],[128.8,35.7],[128.4,35.7],[128.4,36.0]]] }},
+                { type: "Feature", properties: { name: "울산", nameEn: "Ulsan" }, geometry: { type: "Polygon", coordinates: [[[129.0,35.7],[129.5,35.7],[129.5,35.3],[129.0,35.3],[129.0,35.7]]] }},
+                { type: "Feature", properties: { name: "부산", nameEn: "Busan" }, geometry: { type: "Polygon", coordinates: [[[128.8,35.3],[129.3,35.3],[129.3,35.0],[128.8,35.0],[128.8,35.3]]] }},
+                { type: "Feature", properties: { name: "제주", nameEn: "Jeju" }, geometry: { type: "Polygon", coordinates: [[[126.1,33.6],[126.9,33.6],[126.9,33.1],[126.1,33.1],[126.1,33.6]]] }}
+            ]
+        };
+
+        // 시도 이름 정규화
+        const sidoNameMap = {
+            '서울': '서울', '서울특별시': '서울',
+            '경기': '경기', '경기도': '경기',
+            '인천': '인천', '인천광역시': '인천',
+            '강원': '강원', '강원도': '강원', '강원특별자치도': '강원',
+            '충북': '충북', '충청북도': '충북',
+            '충남': '충남', '충청남도': '충남',
+            '대전': '대전', '대전광역시': '대전',
+            '세종': '세종', '세종특별자치시': '세종',
+            '전북': '전북', '전라북도': '전북', '전북특별자치도': '전북',
+            '전남': '전남', '전라남도': '전남',
+            '광주': '광주', '광주광역시': '광주',
+            '경북': '경북', '경상북도': '경북',
+            '경남': '경남', '경상남도': '경남',
+            '대구': '대구', '대구광역시': '대구',
+            '울산': '울산', '울산광역시': '울산',
+            '부산': '부산', '부산광역시': '부산',
+            '제주': '제주', '제주특별자치도': '제주', '제주도': '제주'
+        };
+
+        function normalizeSidoName(name) {
+            return sidoNameMap[name] || name;
+        }
+
+        function getCountColor(count) {
+            if (count >= 100) return '#1e3a8a';
+            if (count >= 50) return '#3b82f6';
+            if (count >= 10) return '#93c5fd';
+            return '#dbeafe';
+        }
+
+        function renderD3Map() {
+            const container = document.getElementById('d3MapContainer');
+            const svg = d3.select('#d3KoreaMap');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.selectAll('*').remove();
+
+            const sidoHierarchy = currentData.sido_hierarchy || {};
+            const tooltip = document.getElementById('mapTooltip');
+
+            // 프로젝션 설정
+            const projection = d3.geoMercator()
+                .center([127.5, 36.0])
+                .scale(width * 8)
+                .translate([width / 2, height / 2]);
+
+            const path = d3.geoPath().projection(projection);
+
+            // 지도 그리기
+            svg.selectAll('path')
+                .data(koreaGeoData.features)
+                .enter()
+                .append('path')
+                .attr('d', path)
+                .attr('fill', d => {
+                    const data = sidoHierarchy[d.properties.name] || {};
+                    return getCountColor(data.count || 0);
+                })
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 1.5)
+                .style('cursor', 'pointer')
+                .style('transition', 'all 0.2s ease')
+                .on('mouseover', function(event, d) {
+                    d3.select(this).attr('stroke', '#1e40af').attr('stroke-width', 3);
+                    const data = sidoHierarchy[d.properties.name] || {};
+                    tooltip.innerHTML = `
+                        <div style="font-weight:bold;margin-bottom:8px;font-size:14px;">📍 ${d.properties.name}</div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>건수:</span><strong>${(data.count || 0).toLocaleString()}건</strong></div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>매출:</span><strong>${formatCurrency(data.sales || 0)}</strong></div>
+                        <div style="display:flex;justify-content:space-between;"><span>시군구:</span><strong>${Object.keys(data.sigungu || {}).length}개</strong></div>
+                        <div style="margin-top:8px;font-size:11px;color:#94a3b8;">클릭하여 시군구 보기</div>
+                    `;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (event.offsetX + 15) + 'px';
+                    tooltip.style.top = (event.offsetY + 15) + 'px';
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5);
+                    tooltip.style.display = 'none';
+                })
+                .on('click', function(event, d) {
+                    drillDownToSido(d.properties.name);
+                });
+
+            // 시도명 라벨
+            svg.selectAll('text')
+                .data(koreaGeoData.features)
+                .enter()
+                .append('text')
+                .attr('x', d => path.centroid(d)[0])
+                .attr('y', d => path.centroid(d)[1])
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'middle')
+                .attr('font-size', '11px')
+                .attr('font-weight', '600')
+                .attr('fill', d => {
+                    const data = sidoHierarchy[d.properties.name] || {};
+                    return (data.count || 0) >= 50 ? '#fff' : '#334155';
+                })
+                .attr('pointer-events', 'none')
+                .text(d => d.properties.name);
+
+            // 요약 정보 표시
+            updateMapSummary();
+        }
+
+        function updateMapSummary() {
+            const sidoHierarchy = currentData.sido_hierarchy || {};
+            const summaryEl = document.getElementById('mapSummary');
+
+            if (currentMapLevel === 'sido') {
+                const totalCount = Object.values(sidoHierarchy).reduce((s, d) => s + (d.count || 0), 0);
+                const totalSales = Object.values(sidoHierarchy).reduce((s, d) => s + (d.sales || 0), 0);
+                const sidoCount = Object.keys(sidoHierarchy).length;
+                summaryEl.innerHTML = `
+                    <span style="white-space:nowrap;background:#dbeafe;padding:4px 10px;border-radius:4px;color:#1e40af;">전체: <strong style="color:#3b82f6;">${totalCount.toLocaleString()}건</strong></span>
+                    <span style="white-space:nowrap;background:#e0e7ff;padding:4px 10px;border-radius:4px;color:#3730a3;">매출: <strong>${(totalSales / 100000000).toFixed(1)}억</strong></span>
+                    <span style="white-space:nowrap;background:#fce7f3;padding:4px 10px;border-radius:4px;color:#9d174d;">시도: <strong>${sidoCount}개</strong></span>
+                `;
+            } else if (currentMapLevel === 'sigungu' && currentSido) {
+                const sidoData = sidoHierarchy[currentSido] || {};
+                const sigunguCount = Object.keys(sidoData.sigungu || {}).length;
+                summaryEl.innerHTML = `
+                    <span style="white-space:nowrap;background:#dbeafe;padding:4px 10px;border-radius:4px;color:#1e40af;">${currentSido}: <strong style="color:#3b82f6;">${(sidoData.count || 0).toLocaleString()}건</strong></span>
+                    <span style="white-space:nowrap;background:#e0e7ff;padding:4px 10px;border-radius:4px;color:#3730a3;">매출: <strong>${formatCurrency(sidoData.sales || 0)}</strong></span>
+                    <span style="white-space:nowrap;background:#fce7f3;padding:4px 10px;border-radius:4px;color:#9d174d;">시군구: <strong>${sigunguCount}개</strong></span>
+                `;
+            }
+        }
+
+        function drillDownToSido(sidoName) {
+            currentMapLevel = 'sigungu';
+            currentSido = sidoName;
+
+            document.getElementById('mapBackBtn').style.display = 'inline-block';
+            document.getElementById('mapBreadcrumb').textContent = `전국 > ${sidoName}`;
+            document.getElementById('mapTitle').textContent = `🗺️ ${sidoName} 시군구별 업체 현황`;
+
+            renderSigunguView(sidoName);
+            updateMapSummary();
+        }
+
+        function renderSigunguView(sidoName) {
+            const container = document.getElementById('d3MapContainer');
+            const sidoHierarchy = currentData.sido_hierarchy || {};
+            const sidoData = sidoHierarchy[sidoName] || {};
+            const sigunguData = sidoData.sigungu || {};
+            const tooltip = document.getElementById('mapTooltip');
+
+            // 시군구 리스트를 그리드로 표시
+            const sigunguList = Object.entries(sigunguData).sort((a, b) => b[1].count - a[1].count);
+
+            let html = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 10px;">`;
+            sigunguList.forEach(([name, data]) => {
+                const bgColor = getCountColor(data.count);
+                const textColor = data.count >= 50 ? '#fff' : '#334155';
+                html += `
+                    <div onclick="drillDownToSigungu('${sidoName}', '${name}')"
+                         style="background:${bgColor};color:${textColor};padding:16px;border-radius:10px;cursor:pointer;text-align:center;transition:transform 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.1);"
+                         onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${name}</div>
+                        <div style="font-size:20px;font-weight:700;">${data.count.toLocaleString()}<span style="font-size:12px;">건</span></div>
+                        <div style="font-size:11px;opacity:0.8;margin-top:4px;">${formatCurrency(data.sales)}</div>
+                    </div>
+                `;
+            });
+
+            if (sigunguList.length === 0) {
+                html += `<div style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:40px;">시군구 데이터가 없습니다</div>`;
+            }
+            html += '</div>';
+
+            container.innerHTML = html;
+
+            // 상세 패널에 시도 정보 표시
+            showSidoDetail(sidoName, sidoData);
+        }
+
+        function drillDownToSigungu(sidoName, sigunguName) {
+            currentMapLevel = 'detail';
+            currentSigungu = sigunguName;
+
+            document.getElementById('mapBreadcrumb').textContent = `전국 > ${sidoName} > ${sigunguName}`;
+            document.getElementById('mapTitle').textContent = `🗺️ ${sigunguName} 담당자별 업체 현황`;
+
+            renderManagerView(sidoName, sigunguName);
+        }
+
+        function renderManagerView(sidoName, sigunguName) {
+            const container = document.getElementById('d3MapContainer');
+            const sidoHierarchy = currentData.sido_hierarchy || {};
+            const sigunguData = sidoHierarchy[sidoName]?.sigungu?.[sigunguName] || {};
+            const managers = sigunguData.managers || [];
+
+            let html = `<div style="padding: 10px;">`;
+            html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <span style="white-space:nowrap;background:#dbeafe;padding:4px 10px;border-radius:4px;color:#1e40af;">${sigunguName}: <strong style="color:#3b82f6;">${(sigunguData.count || 0).toLocaleString()}건</strong></span>
+                <span style="white-space:nowrap;background:#e0e7ff;padding:4px 10px;border-radius:4px;color:#3730a3;">매출: <strong>${formatCurrency(sigunguData.sales || 0)}</strong></span>
+                <span style="white-space:nowrap;background:#fce7f3;padding:4px 10px;border-radius:4px;color:#9d174d;">담당자: <strong>${managers.length}명</strong></span>
+            </div>`;
+
+            html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;">`;
+            managers.forEach((mgr, idx) => {
+                const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`;
+                html += `
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px;border-radius:10px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="font-size:16px;">${rankIcon}</span>
+                            <span style="font-weight:600;font-size:14px;">${mgr.name}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+                            <span style="color:#64748b;">건수</span>
+                            <strong>${mgr.count.toLocaleString()}건</strong>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:13px;">
+                            <span style="color:#64748b;">매출</span>
+                            <strong style="color:#3b82f6;">${formatCurrency(mgr.sales)}</strong>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (managers.length === 0) {
+                html += `<div style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:40px;">담당자 데이터가 없습니다</div>`;
+            }
+            html += '</div></div>';
+
+            container.innerHTML = html;
+
+            // 상세 패널 업데이트
+            showSigunguDetail(sidoName, sigunguName, sigunguData);
+        }
+
+        function showSidoDetail(sidoName, data) {
+            document.getElementById('regionDetailTitle').textContent = `📍 ${sidoName} 상세 정보`;
+            document.getElementById('regionDetailBadge').textContent = currentData.year + '년';
+
+            const managers = data.managers || [];
+            const sigunguList = Object.entries(data.sigungu || {}).sort((a, b) => b[1].count - a[1].count);
+
+            let html = `
+                <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;padding:20px;border-radius:12px;margin-bottom:16px;">
+                    <div style="font-size:24px;font-weight:700;margin-bottom:8px;">${(data.count || 0).toLocaleString()}건</div>
+                    <div style="font-size:14px;opacity:0.9;">총 매출: ${formatCurrency(data.sales || 0)}</div>
+                </div>
+
+                <div style="font-weight:600;margin-bottom:10px;color:#334155;">📊 시군구별 TOP 5</div>
+                <div style="margin-bottom:16px;">
+            `;
+
+            sigunguList.slice(0, 5).forEach(([name, sgData], idx) => {
+                const percent = data.count > 0 ? (sgData.count / data.count * 100) : 0;
+                html += `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <span style="width:20px;text-align:center;font-weight:600;color:#6366f1;">${idx + 1}</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:500;">${name}</div>
+                            <div style="font-size:11px;color:#64748b;">${sgData.count.toLocaleString()}건 · ${formatCurrency(sgData.sales)}</div>
+                        </div>
+                        <div style="width:60px;background:#e2e8f0;height:6px;border-radius:3px;overflow:hidden;">
+                            <div style="width:${percent}%;height:100%;background:#6366f1;border-radius:3px;"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>
+                <div style="font-weight:600;margin-bottom:10px;color:#334155;">👤 담당자별 TOP 5</div>
+            `;
+
+            managers.slice(0, 5).forEach((mgr, idx) => {
+                html += `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                        <span style="width:20px;text-align:center;font-weight:600;color:#10b981;">${idx + 1}</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:500;">${mgr.name}</div>
+                            <div style="font-size:11px;color:#64748b;">${mgr.count.toLocaleString()}건 · ${formatCurrency(mgr.sales)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('regionDetailBody').innerHTML = html;
+        }
+
+        function showSigunguDetail(sidoName, sigunguName, data) {
+            document.getElementById('regionDetailTitle').textContent = `📍 ${sigunguName} 상세 정보`;
+            document.getElementById('regionDetailBadge').textContent = `${sidoName} · ${currentData.year}년`;
+
+            const managers = data.managers || [];
+            const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+
+            let html = `
+                <div style="background:linear-gradient(135deg,#10b981,#14b8a6);color:white;padding:20px;border-radius:12px;margin-bottom:16px;">
+                    <div style="font-size:24px;font-weight:700;margin-bottom:8px;">${(data.count || 0).toLocaleString()}건</div>
+                    <div style="font-size:14px;opacity:0.9;">매출: ${formatCurrency(data.sales || 0)}</div>
+                    <div style="font-size:13px;opacity:0.8;margin-top:4px;">건당 단가: ${formatCurrency(Math.round(avgPrice))}</div>
+                </div>
+
+                <div style="font-weight:600;margin-bottom:10px;color:#334155;">👤 담당자별 현황</div>
+            `;
+
+            managers.forEach((mgr, idx) => {
+                const mgrPercent = data.count > 0 ? (mgr.count / data.count * 100) : 0;
+                html += `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#f8fafc;border-radius:8px;margin-bottom:8px;">
+                        <span style="width:24px;height:24px;background:#6366f1;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">${idx + 1}</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;">${mgr.name}</div>
+                            <div style="display:flex;gap:12px;font-size:12px;color:#64748b;margin-top:2px;">
+                                <span>${mgr.count.toLocaleString()}건 (${mgrPercent.toFixed(1)}%)</span>
+                                <span>${formatCurrency(mgr.sales)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (managers.length === 0) {
+                html += `<div style="text-align:center;color:#94a3b8;padding:20px;">담당자 데이터가 없습니다</div>`;
+            }
+
+            document.getElementById('regionDetailBody').innerHTML = html;
+        }
+
+        function mapDrillUp() {
+            if (currentMapLevel === 'detail') {
+                currentMapLevel = 'sigungu';
+                currentSigungu = null;
+                document.getElementById('mapBreadcrumb').textContent = `전국 > ${currentSido}`;
+                document.getElementById('mapTitle').textContent = `🗺️ ${currentSido} 시군구별 업체 현황`;
+                renderSigunguView(currentSido);
+            } else if (currentMapLevel === 'sigungu') {
+                currentMapLevel = 'sido';
+                currentSido = null;
+                document.getElementById('mapBackBtn').style.display = 'none';
+                document.getElementById('mapBreadcrumb').textContent = '전국';
+                document.getElementById('mapTitle').textContent = '🗺️ 전국 시도별 업체 현황';
+                document.getElementById('d3MapContainer').innerHTML = '<svg id="d3KoreaMap" style="width: 100%; height: 100%;"></svg><div id="mapTooltip" style="position: absolute; display: none; background: rgba(30,41,59,0.95); color: #e2e8f0; padding: 12px 16px; border-radius: 8px; font-size: 12px; pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 250px;"></div>';
+                renderD3Map();
+
+                // 상세 패널 초기화
+                document.getElementById('regionDetailTitle').textContent = '📍 지역 상세 정보';
+                document.getElementById('regionDetailBadge').textContent = '지역 선택';
+                document.getElementById('regionDetailBody').innerHTML = `
+                    <div style="text-align: center; color: #94a3b8; padding: 60px 20px;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">🗺️</div>
+                        <div style="font-size: 14px;">좌측 지도에서 지역을 클릭하면<br>상세 정보가 표시됩니다.</div>
+                    </div>
+                `;
+            }
+            updateMapSummary();
+        }
+
         function updateKoreaMap(regionData) {
-            const maxSales = Math.max(...regionData.map(r => r.sales), 1);
-
-            // 시/도 이름 매핑 (데이터 지역명 → SVG ID)
-            const sidoMap = {
-                '서울': '서울', '서울특별시': '서울',
-                '경기': '경기', '경기도': '경기',
-                '인천': '인천', '인천광역시': '인천',
-                '강원': '강원', '강원도': '강원', '강원특별자치도': '강원',
-                '충북': '충북', '충청북도': '충북',
-                '충남': '충남', '충청남도': '충남',
-                '대전': '대전', '대전광역시': '대전',
-                '세종': '세종', '세종특별자치시': '세종',
-                '전북': '전북', '전라북도': '전북', '전북특별자치도': '전북',
-                '전남': '전남', '전라남도': '전남',
-                '광주': '광주', '광주광역시': '광주',
-                '경북': '경북', '경상북도': '경북',
-                '경남': '경남', '경상남도': '경남',
-                '대구': '대구', '대구광역시': '대구',
-                '울산': '울산', '울산광역시': '울산',
-                '부산': '부산', '부산광역시': '부산',
-                '제주': '제주', '제주특별자치도': '제주', '제주도': '제주'
-            };
-
-            // 지역별 매출 합산 (시/도 기준)
-            const sidoSales = {};
-            regionData.forEach(r => {
-                const sido = sidoMap[r.sido] || sidoMap[r.name] || r.sido;
-                if (sido) {
-                    if (!sidoSales[sido]) sidoSales[sido] = 0;
-                    sidoSales[sido] += r.sales;
-                }
-            });
-
-            const maxSidoSales = Math.max(...Object.values(sidoSales), 1);
-
-            // SVG 경로 색상 업데이트
-            document.querySelectorAll('.region-path').forEach(path => {
-                const regionName = path.dataset.region;
-                const sales = sidoSales[regionName] || 0;
-
-                // 색상 레벨 결정
-                path.classList.remove('level-1', 'level-2', 'level-3', 'level-4', 'selected');
-                if (sales >= 1000000000) { // 10억 이상
-                    path.classList.add('level-4');
-                } else if (sales >= 500000000) { // 5억 이상
-                    path.classList.add('level-3');
-                } else if (sales >= 100000000) { // 1억 이상
-                    path.classList.add('level-2');
-                } else {
-                    path.classList.add('level-1');
-                }
-            });
+            // D3.js 지도 렌더링
+            renderD3Map();
         }
 
         function setupMapClickEvents(regionData, clients) {
-            const regionDataMap = Object.fromEntries(regionData.map(r => [r.name, r]));
-            const sidoDataMap = {};
-
-            // 시도별 데이터 집계
-            regionData.forEach(r => {
-                const sido = r.sido || r.name;
-                if (!sidoDataMap[sido]) {
-                    sidoDataMap[sido] = { sales: 0, count: 0, growth: 0, lastYearSales: 0, regions: [] };
-                }
-                sidoDataMap[sido].sales += r.sales;
-                sidoDataMap[sido].count += r.count;
-                sidoDataMap[sido].lastYearSales += r.lastYearSales;
-                sidoDataMap[sido].growth += r.growth;
-                sidoDataMap[sido].regions.push(r.name);
-            });
-
-            document.querySelectorAll('.region-path').forEach(path => {
-                path.addEventListener('click', function() {
-                    const regionName = this.dataset.region;
-
-                    // 선택 상태 토글
-                    document.querySelectorAll('.region-path').forEach(p => p.classList.remove('selected'));
-                    this.classList.add('selected');
-                    selectedRegion = regionName;
-
-                    showRegionDetail(regionName, sidoDataMap[regionName] || regionDataMap[regionName], clients);
-                });
-            });
+            // D3.js에서 이벤트를 직접 처리하므로 별도 설정 불필요
         }
 
         function showRegionDetail(regionName, data, clients) {

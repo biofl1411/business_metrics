@@ -2735,7 +2735,7 @@ HTML_TEMPLATE = '''
         .sortable-table th.sortable:hover { background: var(--gray-100); }
 
         /* 모달 스타일 */
-        .modal-overlay {
+        .modal-overlay, .modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -2747,6 +2747,7 @@ HTML_TEMPLATE = '''
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
         }
         .modal-content {
             background: white;
@@ -2756,6 +2757,18 @@ HTML_TEMPLATE = '''
             max-height: 85vh;
             overflow-y: auto;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalSlideIn 0.3s ease-out;
+            transform-origin: center center;
+        }
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
         }
         .modal-header {
             display: flex;
@@ -14904,6 +14917,11 @@ HTML_TEMPLATE = '''
         function closeMonthModal() {
             document.getElementById('monthModal').style.display = 'none';
         }
+
+        // 모달 외부 클릭 시 닫기
+        document.getElementById('monthModal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeMonthModal();
+        });
 
         // 테이블 정렬 함수
         function sortManagerTable(column) {

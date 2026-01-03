@@ -10282,13 +10282,61 @@ HTML_TEMPLATE = '''
                     const monthIdx = dataPoints[0]?.dataIndex;
                     const monthLabel = labels[monthIdx];
 
+                    // 클릭한 포인트가 비교 연도인지 확인
+                    const clickedPoint = dataPoints[0];
+                    const isClickedComparison = clickedPoint?.dataset?.isComparison;
+                    const displayYear = isClickedComparison ? selectedCompareYear : currentData.year;
+
                     // 현재 연도 데이터만 필터링
                     const currentYearPoints = dataPoints.filter(p => !p.dataset.isComparison && p.dataset.label !== '평균');
                     const compYearPoints = dataPoints.filter(p => p.dataset.isComparison);
 
-                    let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${currentData.year}년 ${monthLabel}</div>`;
+                    let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${displayYear}년 ${monthLabel}</div>`;
 
-                    currentYearPoints.forEach(point => {
+                    // 비교 연도 포인트 클릭 시 비교 연도 데이터 표시
+                    if (isClickedComparison && compYearPoints.length > 0) {
+                        compYearPoints.forEach(point => {
+                            const ds = point.dataset;
+                            const rawLabel = ds.label || '';
+                            const branchName = rawLabel.replace(` (${selectedCompareYear})`, '');
+                            const value = point.raw || 0;
+
+                            // 비교 연도의 월별 데이터 가져오기
+                            const compMonthMap = Object.fromEntries(compareData?.by_month || []);
+                            const compMonthData = compMonthMap[monthIdx + 1];
+                            const branchData = compMonthData?.byBranch?.[branchName];
+                            const count = branchData?.count || 0;
+                            const perCase = count > 0 ? value / count : 0;
+
+                            const borderColor = ds.borderColor || '#94a3b8';
+                            html += `<div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid ${borderColor};">`;
+                            html += `<div style="font-size: 15px; font-weight: bold; margin-bottom: 8px; color: ${borderColor};">🏢 ${branchName}</div>`;
+
+                            // 기본 정보
+                            html += `<div style="margin-bottom: 4px;">💰 매출: <strong>${(value / 100000000).toFixed(2)}억</strong></div>`;
+                            html += `<div style="margin-bottom: 4px;">📋 건수: ${count.toLocaleString()}건 | 건당: ${formatCurrency(perCase)}</div>`;
+
+                            // 현재 연도와 비교
+                            const currentMonthMap = Object.fromEntries(currentData?.by_month || []);
+                            const currentMonthData = currentMonthMap[monthIdx + 1];
+                            const currentBranchData = currentMonthData?.byBranch?.[branchName];
+                            const currentSales = currentBranchData?.sales || 0;
+
+                            if (currentSales > 0) {
+                                const diff = currentSales - value;
+                                const diffPct = value > 0 ? (diff / value * 100) : 0;
+                                const diffColor = diff >= 0 ? '#10b981' : '#ef4444';
+                                const diffSign = diff >= 0 ? '+' : '';
+                                html += `<div style="color: #94a3b8; margin: 8px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2);">── ${currentData.year}년 대비 ──</div>`;
+                                html += `<div style="margin-bottom: 4px;">📆 ${currentData.year}년 동월: <span style="color: #60a5fa; font-weight: bold;">${(currentSales / 100000000).toFixed(2)}억</span></div>`;
+                                html += `<div style="margin-bottom: 4px;">📊 변화: <span style="color: ${diffColor}; font-weight: bold;">${diffSign}${diffPct.toFixed(1)}% (${diffSign}${(diff / 10000).toFixed(0)}만)</span></div>`;
+                            }
+                            html += '</div>';
+                        });
+                        tooltipEl.innerHTML = html;
+                    } else {
+                        // 현재 연도 포인트 클릭 시 기존 로직
+                        currentYearPoints.forEach(point => {
                         const ds = point.dataset;
                         const branchName = ds.label;
                         const value = point.raw || 0;
@@ -10437,6 +10485,7 @@ HTML_TEMPLATE = '''
                     });
 
                     tooltipEl.innerHTML = html;
+                    }
                 }
 
                 // 위치 계산 (짤림 방지)

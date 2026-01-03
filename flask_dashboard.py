@@ -16570,35 +16570,34 @@ HTML_TEMPLATE = '''
                 const cardInfo = kpiCardTitles[id] || { title: '상세', desc: '', color: '#6366f1' };
                 if (overlay) {
                     const aboveAvgCount = sorted.filter(d => isLowerBetter ? d.value <= avgValue : d.value >= avgValue).length;
-                    const belowAvgCount = sorted.length - aboveAvgCount;
-                    overlay.innerHTML = `
-                        <div style="background: linear-gradient(135deg, ${cardInfo.color} 0%, ${cardInfo.color}cc 100%); color: white; padding: 10px 14px; border-radius: 10px 10px 0 0; margin: -12px -12px 12px -12px;">
-                            <div style="font-size: 13px; font-weight: 700;">${cardInfo.title}</div>
-                            <div style="font-size: 10px; opacity: 0.9;">${cardInfo.desc}</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #f8fafc; border-radius: 6px;">
-                            <div style="text-align: center;">
-                                <div style="font-size: 16px; font-weight: 700; color: ${cardInfo.color};">${valueFormatter(avgValue)}</div>
-                                <div style="font-size: 10px; color: #64748b;">전체 평균</div>
-                            </div>
-                            <div style="text-align: center;">
-                                <div style="font-size: 16px; font-weight: 700; color: #10b981;">${aboveAvgCount}명</div>
-                                <div style="font-size: 10px; color: #64748b;">평균 이상</div>
-                            </div>
-                        </div>
-                        <div style="font-size: 10px; color: #64748b; margin-bottom: 6px;">📊 담당자별 순위</div>
-                        <div style="max-height: 200px; overflow-y: auto;">
-                        ${sorted.map((d, i) => {
-                            const isAboveAvg = isLowerBetter ? d.value <= avgValue : d.value >= avgValue;
-                            const bgColor = isAboveAvg ? 'rgba(16,185,129,0.1)' : 'transparent';
-                            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
-                            return `<div style="display: flex; justify-content: space-between; padding: 6px 8px; background: ${bgColor}; border-radius: 4px; margin-bottom: 2px;">
-                                <span style="font-weight: ${i < 3 ? '600' : '400'};">${medal} ${d.name}</span>
-                                <span style="color: ${isAboveAvg ? '#10b981' : '#64748b'}; font-weight: 600;">${valueFormatter(d.value)}</span>
-                            </div>`;
-                        }).join('')}
-                        </div>
-                    `;
+                    let html = '';
+                    html += '<div style="background: linear-gradient(135deg, ' + cardInfo.color + ' 0%, ' + cardInfo.color + 'cc 100%); color: white; padding: 10px 14px; border-radius: 10px 10px 0 0; margin: -12px -12px 12px -12px;">';
+                    html += '<div style="font-size: 13px; font-weight: 700;">' + cardInfo.title + '</div>';
+                    html += '<div style="font-size: 10px; opacity: 0.9;">' + cardInfo.desc + '</div>';
+                    html += '</div>';
+                    html += '<div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #f8fafc; border-radius: 6px;">';
+                    html += '<div style="text-align: center;">';
+                    html += '<div style="font-size: 16px; font-weight: 700; color: ' + cardInfo.color + ';">' + valueFormatter(avgValue) + '</div>';
+                    html += '<div style="font-size: 10px; color: #64748b;">전체 평균</div>';
+                    html += '</div>';
+                    html += '<div style="text-align: center;">';
+                    html += '<div style="font-size: 16px; font-weight: 700; color: #10b981;">' + aboveAvgCount + '명</div>';
+                    html += '<div style="font-size: 10px; color: #64748b;">평균 이상</div>';
+                    html += '</div>';
+                    html += '</div>';
+                    html += '<div style="font-size: 10px; color: #64748b; margin-bottom: 6px;">📊 담당자별 순위</div>';
+                    html += '<div style="max-height: 200px; overflow-y: auto;">';
+                    sorted.forEach(function(d, i) {
+                        var isAboveAvg = isLowerBetter ? d.value <= avgValue : d.value >= avgValue;
+                        var bgColor = isAboveAvg ? 'rgba(16,185,129,0.1)' : 'transparent';
+                        var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+                        html += '<div style="display: flex; justify-content: space-between; padding: 6px 8px; background: ' + bgColor + '; border-radius: 4px; margin-bottom: 2px;">';
+                        html += '<span style="font-weight: ' + (i < 3 ? '600' : '400') + ';">' + medal + ' ' + d.name + '</span>';
+                        html += '<span style="color: ' + (isAboveAvg ? '#10b981' : '#64748b') + '; font-weight: 600;">' + valueFormatter(d.value) + '</span>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                    overlay.innerHTML = html;
                 }
             };
 

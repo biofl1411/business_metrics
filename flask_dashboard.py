@@ -4609,10 +4609,10 @@ HTML_TEMPLATE = '''
         let currentTab = 'main';
         let managerTableSort = { column: null, direction: 'desc' };
 
-        // 툴팁 hover 상태 관리 (스크롤 가능하도록 + 민감도 감소)
+        // 툴팁 hover 상태 관리 (스크롤 가능하도록)
         const tooltipHoverState = {};
         const tooltipHideTimers = {};
-        const TOOLTIP_HIDE_DELAY = 350; // ms - 툴팁 숨김 지연
+        const TOOLTIP_HIDE_DELAY = 400; // ms - 툴팁 위에 마우스 있을 때만 적용
 
         function setupTooltipHover(tooltipEl) {
             if (!tooltipEl || tooltipEl._hoverSetup) return;
@@ -4629,11 +4629,12 @@ HTML_TEMPLATE = '''
             });
             tooltipEl.addEventListener('mouseleave', () => {
                 tooltipHoverState[tooltipEl.id] = false;
-                // 지연 후 숨김
+                // 툴팁에서 벗어나면 지연 후 숨김 (스크롤 후 차트로 돌아갈 시간)
                 tooltipHideTimers[tooltipEl.id] = setTimeout(() => {
                     if (!tooltipHoverState[tooltipEl.id]) {
                         tooltipEl.style.opacity = 0;
                     }
+                    tooltipHideTimers[tooltipEl.id] = null;
                 }, TOOLTIP_HIDE_DELAY);
             });
         }
@@ -4641,17 +4642,20 @@ HTML_TEMPLATE = '''
             return tooltipEl && tooltipHoverState[tooltipEl.id];
         }
 
-        // 툴팁 숨김 지연 처리
+        // 툴팁 즉시 숨김 (차트 데이터 영역 벗어날 때)
         function hideTooltipWithDelay(tooltipEl) {
             if (!tooltipEl) return;
+            // 툴팁 위에 마우스가 있으면 숨기지 않음
+            if (tooltipHoverState[tooltipEl.id]) return;
+
+            // 타이머가 있으면 취소
             if (tooltipHideTimers[tooltipEl.id]) {
                 clearTimeout(tooltipHideTimers[tooltipEl.id]);
+                tooltipHideTimers[tooltipEl.id] = null;
             }
-            tooltipHideTimers[tooltipEl.id] = setTimeout(() => {
-                if (!tooltipHoverState[tooltipEl.id]) {
-                    tooltipEl.style.opacity = 0;
-                }
-            }, TOOLTIP_HIDE_DELAY);
+
+            // 즉시 숨김
+            tooltipEl.style.opacity = 0;
         }
 
         // 유틸리티 함수

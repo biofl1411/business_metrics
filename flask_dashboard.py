@@ -1625,7 +1625,7 @@ def process_data(data, purpose_filter=None):
 
     return {
         'by_manager': [(m, {'sales': d['sales'], 'count': d['count'], 'urgent': d.get('urgent', 0), 'urgent_by_purpose': d.get('urgent_by_purpose', {}), 'by_purpose': d.get('by_purpose', {})}) for m, d in sorted_managers],
-        'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': len(v['managers']), 'by_purpose': v.get('by_purpose', {})})
+        'by_branch': [(k, {'sales': v['sales'], 'count': v['count'], 'managers': list(v['managers']), 'by_purpose': v.get('by_purpose', {})})
                       for k, v in sorted_branches],
         'by_month': sorted(by_month.items()),
         'by_urgent_month': sorted(by_urgent_month.items()),

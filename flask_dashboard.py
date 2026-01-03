@@ -4023,17 +4023,35 @@ HTML_TEMPLATE = '''
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📈 월별 매출 추이</div>
+                        <div class="chart-controls" style="display: flex; gap: 8px;">
+                            <select id="monthlySalesPurposeFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                                <option value="전체">전체 목적</option>
+                            </select>
+                            <select id="monthlySalesManagerFilter" onchange="updateMonthlyChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                                <option value="전체">전체 담당</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-legend" id="monthlyLegend" style="display: none;"></div>
+                        <div class="chart-summary" id="monthlySalesSummary" style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
                         <div class="chart-container" style="height: 350px;"><canvas id="monthlyChart"></canvas></div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📊 월별 건수 추이</div>
+                        <div class="chart-controls" style="display: flex; gap: 8px;">
+                            <select id="monthlyCountPurposeFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                                <option value="전체">전체 목적</option>
+                            </select>
+                            <select id="monthlyCountManagerFilter" onchange="updateMonthlyCountChartWithFilter()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                                <option value="전체">전체 담당</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
+                        <div class="chart-summary" id="monthlyCountSummary" style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; justify-content: flex-end; flex-wrap: wrap;"></div>
                         <div class="chart-container" style="height: 350px;"><canvas id="monthlyCountChart"></canvas></div>
                     </div>
                 </div>
@@ -12115,15 +12133,105 @@ HTML_TEMPLATE = '''
 
         // 월별 탭 전체 업데이트
         function updateMonthlyTab() {
+            initMonthlyChartFilters();
             updateMonthlyKPI();
-            updateMonthlyChart();
-            updateMonthlyCountChart();
+            updateMonthlyChartWithFilter();
+            updateMonthlyCountChartWithFilter();
             updateGrowthTrendChart();
             updateQuarterlyChart();
             updateAvgPriceChart();
             updateYoyChart();
             updateHeatmap();
             updateMonthlyDetailTable();
+        }
+
+        // 월별 차트 필터 초기화
+        function initMonthlyChartFilters() {
+            const purposes = currentData.by_purpose || [];
+            const managers = currentData.by_manager || [];
+
+            // 매출 차트 필터
+            const salesPurposeFilter = document.getElementById('monthlySalesPurposeFilter');
+            const salesManagerFilter = document.getElementById('monthlySalesManagerFilter');
+            // 건수 차트 필터
+            const countPurposeFilter = document.getElementById('monthlyCountPurposeFilter');
+            const countManagerFilter = document.getElementById('monthlyCountManagerFilter');
+
+            if (salesPurposeFilter && salesManagerFilter && countPurposeFilter && countManagerFilter) {
+                // 현재 선택값 저장
+                const salesPurposeVal = salesPurposeFilter.value;
+                const salesManagerVal = salesManagerFilter.value;
+                const countPurposeVal = countPurposeFilter.value;
+                const countManagerVal = countManagerFilter.value;
+
+                // 목적 필터 옵션
+                const purposeOptions = '<option value="전체">전체 목적</option>' +
+                    purposes.map(p => `<option value="${p[0]}">${p[0]}</option>`).join('');
+                salesPurposeFilter.innerHTML = purposeOptions;
+                countPurposeFilter.innerHTML = purposeOptions;
+
+                // 담당자 필터 옵션
+                const managerOptions = '<option value="전체">전체 담당</option>' +
+                    managers.map(m => `<option value="${m[0]}">${m[0]}</option>`).join('');
+                salesManagerFilter.innerHTML = managerOptions;
+                countManagerFilter.innerHTML = managerOptions;
+
+                // 선택값 복원
+                if (salesPurposeVal) salesPurposeFilter.value = salesPurposeVal;
+                if (salesManagerVal) salesManagerFilter.value = salesManagerVal;
+                if (countPurposeVal) countPurposeFilter.value = countPurposeVal;
+                if (countManagerVal) countManagerFilter.value = countManagerVal;
+            }
+        }
+
+        // 필터된 월별 데이터 가져오기
+        function getFilteredMonthlyData(purposeFilter, managerFilter) {
+            const monthly = currentData.by_month || [];
+            const monthMap = Object.fromEntries(monthly);
+
+            // 필터 없으면 원본 반환
+            if (purposeFilter === '전체' && managerFilter === '전체') {
+                return monthMap;
+            }
+
+            // 필터링된 데이터 계산
+            const filteredMap = {};
+            for (let m = 1; m <= 12; m++) {
+                const data = monthMap[m];
+                if (data) {
+                    let sales = 0, count = 0;
+
+                    // 목적별 필터
+                    if (purposeFilter !== '전체' && managerFilter === '전체') {
+                        const purposeData = data.byPurpose?.[purposeFilter];
+                        if (purposeData) {
+                            sales = purposeData.sales || 0;
+                            count = purposeData.count || 0;
+                        }
+                    }
+                    // 담당자별 필터
+                    else if (purposeFilter === '전체' && managerFilter !== '전체') {
+                        const managerData = data.byManager?.[managerFilter];
+                        if (managerData) {
+                            sales = managerData.sales || 0;
+                            count = managerData.count || 0;
+                        }
+                    }
+                    // 목적 + 담당자 필터 (근사치)
+                    else {
+                        const purposeData = data.byPurpose?.[purposeFilter];
+                        const managerData = data.byManager?.[managerFilter];
+                        if (purposeData && managerData) {
+                            // 둘 중 작은 값 사용 (교집합 근사)
+                            sales = Math.min(purposeData.sales || 0, managerData.sales || 0);
+                            count = Math.min(purposeData.count || 0, managerData.count || 0);
+                        }
+                    }
+
+                    filteredMap[m] = { sales, count };
+                }
+            }
+            return filteredMap;
         }
 
         // 월별 KPI 오버레이 데이터 저장
@@ -12288,33 +12396,74 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // 월별 매출 차트 (필터 적용)
+        function updateMonthlyChartWithFilter() {
+            const purposeFilter = document.getElementById('monthlySalesPurposeFilter')?.value || '전체';
+            const managerFilter = document.getElementById('monthlySalesManagerFilter')?.value || '전체';
+            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
+
+            // 요약 정보 계산
+            let totalSales = 0, totalCount = 0, monthCount = 0;
+            for (let m = 1; m <= 12; m++) {
+                const data = filteredMap[m];
+                if (data && data.sales > 0) {
+                    totalSales += data.sales;
+                    totalCount += data.count;
+                    monthCount++;
+                }
+            }
+            const avgSales = monthCount > 0 ? totalSales / monthCount : 0;
+            const avgCount = monthCount > 0 ? totalCount / monthCount : 0;
+            const avgPrice = totalCount > 0 ? totalSales / totalCount : 0;
+
+            // 요약 정보 표시
+            const summaryEl = document.getElementById('monthlySalesSummary');
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">총매출: <strong>${(totalSales / 100000000).toFixed(1)}억</strong></span>
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">총건수: <strong>${totalCount.toLocaleString()}건</strong></span>
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">평균단가: <strong>${Math.round(avgPrice / 10000).toLocaleString()}만</strong></span>
+                `;
+            }
+
+            // 차트 업데이트
+            updateMonthlyChart(purposeFilter, managerFilter);
+        }
+
         // 월별 매출 차트
-        function updateMonthlyChart() {
+        function updateMonthlyChart(purposeFilter = '전체', managerFilter = '전체') {
             const monthly = currentData.by_month || [];
             const ctx = document.getElementById('monthlyChart');
             if (!ctx) return;
             if (charts.monthly) charts.monthly.destroy();
 
             const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-            const monthMap = Object.fromEntries(monthly);
+            const originalMonthMap = Object.fromEntries(monthly);
+            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
+            const monthMap = (purposeFilter === '전체' && managerFilter === '전체') ? originalMonthMap : filteredMap;
             const compMonthMap = compareData ? Object.fromEntries(compareData.by_month || []) : {};
 
             // 월별 데이터 배열 생성
             const monthlyData = labels.map((label, i) => {
                 const m = i + 1;
-                const data = monthMap[m] || { sales: 0, count: 0, byPurpose: {}, byManager: {} };
+                const origData = originalMonthMap[m] || { sales: 0, count: 0, byPurpose: {}, byManager: {} };
+                const filtData = monthMap[m] || { sales: 0, count: 0 };
                 const compData = compMonthMap[m] || { sales: 0, count: 0, byPurpose: {}, byManager: {} };
-                const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+
+                // 필터된 데이터가 있으면 사용, 아니면 원본 사용
+                const sales = filtData.sales || 0;
+                const count = filtData.count || 0;
+                const avgPrice = count > 0 ? sales / count : 0;
                 const compAvgPrice = compData.count > 0 ? compData.sales / compData.count : 0;
 
                 return {
                     month: m,
                     label,
-                    sales: data.sales,
-                    count: data.count,
+                    sales,
+                    count,
                     avgPrice,
-                    byPurpose: data.byPurpose || {},
-                    byManager: data.byManager || {},
+                    byPurpose: origData.byPurpose || {},
+                    byManager: origData.byManager || {},
                     compSales: compData.sales,
                     compCount: compData.count,
                     compAvgPrice,
@@ -12748,14 +12897,49 @@ HTML_TEMPLATE = '''
             });
         }
 
+        // 월별 건수 차트 (필터 적용)
+        function updateMonthlyCountChartWithFilter() {
+            const purposeFilter = document.getElementById('monthlyCountPurposeFilter')?.value || '전체';
+            const managerFilter = document.getElementById('monthlyCountManagerFilter')?.value || '전체';
+            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
+
+            // 요약 정보 계산
+            let totalSales = 0, totalCount = 0, monthCount = 0;
+            for (let m = 1; m <= 12; m++) {
+                const data = filteredMap[m];
+                if (data && data.count > 0) {
+                    totalSales += data.sales || 0;
+                    totalCount += data.count;
+                    monthCount++;
+                }
+            }
+            const avgCount = monthCount > 0 ? totalCount / monthCount : 0;
+            const avgPrice = totalCount > 0 ? totalSales / totalCount : 0;
+
+            // 요약 정보 표시
+            const summaryEl = document.getElementById('monthlyCountSummary');
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">총건수: <strong>${totalCount.toLocaleString()}건</strong></span>
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">평균건수: <strong>${Math.round(avgCount).toLocaleString()}건</strong></span>
+                    <span style="background: #fef08a; padding: 4px 10px; border-radius: 4px; color: #854d0e;">평균단가: <strong>${Math.round(avgPrice / 10000).toLocaleString()}만</strong></span>
+                `;
+            }
+
+            // 차트 업데이트
+            updateMonthlyCountChart(purposeFilter, managerFilter);
+        }
+
         // 월별 건수 차트
-        function updateMonthlyCountChart() {
+        function updateMonthlyCountChart(purposeFilter = '전체', managerFilter = '전체') {
             const monthly = currentData.by_month || [];
             const ctx = document.getElementById('monthlyCountChart').getContext('2d');
             if (charts.monthlyCount) charts.monthlyCount.destroy();
 
             const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-            const monthMap = Object.fromEntries(monthly);
+            const originalMonthMap = Object.fromEntries(monthly);
+            const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
+            const monthMap = (purposeFilter === '전체' && managerFilter === '전체') ? originalMonthMap : filteredMap;
             const data = labels.map((_, i) => monthMap[i+1]?.count || 0);
             const validMonths = data.filter(c => c > 0);
             const totalCount = data.reduce((s, v) => s + v, 0);

@@ -9026,7 +9026,8 @@ HTML_TEMPLATE = '''
 
         // ====== 팀별 탭 관련 함수 ======
         function updateTeamTab() {
-            const branches = currentData.by_branch || [];
+            // "기타" 팀 제외
+            const branches = (currentData.by_branch || []).filter(b => b[0] !== '기타');
             if (branches.length === 0) return;
 
             const totalBranches = branches.length;
@@ -9046,7 +9047,8 @@ HTML_TEMPLATE = '''
 
             // 비교년도 팀 수
             if (compareData && compareData.by_branch) {
-                const compBranches = compareData.by_branch.length;
+                const compBranchesFiltered = compareData.by_branch.filter(b => b[0] !== '기타');
+                const compBranches = compBranchesFiltered.length;
                 const diff = totalBranches - compBranches;
                 const diffText = diff > 0 ? `+${diff}` : diff.toString();
                 document.getElementById('teamTotalBranchesCompare').textContent = `${compareData.year}년: ${compBranches}개 (${diffText})`;
@@ -9072,8 +9074,9 @@ HTML_TEMPLATE = '''
 
             // 비교년도 평균
             if (compareData && compareData.by_branch) {
-                const compTotalSales = compareData.by_branch.reduce((sum, b) => sum + (b[1].sales || 0), 0);
-                const compAvgSales = compTotalSales / compareData.by_branch.length;
+                const compBranchesForAvg = compareData.by_branch.filter(b => b[0] !== '기타');
+                const compTotalSales = compBranchesForAvg.reduce((sum, b) => sum + (b[1].sales || 0), 0);
+                const compAvgSales = compTotalSales / compBranchesForAvg.length;
                 const avgDiff = ((avgSales - compAvgSales) / compAvgSales * 100).toFixed(1);
                 const avgDiffSign = avgDiff > 0 ? '+' : '';
                 document.getElementById('teamAvgSalesCompare').textContent = `${compareData.year}년: ${formatCurrency(compAvgSales)} (${avgDiffSign}${avgDiff}%)`;
@@ -9101,7 +9104,7 @@ HTML_TEMPLATE = '''
 
             // 비교년도 최고 성과 팀
             if (compareData && compareData.by_branch) {
-                const compSorted = [...compareData.by_branch].sort((a, b) => (b[1].sales || 0) - (a[1].sales || 0));
+                const compSorted = [...compareData.by_branch].filter(b => b[0] !== '기타').sort((a, b) => (b[1].sales || 0) - (a[1].sales || 0));
                 if (compSorted.length > 0) {
                     document.getElementById('teamTopBranchCompare').textContent = `${compareData.year}년: ${compSorted[0][0]}`;
                     document.getElementById('teamTopBranchCompare').style.display = 'block';
@@ -9112,7 +9115,7 @@ HTML_TEMPLATE = '''
 
             // ===== 4. 최고 성장 팀 카드 =====
             if (compareData && compareData.by_branch) {
-                const compareMap = Object.fromEntries(compareData.by_branch);
+                const compareMap = Object.fromEntries(compareData.by_branch.filter(b => b[0] !== '기타'));
                 const withGrowth = branches.map(b => {
                     const compData = compareMap[b[0]];
                     const compSales = compData?.sales || 0;
@@ -9217,7 +9220,8 @@ HTML_TEMPLATE = '''
 
             const selectedPurpose = document.getElementById('branchPerCasePurposeSelect')?.value || '전체';
             const sortBy = document.getElementById('branchPerCaseSortBy')?.value || 'avgPrice';
-            const branches = currentData.by_branch || [];
+            // "기타" 팀 제외
+            const branches = (currentData.by_branch || []).filter(b => b[0] !== '기타');
             const managers = currentData.by_manager || [];
             const managerMap = Object.fromEntries(managers);
             if (branches.length === 0) return;
@@ -9307,7 +9311,7 @@ HTML_TEMPLATE = '''
             let compareMap = {};
             let compRankMap = {};
             if (compareData) {
-                const compareBranches = compareData.by_branch || [];
+                const compareBranches = (compareData.by_branch || []).filter(b => b[0] !== '기타');
                 const compBranchData = compareBranches.map(b => {
                     let sales = 0, count = 0;
                     if (selectedPurpose === '전체') {
@@ -10889,7 +10893,8 @@ HTML_TEMPLATE = '''
         function updateBranchChart() {
             const purposeFilter = document.getElementById('branchChartPurposeFilter')?.value || '전체';
             const sortBy = document.getElementById('branchChartSortBy')?.value || 'sales';
-            const branches = currentData.by_branch || [];
+            // "기타" 팀 제외
+            const branches = (currentData.by_branch || []).filter(b => b[0] !== '기타');
             const managers = currentData.by_manager || [];
             const managerMap = Object.fromEntries(managers);
 
@@ -10954,7 +10959,7 @@ HTML_TEMPLATE = '''
             // 비교 데이터 먼저 준비 (성장률 정렬을 위해)
             let compareMapForSort = {};
             if (compareData) {
-                const compareBranches = compareData.by_branch || [];
+                const compareBranches = (compareData.by_branch || []).filter(b => b[0] !== '기타');
                 compareBranches.forEach(b => {
                     let sales = 0;
                     if (purposeFilter === '전체') {
@@ -11004,7 +11009,7 @@ HTML_TEMPLATE = '''
             let compRankMap = {};
 
             if (compareData) {
-                const compareBranches = compareData.by_branch || [];
+                const compareBranches = (compareData.by_branch || []).filter(b => b[0] !== '기타');
                 const compBranchData = compareBranches.map(b => {
                     let sales = 0, count = 0;
                     if (purposeFilter === '전체') {

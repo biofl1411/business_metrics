@@ -17021,8 +17021,14 @@ HTML_TEMPLATE = '''
             const newClientNames = new Set(newClients.map(c => c.name));
             const retainedMap = Object.fromEntries(retainedClients.map(c => [c.name, c]));
             const totalCount = clients.reduce((s, c) => s + c[1].count, 0);
+            const totalSales = clients.reduce((s, c) => s + c[1].sales, 0);
+            const avgClientCount = clients.length > 0 ? totalCount / clients.length : 0;
+            const hasCompare = compareData && compareData.by_client;
+            const compareClientMap = hasCompare ? Object.fromEntries(compareData.by_client.map(c => [c[0], c[1]])) : {};
+            const compTotalCount = hasCompare ? compareData.by_client.reduce((s, c) => s + c[1].count, 0) : 0;
 
-            document.getElementById('clientCountChartBadge').textContent = currentData.year + '년';
+            document.getElementById('clientCountChartBadge').textContent = hasCompare ?
+                currentData.year + ' vs ' + compareData.year : currentData.year + '년';
 
             const ctx = document.getElementById('clientCountChart');
             if (!ctx) return;
@@ -17034,7 +17040,7 @@ HTML_TEMPLATE = '''
                 if (!el) {
                     el = document.createElement('div');
                     el.id = 'clientCountChartTooltip';
-                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:300px;max-width:380px;max-height:85vh;overflow-y:auto;transition:opacity 0.15s ease;line-height:1.5;';
+                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:340px;max-width:420px;max-height:85vh;overflow-y:auto;transition:opacity 0.15s ease;line-height:1.5;';
                     document.body.appendChild(el); setupTooltipHover(el);
                 }
                 return el;
@@ -17070,44 +17076,101 @@ HTML_TEMPLATE = '''
                                 const c = top10[idx][1];
                                 const isNew = newClientNames.has(name);
                                 const retained = retainedMap[name];
+                                const compData = compareClientMap[name];
                                 const percent = totalCount > 0 ? (c.count / totalCount * 100) : 0;
                                 const avgPrice = c.count > 0 ? c.sales / c.count : 0;
+                                const rank = idx + 1;
 
-                                const rankIcon = idx === 0 ? '🏆' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                                // 스타일 결정
+                                let borderColor, headerBg, rankIcon;
+                                if (rank === 1) {
+                                    borderColor = 'rgba(255, 215, 0, 0.8)'; headerBg = 'linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 180, 0, 0.2))'; rankIcon = '🏆';
+                                } else if (rank === 2) {
+                                    borderColor = 'rgba(192, 192, 192, 0.8)'; headerBg = 'linear-gradient(135deg, rgba(192, 192, 192, 0.3), rgba(169, 169, 169, 0.2))'; rankIcon = '🥈';
+                                } else if (rank === 3) {
+                                    borderColor = 'rgba(205, 127, 50, 0.8)'; headerBg = 'linear-gradient(135deg, rgba(205, 127, 50, 0.3), rgba(184, 115, 51, 0.2))'; rankIcon = '🥉';
+                                } else {
+                                    borderColor = isNew ? 'rgba(16, 185, 129, 0.8)' : 'rgba(99, 102, 241, 0.6)';
+                                    headerBg = isNew ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)'; rankIcon = '';
+                                }
+                                tooltipEl.style.border = '2px solid ' + borderColor;
+
                                 const statusColor = isNew ? '#10b981' : '#6366f1';
                                 const statusText = isNew ? '신규' : '유지';
 
-                                let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                    <span style="font-size:15px;font-weight:bold;">${rankIcon} ${name}</span>
-                                    <span style="background:${statusColor}22;color:${statusColor};padding:4px 10px;border-radius:6px;font-size:12px;">${statusText} · ${idx + 1}위</span>
-                                </div>`;
+                                let html = '';
 
-                                html += `<div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;margin-bottom:10px;">`;
-                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>📋 연간 건수</span><strong>${c.count.toLocaleString()}건</strong></div>`;
-                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>💰 연간 매출</span><strong>${formatCurrency(c.sales)}</strong></div>`;
-                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>📊 건당 매출</span><strong>${formatCurrency(Math.round(avgPrice))}</strong></div>`;
-                                html += `<div style="display:flex;justify-content:space-between;"><span>📈 건수 비중</span><strong>${percent.toFixed(1)}%</strong></div>`;
-                                html += `</div>`;
+                                // 1. 헤더
+                                html += '<div style="font-size:16px;font-weight:bold;color:#fff;margin:-16px -16px 12px -16px;padding:12px 16px;background:' + headerBg + ';border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">';
+                                html += '<span>' + rankIcon + ' ' + name + '</span>';
+                                html += '<span style="background:' + statusColor + '33;color:' + statusColor + ';padding:4px 10px;border-radius:6px;font-size:12px;">' + statusText + ' · ' + rank + '위</span>';
+                                html += '</div>';
 
-                                if (retained && retained.lastYearCount > 0) {
-                                    const countGrowth = ((c.count - retained.lastYearCount) / retained.lastYearCount * 100);
-                                    const growthColor = countGrowth >= 0 ? '#10b981' : '#ef4444';
-                                    html += `<div style="padding:8px;border-radius:6px;background:rgba(99,102,241,0.1);margin-bottom:10px;">
-                                        📅 건수 증감: <span style="color:${growthColor};font-weight:bold;">${countGrowth >= 0 ? '+' : ''}${countGrowth.toFixed(1)}%</span>
-                                        <span style="color:#94a3b8;font-size:11px;">(${retained.lastYearCount.toLocaleString()}건 → ${c.count.toLocaleString()}건)</span>
-                                    </div>`;
+                                // 2. 기본 지표
+                                html += '<div style="margin-bottom:4px;">📋 ' + currentData.year + '년 건수: <strong style="color:#60a5fa;">' + c.count.toLocaleString() + '건</strong> | 건당: <strong>' + formatCurrency(avgPrice) + '</strong></div>';
+                                if (compData && compData.count > 0) {
+                                    const compAvgPrice = compData.sales / compData.count;
+                                    html += '<div style="margin-bottom:4px;">📋 ' + compareData.year + '년 건수: <strong style="color:#f59e0b;">' + compData.count.toLocaleString() + '건</strong> | 건당: <strong>' + formatCurrency(compAvgPrice) + '</strong></div>';
+                                }
+                                html += '<div style="margin-bottom:4px;">💰 ' + currentData.year + '년 매출: <strong>' + formatCurrency(c.sales) + '</strong></div>';
+                                if (compData && compData.sales > 0) {
+                                    html += '<div style="margin-bottom:8px;">💰 ' + compareData.year + '년 매출: <strong>' + formatCurrency(compData.sales) + '</strong></div>';
                                 }
 
-                                html += `<div style="color:#94a3b8;font-size:12px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">`;
-                                html += `👤 담당자: ${c.manager || '미지정'}<br>`;
-                                html += `🔬 주요 검사: ${c.purpose || '-'}`;
-                                html += `</div>`;
+                                // 3. 거래 현황
+                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 거래 현황 ──</div>';
+                                html += '<div style="margin-bottom:4px;">📅 거래월수: <strong>' + (c.tradeMonths || '-') + '개월</strong></div>';
+                                html += '<div style="margin-bottom:4px;">👤 주 담당자: <strong>' + (c.manager || '미지정') + '</strong></div>';
+
+                                // 평균 대비
+                                const vsAvgCount = avgClientCount > 0 ? ((c.count - avgClientCount) / avgClientCount * 100) : 0;
+                                const vsAvgColor = vsAvgCount >= 0 ? '#10b981' : '#ef4444';
+                                html += '<div style="margin-bottom:4px;">📊 평균 대비: <span style="color:' + vsAvgColor + ';">' + (vsAvgCount >= 0 ? '+' : '') + vsAvgCount.toFixed(1) + '%</span> <span style="color:#94a3b8;">(평균: ' + Math.round(avgClientCount).toLocaleString() + '건)</span></div>';
+
+                                // 4. 전체 대비 점유율
+                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전체 대비 점유율 ──</div>';
+                                html += '<div style="margin-bottom:4px;">📈 건수 점유율: <strong>' + percent.toFixed(2) + '%</strong> (' + rank + '위/' + clients.length + '업체)</div>';
+
+                                if (compData && compData.count > 0 && compTotalCount > 0) {
+                                    const compShare = (compData.count / compTotalCount * 100);
+                                    const shareDiff = percent - compShare;
+                                    const shareColor = shareDiff >= 0 ? '#10b981' : '#ef4444';
+                                    html += '<div style="margin-bottom:4px;">📊 점유율 변화: <span style="color:' + shareColor + ';">' + (shareDiff >= 0 ? '+' : '') + shareDiff.toFixed(2) + '%p (' + (shareDiff >= 0 ? '확대' : '축소') + ')</span></div>';
+                                }
+
+                                // 5. 전년 대비 성장률
+                                if (retained && retained.lastYearCount > 0) {
+                                    const countDiff = c.count - retained.lastYearCount;
+                                    const countGrowth = (countDiff / retained.lastYearCount * 100);
+                                    const growthColor = countDiff >= 0 ? '#10b981' : '#ef4444';
+
+                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전년 대비 성장률 ──</div>';
+                                    html += '<div style="margin-bottom:4px;">📋 건수: <span style="color:' + growthColor + ';font-weight:bold;">' + (countDiff >= 0 ? '+' : '') + countDiff.toLocaleString() + '건 (' + (countGrowth >= 0 ? '+' : '') + countGrowth.toFixed(1) + '%)</span></div>';
+
+                                    if (retained.lastYearSales > 0) {
+                                        const salesDiff = c.sales - retained.lastYearSales;
+                                        const salesGrowth = (salesDiff / retained.lastYearSales * 100);
+                                        const salesColor = salesDiff >= 0 ? '#10b981' : '#ef4444';
+                                        html += '<div style="margin-bottom:4px;">💰 매출: <span style="color:' + salesColor + ';font-weight:bold;">' + (salesDiff >= 0 ? '+' : '') + formatCurrency(salesDiff) + ' (' + (salesGrowth >= 0 ? '+' : '') + salesGrowth.toFixed(1) + '%)</span></div>';
+                                    }
+                                }
+
+                                // 6. 주요 검사목적 TOP 3
+                                if (c.byPurpose && Object.keys(c.byPurpose).length > 0) {
+                                    const purposeEntries = Object.entries(c.byPurpose).sort((a, b) => b[1].count - a[1].count).slice(0, 3);
+                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 주요 검사목적 TOP 3 ──</div>';
+                                    purposeEntries.forEach((p, i) => {
+                                        const purposeShare = c.count > 0 ? (p[1].count / c.count * 100) : 0;
+                                        const emoji = i === 0 ? '🥇' : (i === 1 ? '🥈' : '🥉');
+                                        html += '<div style="margin-left:8px;margin-bottom:2px;">' + emoji + ' ' + p[0] + ': ' + p[1].count.toLocaleString() + '건 <span style="color:#94a3b8;">(' + purposeShare.toFixed(0) + '%)</span></div>';
+                                    });
+                                }
 
                                 tooltipEl.innerHTML = html;
                                 tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
-                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 350) + 'px';
+                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 430) + 'px';
+                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 500) + 'px';
                             }
                         }
                     },

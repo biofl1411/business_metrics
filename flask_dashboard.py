@@ -14520,6 +14520,31 @@ HTML_TEMPLATE = '''
                     const intensity = range > 0 && val !== null ? (val - minVal) / range : 0;
                     const { bg, text } = getColor(val, intensity);
 
+                    // 호버 툴팁용 데이터
+                    const currData = pData.months[m] || { sales: 0, count: 0 };
+                    const compData = pData.compMonths[m] || { sales: 0, count: 0 };
+                    const currStr = JSON.stringify(currData).replace(/"/g, '&quot;');
+                    const compStr = JSON.stringify(compData).replace(/"/g, '&quot;');
+
+                    // 전년 대비 증감 표시
+                    let yoyIndicator = '';
+                    if (hasCompare && metric !== 'growth') {
+                        const currVal = metric === 'sales' ? currData.sales : currData.count;
+                        const compVal = metric === 'sales' ? compData.sales : compData.count;
+                        if (compVal > 0 && currVal > 0) {
+                            const diff = currVal - compVal;
+                            if (diff > 0) {
+                                yoyIndicator = '<span style="color:#10b981;font-size:9px;margin-left:2px;">▲</span>';
+                            } else if (diff < 0) {
+                                yoyIndicator = '<span style="color:#ef4444;font-size:9px;margin-left:2px;">▼</span>';
+                            }
+                        } else if (currVal > 0 && compVal === 0) {
+                            yoyIndicator = '<span style="color:#10b981;font-size:9px;margin-left:2px;">▲</span>';
+                        } else if (currVal === 0 && compVal > 0) {
+                            yoyIndicator = '<span style="color:#ef4444;font-size:9px;margin-left:2px;">▼</span>';
+                        }
+                    }
+
                     let displayVal = '-';
                     if (val !== null && val !== 0) {
                         if (metric === 'sales') displayVal = formatCurrency(val);
@@ -14527,13 +14552,7 @@ HTML_TEMPLATE = '''
                         else if (metric === 'growth') displayVal = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
                     }
 
-                    // 호버 툴팁용 데이터
-                    const currData = pData.months[m] || { sales: 0, count: 0 };
-                    const compData = pData.compMonths[m] || { sales: 0, count: 0 };
-                    const currStr = JSON.stringify(currData).replace(/"/g, '&quot;');
-                    const compStr = JSON.stringify(compData).replace(/"/g, '&quot;');
-
-                    cells.push(`<td class="text-center" style="background:${bg};color:${text};font-size:12px;cursor:pointer;transition:transform 0.1s;" data-purpose="${escapedPurpose}" data-month="${m}" data-curr="${currStr}" data-comp="${compStr}" onmouseenter="showHeatmapCellTooltip(event,this);this.style.transform='scale(1.1)';this.style.zIndex='10';" onmouseleave="hideHeatmapTooltip();this.style.transform='';this.style.zIndex='';">${displayVal}</td>`);
+                    cells.push(`<td class="text-center" style="background:${bg};color:${text};font-size:12px;cursor:pointer;transition:transform 0.1s;" data-purpose="${escapedPurpose}" data-month="${m}" data-curr="${currStr}" data-comp="${compStr}" onmouseenter="showHeatmapCellTooltip(event,this);this.style.transform='scale(1.1)';this.style.zIndex='10';" onmouseleave="hideHeatmapTooltip();this.style.transform='';this.style.zIndex='';">${displayVal}${yoyIndicator}</td>`);
                 }
                 const total = getTotal(pData);
                 let totalDisplay = metric === 'sales' ? formatCurrency(total) :

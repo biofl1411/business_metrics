@@ -4083,34 +4083,6 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
 
-            <!-- 분기별/평균단가/전년비교 차트 -->
-            <div class="content-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">📊 분기별 매출</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-container" style="height: 300px;"><canvas id="quarterlyChart"></canvas></div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">💰 월별 평균단가</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-container" style="height: 300px;"><canvas id="monthlyAvgPriceChart"></canvas></div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">📈 전년 대비</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-container" style="height: 300px;"><canvas id="yoyChart"></canvas></div>
-                    </div>
-                </div>
-            </div>
-
             <!-- 목적별 월별 히트맵 -->
             <div class="card" style="margin-bottom: 24px;">
                 <div class="card-header">
@@ -12182,9 +12154,6 @@ HTML_TEMPLATE = '''
             updateMonthlyChartWithFilter();
             updateMonthlyCountChartWithFilter();
             updateGrowthTrendChart();
-            updateQuarterlyChart();
-            updateAvgPriceChart();
-            updateYoyChart();
             updateHeatmap();
             updateMonthlyDetailTable();
         }

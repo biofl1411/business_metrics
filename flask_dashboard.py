@@ -17107,6 +17107,18 @@ HTML_TEMPLATE = '''
                 highThreshold: highThreshold
             };
 
+            // 외부 툴팁
+            const getOrCreateEfficiencyTooltip = () => {
+                let el = document.getElementById('clientEfficiencyTooltip');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'clientEfficiencyTooltip';
+                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:0;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:300px;max-width:380px;overflow:hidden;transition:opacity 0.15s ease;line-height:1.5;';
+                    document.body.appendChild(el); setupTooltipHover(el);
+                }
+                return el;
+            };
+
             // 파이 차트
             charts.clientEfficiency = new Chart(ctx.getContext('2d'), {
                 type: 'doughnut',
@@ -17126,11 +17138,11 @@ HTML_TEMPLATE = '''
                         tooltip: {
                             enabled: false,
                             external: function(context) {
-                                const tooltipEl = getOrCreateTooltip(context.chart);
+                                const tooltipEl = getOrCreateEfficiencyTooltip();
                                 const tooltipModel = context.tooltip;
 
-                                if (tooltipModel.opacity === 0) {
-                                    hideTooltipWithDelay(tooltipEl, context.chart.canvas);
+                                if (tooltipModel.opacity === 0 && !isTooltipHovered(tooltipEl)) {
+                                    hideTooltipWithDelay(tooltipEl);
                                     return;
                                 }
 

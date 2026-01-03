@@ -14286,17 +14286,18 @@ HTML_TEMPLATE = '''
             const purposes = {};
 
             // 모든 목적과 월별 데이터 수집
+            const excludePurposes = ['접수취소', 'IGC', '참고용(유통기한설정)', '정도관리', '잔류농약(인증용)'];
             for (let m = 1; m <= 12; m++) {
                 const byPurpose = monthMap[m]?.byPurpose || {};
                 const compByPurpose = compMap[m]?.byPurpose || {};
                 for (const [purpose, data] of Object.entries(byPurpose)) {
-                    if (purpose === '접수취소') continue;
+                    if (excludePurposes.includes(purpose)) continue;
                     if (!purposes[purpose]) purposes[purpose] = { months: {}, compMonths: {} };
                     purposes[purpose].months[m] = { sales: data.sales || 0, count: data.count || 0 };
                 }
                 // 비교 연도 데이터
                 for (const [purpose, data] of Object.entries(compByPurpose)) {
-                    if (purpose === '접수취소') continue;
+                    if (excludePurposes.includes(purpose)) continue;
                     if (!purposes[purpose]) purposes[purpose] = { months: {}, compMonths: {} };
                     purposes[purpose].compMonths[m] = { sales: data.sales || 0, count: data.count || 0 };
                 }

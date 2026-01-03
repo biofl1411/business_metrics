@@ -16739,19 +16739,77 @@ HTML_TEMPLATE = '''
                                 var low = lowData[monthIdx];
                                 var total = high + mid + low;
 
-                                var html = '<div style="font-weight:700;font-size:15px;margin-bottom:12px;color:#fff;">' + month + ' 효율 분류</div>' +
-                                    '<div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:6px 8px;background:rgba(16,185,129,0.2);border-radius:6px;"><span style="color:#10b981;">🌟 고효율</span><span style="font-weight:600;">' + high + '개 (' + (total > 0 ? Math.round(high/total*100) : 0) + '%)</span></div>' +
-                                    '<div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:6px 8px;background:rgba(234,179,8,0.2);border-radius:6px;"><span style="color:#eab308;">📊 중간</span><span style="font-weight:600;">' + mid + '개 (' + (total > 0 ? Math.round(mid/total*100) : 0) + '%)</span></div>' +
-                                    '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:rgba(239,68,68,0.2);border-radius:6px;"><span style="color:#ef4444;">⚠️ 저효율</span><span style="font-weight:600;">' + low + '개 (' + (total > 0 ? Math.round(low/total*100) : 0) + '%)</span></div>' +
-                                    '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #475569;font-size:11px;color:#94a3b8;">기준: 건당단가 ' + formatCurrency(avgPerCase) + '</div>';
+                                // 이전 월 데이터 (추세 비교용)
+                                var prevHigh = monthIdx > 0 ? highData[monthIdx - 1] : 0;
+                                var prevMid = monthIdx > 0 ? midData[monthIdx - 1] : 0;
+                                var prevLow = monthIdx > 0 ? lowData[monthIdx - 1] : 0;
+                                var prevTotal = prevHigh + prevMid + prevLow;
+
+                                var html = '';
+
+                                // 헤더
+                                html += '<div style="font-size:16px;font-weight:bold;color:#fff;margin:-16px -16px 12px -16px;padding:12px 16px;background:linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(79, 70, 229, 0.2));border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">';
+                                html += '<span>📊 ' + currentData.year + '년 ' + month + '</span>';
+                                html += '<span style="background:rgba(99,102,241,0.4);color:#a5b4fc;padding:4px 10px;border-radius:6px;font-size:12px;">' + total + '개 업체</span>';
+                                html += '</div>';
+
+                                // 효율 분류 현황
+                                html += '<div style="color:#94a3b8;margin-bottom:8px;">── 효율 분류 현황 ──</div>';
+                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:8px 10px;background:rgba(16,185,129,0.2);border-radius:6px;border-left:3px solid #10b981;">';
+                                html += '<span style="color:#10b981;font-weight:600;">🌟 고효율 (평균 이상)</span>';
+                                html += '<span style="font-weight:600;">' + high + '개 <span style="color:#94a3b8;">(' + (total > 0 ? Math.round(high/total*100) : 0) + '%)</span></span>';
+                                html += '</div>';
+                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:8px 10px;background:rgba(234,179,8,0.2);border-radius:6px;border-left:3px solid #eab308;">';
+                                html += '<span style="color:#eab308;font-weight:600;">📊 중간 (평균 ±30%)</span>';
+                                html += '<span style="font-weight:600;">' + mid + '개 <span style="color:#94a3b8;">(' + (total > 0 ? Math.round(mid/total*100) : 0) + '%)</span></span>';
+                                html += '</div>';
+                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:8px;padding:8px 10px;background:rgba(239,68,68,0.2);border-radius:6px;border-left:3px solid #ef4444;">';
+                                html += '<span style="color:#ef4444;font-weight:600;">⚠️ 저효율 (평균 미만)</span>';
+                                html += '<span style="font-weight:600;">' + low + '개 <span style="color:#94a3b8;">(' + (total > 0 ? Math.round(low/total*100) : 0) + '%)</span></span>';
+                                html += '</div>';
+
+                                // 전월 대비 변화
+                                if (monthIdx > 0 && prevTotal > 0) {
+                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전월 대비 변화 ──</div>';
+                                    var highDiff = high - prevHigh;
+                                    var midDiff = mid - prevMid;
+                                    var lowDiff = low - prevLow;
+                                    var highColor = highDiff >= 0 ? '#10b981' : '#ef4444';
+                                    var midColor = midDiff >= 0 ? '#eab308' : '#94a3b8';
+                                    var lowColor = lowDiff <= 0 ? '#10b981' : '#ef4444';
+                                    html += '<div style="margin-bottom:4px;">🌟 고효율: <span style="color:' + highColor + ';font-weight:bold;">' + (highDiff >= 0 ? '+' : '') + highDiff + '개</span></div>';
+                                    html += '<div style="margin-bottom:4px;">📊 중간: <span style="color:' + midColor + ';font-weight:bold;">' + (midDiff >= 0 ? '+' : '') + midDiff + '개</span></div>';
+                                    html += '<div style="margin-bottom:4px;">⚠️ 저효율: <span style="color:' + lowColor + ';font-weight:bold;">' + (lowDiff >= 0 ? '+' : '') + lowDiff + '개</span></div>';
+                                }
+
+                                // 효율 비율 바
+                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 효율 분포 ──</div>';
+                                html += '<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:4px;">';
+                                if (total > 0) {
+                                    html += '<div style="width:' + (high/total*100) + '%;background:#10b981;" title="고효율"></div>';
+                                    html += '<div style="width:' + (mid/total*100) + '%;background:#eab308;" title="중간"></div>';
+                                    html += '<div style="width:' + (low/total*100) + '%;background:#ef4444;" title="저효율"></div>';
+                                }
+                                html += '</div>';
+                                html += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">';
+                                html += '<span>● 고효율 ' + (total > 0 ? Math.round(high/total*100) : 0) + '%</span>';
+                                html += '<span>● 중간 ' + (total > 0 ? Math.round(mid/total*100) : 0) + '%</span>';
+                                html += '<span>● 저효율 ' + (total > 0 ? Math.round(low/total*100) : 0) + '%</span>';
+                                html += '</div>';
+
+                                // 기준 정보
+                                html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid #475569;font-size:11px;color:#94a3b8;">';
+                                html += '📌 분류 기준: 건당단가 <strong>' + formatCurrency(avgPerCase) + '</strong>';
+                                html += '</div>';
 
                                 tooltipEl.innerHTML = html;
+                                tooltipEl.style.border = '2px solid rgba(99, 102, 241, 0.6)';
                                 tooltipEl.style.opacity = '1';
                                 tooltipEl.style.display = 'block';
 
                                 var pos = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.left = (pos.left + context.tooltip.caretX + 15) + 'px';
-                                tooltipEl.style.top = (pos.top + context.tooltip.caretY - 10) + 'px';
+                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 15, window.innerWidth - 370) + 'px';
+                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY - 10, window.innerHeight - 450) + 'px';
                             }
                         }
                     },
@@ -17270,42 +17328,83 @@ HTML_TEMPLATE = '''
                                 const sales = currentSales[monthIdx];
                                 const caseCount = currentCountsData[monthIdx];
                                 const avgSalesPerClient = clientCount > 0 ? sales / clientCount : 0;
+                                const avgCasePerClient = clientCount > 0 ? caseCount / clientCount : 0;
+                                const avgPricePerCase = caseCount > 0 ? sales / caseCount : 0;
 
-                                let html = '<div style="font-weight:700;font-size:15px;margin-bottom:12px;color:#fff;display:flex;justify-content:space-between;align-items:center;">';
-                                html += '<span>📅 ' + currentData.year + '년 ' + month + '</span>';
-                                html += '<span style="background:rgba(99,102,241,0.3);color:#a5b4fc;padding:4px 10px;border-radius:6px;font-size:12px;">' + clientCount + '개 업체</span>';
+                                // 연간 합계 계산
+                                const yearTotalClients = currentCounts.reduce((s, v) => s + v, 0);
+                                const yearTotalSales = currentSales.reduce((s, v) => s + v, 0);
+                                const monthShare = yearTotalSales > 0 ? (sales / yearTotalSales * 100) : 0;
+
+                                let html = '';
+
+                                // 헤더
+                                html += '<div style="font-size:16px;font-weight:bold;color:#fff;margin:-16px -16px 12px -16px;padding:12px 16px;background:linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(79, 70, 229, 0.2));border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">';
+                                html += '<span>📅 ' + month + '</span>';
+                                html += '<span style="background:rgba(99,102,241,0.4);color:#a5b4fc;padding:4px 10px;border-radius:6px;font-size:12px;">' + clientCount + '개 업체</span>';
                                 html += '</div>';
 
-                                html += '<div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;margin-bottom:10px;">';
-                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>🏢 거래 업체</span><strong>' + clientCount.toLocaleString() + '개</strong></div>';
-                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>💰 월 매출</span><strong>' + formatCurrency(sales) + '</strong></div>';
-                                html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>📋 월 건수</span><strong>' + caseCount.toLocaleString() + '건</strong></div>';
-                                html += '<div style="display:flex;justify-content:space-between;"><span>📊 업체당 매출</span><strong>' + formatCurrency(Math.round(avgSalesPerClient)) + '</strong></div>';
-                                html += '</div>';
+                                // 올해 데이터
+                                html += '<div style="margin-bottom:4px;">🏢 ' + currentData.year + '년 업체: <strong style="color:#60a5fa;">' + clientCount.toLocaleString() + '개</strong></div>';
+                                html += '<div style="margin-bottom:4px;">💰 ' + currentData.year + '년 매출: <strong style="color:#60a5fa;">' + formatCurrency(sales) + '</strong></div>';
+                                html += '<div style="margin-bottom:4px;">📋 ' + currentData.year + '년 건수: <strong>' + caseCount.toLocaleString() + '건</strong> | 건당: <strong>' + formatCurrency(avgPricePerCase) + '</strong></div>';
 
+                                // 전년 데이터
+                                if (hasCompare) {
+                                    const compCount = compareCounts[monthIdx];
+                                    const compSales = compareSales[monthIdx];
+                                    const compCaseCount = compMonthMap[monthIdx + 1]?.count || 0;
+                                    const compAvgPrice = compCaseCount > 0 ? compSales / compCaseCount : 0;
+                                    html += '<div style="margin-bottom:4px;">🏢 ' + compareData.year + '년 업체: <strong style="color:#f59e0b;">' + compCount.toLocaleString() + '개</strong></div>';
+                                    html += '<div style="margin-bottom:4px;">💰 ' + compareData.year + '년 매출: <strong style="color:#f59e0b;">' + formatCurrency(compSales) + '</strong></div>';
+                                    html += '<div style="margin-bottom:8px;">📋 ' + compareData.year + '년 건수: <strong>' + compCaseCount.toLocaleString() + '건</strong> | 건당: <strong>' + formatCurrency(compAvgPrice) + '</strong></div>';
+                                }
+
+                                // 월별 현황
+                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 월별 현황 ──</div>';
+                                html += '<div style="margin-bottom:4px;">📊 업체당 매출: <strong>' + formatCurrency(Math.round(avgSalesPerClient)) + '</strong></div>';
+                                html += '<div style="margin-bottom:4px;">📋 업체당 건수: <strong>' + avgCasePerClient.toFixed(1) + '건</strong></div>';
+                                html += '<div style="margin-bottom:4px;">📈 연간 매출 비중: <strong>' + monthShare.toFixed(1) + '%</strong></div>';
+
+                                // 전년 대비 성장률
                                 if (hasCompare) {
                                     const compCount = compareCounts[monthIdx];
                                     const compSales = compareSales[monthIdx];
                                     const countDiff = clientCount - compCount;
                                     const countGrowth = compCount > 0 ? ((clientCount - compCount) / compCount * 100) : 0;
+                                    const salesDiff = sales - compSales;
                                     const salesGrowth = compSales > 0 ? ((sales - compSales) / compSales * 100) : 0;
                                     const countColor = countDiff >= 0 ? '#10b981' : '#ef4444';
                                     const salesColor = salesGrowth >= 0 ? '#10b981' : '#ef4444';
 
-                                    html += '<div style="padding:10px;border-radius:8px;background:rgba(245,158,11,0.15);border-left:3px solid #f59e0b;">';
-                                    html += '<div style="font-weight:600;margin-bottom:6px;color:#fbbf24;">📊 ' + compareData.year + '년 대비</div>';
-                                    html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">';
-                                    html += '<span>업체 수</span>';
-                                    html += '<span style="color:' + countColor + ';font-weight:600;">' + (countDiff >= 0 ? '+' : '') + countDiff + '개 (' + (countGrowth >= 0 ? '+' : '') + countGrowth.toFixed(1) + '%)</span>';
-                                    html += '</div>';
-                                    html += '<div style="display:flex;justify-content:space-between;">';
-                                    html += '<span>매출</span>';
-                                    html += '<span style="color:' + salesColor + ';font-weight:600;">' + (salesGrowth >= 0 ? '+' : '') + salesGrowth.toFixed(1) + '%</span>';
-                                    html += '</div>';
-                                    html += '</div>';
+                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전년 대비 성장률 ──</div>';
+                                    html += '<div style="margin-bottom:4px;">🏢 업체 수: <span style="color:' + countColor + ';font-weight:bold;">' + (countDiff >= 0 ? '+' : '') + countDiff + '개 (' + (countGrowth >= 0 ? '+' : '') + countGrowth.toFixed(1) + '%)</span></div>';
+                                    html += '<div style="margin-bottom:4px;">💰 매출: <span style="color:' + salesColor + ';font-weight:bold;">' + (salesDiff >= 0 ? '+' : '') + formatCurrency(salesDiff) + ' (' + (salesGrowth >= 0 ? '+' : '') + salesGrowth.toFixed(1) + '%)</span></div>';
+
+                                    // 변화 원인 분해
+                                    if (compCount > 0 && compSales > 0) {
+                                        const compAvgSales = compSales / compCount;
+                                        const currAvgSales = clientCount > 0 ? sales / clientCount : 0;
+                                        const countEffect = (clientCount - compCount) * compAvgSales;
+                                        const avgEffect = (currAvgSales - compAvgSales) * clientCount;
+
+                                        if (Math.abs(salesDiff) > 0) {
+                                            html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 변화 원인 분해 ──</div>';
+                                            const countEffColor = countEffect >= 0 ? '#10b981' : '#ef4444';
+                                            const avgEffColor = avgEffect >= 0 ? '#10b981' : '#ef4444';
+                                            const countPct = Math.abs(salesDiff) > 0 ? Math.abs(countEffect / salesDiff * 100) : 0;
+                                            const avgPct = Math.abs(salesDiff) > 0 ? Math.abs(avgEffect / salesDiff * 100) : 0;
+                                            html += '<div style="margin-bottom:4px;">🏢 업체 수 효과: <span style="color:' + countEffColor + ';">' + (countEffect >= 0 ? '+' : '') + formatCurrency(countEffect) + '</span> <span style="color:#94a3b8;">(' + countPct.toFixed(0) + '%)</span></div>';
+                                            html += '<div style="margin-bottom:4px;">💵 업체당 단가 효과: <span style="color:' + avgEffColor + ';">' + (avgEffect >= 0 ? '+' : '') + formatCurrency(avgEffect) + '</span> <span style="color:#94a3b8;">(' + avgPct.toFixed(0) + '%)</span></div>';
+                                            const mainCause = Math.abs(countEffect) > Math.abs(avgEffect) ? '업체 수' : '업체당 단가';
+                                            const causeDir = (mainCause === '업체 수' ? countEffect : avgEffect) >= 0 ? '증가' : '감소';
+                                            html += '<div style="color:#60a5fa;font-size:11px;margin-top:4px;">→ ' + mainCause + ' ' + causeDir + '가 주요 원인</div>';
+                                        }
+                                    }
                                 }
 
                                 tooltipEl.innerHTML = html;
+                                tooltipEl.style.border = '2px solid rgba(99, 102, 241, 0.6)';
                                 tooltipEl.style.opacity = '1';
                                 tooltipEl.style.display = 'block';
 

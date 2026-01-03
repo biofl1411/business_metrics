@@ -3988,37 +3988,33 @@ HTML_TEMPLATE = '''
         <div id="monthly" class="tab-content">
             <!-- 월별 KPI 카드 -->
             <section class="kpi-section monthly-kpi-section">
-                <div class="kpi-card sales" style="position: relative;">
+                <div class="kpi-card sales" style="position: relative; cursor: pointer;" onmouseenter="showMonthlyKpiOverlay('max')" onmouseleave="hideMonthlyKpiOverlay('max')">
                     <div class="kpi-header"><div class="kpi-icon">🏆</div></div>
                     <div class="kpi-label">최고 매출월</div>
                     <div class="kpi-value" id="monthlyMaxMonth">-</div>
                     <div class="kpi-compare" id="monthlyMaxValue">-</div>
-                    <div class="kpi-compare" id="monthlyMaxYoY" style="font-size: 11px; margin-top: 4px;"></div>
-                    <div class="kpi-compare-overlay" id="monthlyMaxCompare" style="display: none; position: absolute; top: 8px; right: 8px; padding: 4px 8px; border-radius: 6px; font-size: 11px;"></div>
+                    <div class="monthly-kpi-overlay" id="monthlyMaxOverlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,41,59,0.95); border-radius: 12px; padding: 16px; z-index: 10; color: #e2e8f0;"></div>
                 </div>
-                <div class="kpi-card count" style="position: relative;">
+                <div class="kpi-card count" style="position: relative; cursor: pointer;" onmouseenter="showMonthlyKpiOverlay('min')" onmouseleave="hideMonthlyKpiOverlay('min')">
                     <div class="kpi-header"><div class="kpi-icon">📉</div></div>
                     <div class="kpi-label">최저 매출월</div>
                     <div class="kpi-value" id="monthlyMinMonth">-</div>
                     <div class="kpi-compare" id="monthlyMinValue">-</div>
-                    <div class="kpi-compare" id="monthlyMinYoY" style="font-size: 11px; margin-top: 4px;"></div>
-                    <div class="kpi-compare-overlay" id="monthlyMinCompare" style="display: none; position: absolute; top: 8px; right: 8px; padding: 4px 8px; border-radius: 6px; font-size: 11px;"></div>
+                    <div class="monthly-kpi-overlay" id="monthlyMinOverlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,41,59,0.95); border-radius: 12px; padding: 16px; z-index: 10; color: #e2e8f0;"></div>
                 </div>
-                <div class="kpi-card price" style="position: relative;">
+                <div class="kpi-card price" style="position: relative; cursor: pointer;" onmouseenter="showMonthlyKpiOverlay('avg')" onmouseleave="hideMonthlyKpiOverlay('avg')">
                     <div class="kpi-header"><div class="kpi-icon">📊</div></div>
                     <div class="kpi-label">월평균 매출</div>
                     <div class="kpi-value" id="monthlyAvgSales">-</div>
                     <div class="kpi-compare" id="monthlyAvgCount">-</div>
-                    <div class="kpi-compare" id="monthlyAvgYoY" style="font-size: 11px; margin-top: 4px;"></div>
-                    <div class="kpi-compare-overlay" id="monthlyAvgCompare" style="display: none; position: absolute; top: 8px; right: 8px; padding: 4px 8px; border-radius: 6px; font-size: 11px;"></div>
+                    <div class="monthly-kpi-overlay" id="monthlyAvgOverlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,41,59,0.95); border-radius: 12px; padding: 16px; z-index: 10; color: #e2e8f0;"></div>
                 </div>
-                <div class="kpi-card goal" style="position: relative;">
+                <div class="kpi-card goal" style="position: relative; cursor: pointer;" onmouseenter="showMonthlyKpiOverlay('ytd')" onmouseleave="hideMonthlyKpiOverlay('ytd')">
                     <div class="kpi-header"><div class="kpi-icon">📅</div></div>
                     <div class="kpi-label">YTD 누적</div>
                     <div class="kpi-value" id="monthlyYtdSales">-</div>
                     <div class="kpi-compare" id="monthlyYtdCount">-</div>
-                    <div class="kpi-compare" id="monthlyYtdYoY" style="font-size: 11px; margin-top: 4px;"></div>
-                    <div class="kpi-compare-overlay" id="monthlyYtdCompare" style="display: none; position: absolute; top: 8px; right: 8px; padding: 4px 8px; border-radius: 6px; font-size: 11px;"></div>
+                    <div class="monthly-kpi-overlay" id="monthlyYtdOverlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,41,59,0.95); border-radius: 12px; padding: 16px; z-index: 10; color: #e2e8f0;"></div>
                 </div>
             </section>
 
@@ -12130,6 +12126,9 @@ HTML_TEMPLATE = '''
             updateMonthlyDetailTable();
         }
 
+        // 월별 KPI 오버레이 데이터 저장
+        let monthlyKpiOverlayData = {};
+
         // 월별 KPI 업데이트
         function updateMonthlyKPI() {
             const monthly = currentData.by_month || [];
@@ -12175,105 +12174,117 @@ HTML_TEMPLATE = '''
             document.getElementById('monthlyYtdSales').textContent = formatCurrency(totalSales);
             document.getElementById('monthlyYtdCount').textContent = `총 ${totalCount.toLocaleString()}건`;
 
-            // 전년 대비 증감 표시
-            const maxYoYEl = document.getElementById('monthlyMaxYoY');
-            const minYoYEl = document.getElementById('monthlyMinYoY');
-            const avgYoYEl = document.getElementById('monthlyAvgYoY');
-            const ytdYoYEl = document.getElementById('monthlyYtdYoY');
+            // 오버레이 데이터 저장 및 생성
+            const compYear = compareData?.year || '전년';
+            const currYear = currentData.year || '금년';
+            const avgSales = monthCount > 0 ? totalSales / monthCount : 0;
+            const compAvgSales = compMonthCount > 0 ? compTotalSales / compMonthCount : 0;
+            const avgCount = monthCount > 0 ? totalCount / monthCount : 0;
+            const compAvgCount = compMonthCount > 0 ? compTotalCount / compMonthCount : 0;
 
-            const maxCompareEl = document.getElementById('monthlyMaxCompare');
-            const minCompareEl = document.getElementById('monthlyMinCompare');
-            const avgCompareEl = document.getElementById('monthlyAvgCompare');
-            const ytdCompareEl = document.getElementById('monthlyYtdCompare');
-
-            if (compareData && compMonthCount > 0) {
-                // 최고 매출월 전년 비교
-                if (maxMonth > 0 && compMaxSales > 0) {
-                    const maxDiff = maxSales - compMaxSales;
-                    const maxPct = (maxDiff / compMaxSales * 100);
-                    const maxSign = maxDiff >= 0 ? '+' : '';
-                    const maxColor = maxDiff >= 0 ? '#10b981' : '#ef4444';
-
-                    if (maxMonth === compMaxMonth) {
-                        maxYoYEl.innerHTML = `<span style="color: ${maxColor};">전년 동월 대비 ${maxSign}${maxPct.toFixed(1)}%</span>`;
-                    } else {
-                        maxYoYEl.innerHTML = `<span style="color: #64748b;">전년: ${monthNames[compMaxMonth]} (${formatCurrency(compMaxSales)})</span>`;
-                    }
-                    maxCompareEl.style.display = 'block';
-                    maxCompareEl.style.background = maxDiff >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                    maxCompareEl.style.color = maxColor;
-                    maxCompareEl.innerHTML = `${maxSign}${maxPct.toFixed(1)}%`;
-                } else {
-                    maxYoYEl.innerHTML = '';
-                    maxCompareEl.style.display = 'none';
-                }
-
-                // 최저 매출월 전년 비교
-                if (minMonth > 0 && minSales < Infinity && compMinSales < Infinity && compMinSales > 0) {
-                    const minDiff = minSales - compMinSales;
-                    const minPct = (minDiff / compMinSales * 100);
-                    const minSign = minDiff >= 0 ? '+' : '';
-                    const minColor = minDiff >= 0 ? '#10b981' : '#ef4444';
-
-                    if (minMonth === compMinMonth) {
-                        minYoYEl.innerHTML = `<span style="color: ${minColor};">전년 동월 대비 ${minSign}${minPct.toFixed(1)}%</span>`;
-                    } else {
-                        minYoYEl.innerHTML = `<span style="color: #64748b;">전년: ${monthNames[compMinMonth]} (${formatCurrency(compMinSales)})</span>`;
-                    }
-                    minCompareEl.style.display = 'block';
-                    minCompareEl.style.background = minDiff >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                    minCompareEl.style.color = minColor;
-                    minCompareEl.innerHTML = `${minSign}${minPct.toFixed(1)}%`;
-                } else {
-                    minYoYEl.innerHTML = '';
-                    minCompareEl.style.display = 'none';
-                }
-
-                // 월평균 전년 비교
-                const avgSales = monthCount > 0 ? totalSales / monthCount : 0;
-                const compAvgSales = compMonthCount > 0 ? compTotalSales / compMonthCount : 0;
-                if (avgSales > 0 && compAvgSales > 0) {
-                    const avgDiff = avgSales - compAvgSales;
-                    const avgPct = (avgDiff / compAvgSales * 100);
-                    const avgSign = avgDiff >= 0 ? '+' : '';
-                    const avgColor = avgDiff >= 0 ? '#10b981' : '#ef4444';
-
-                    avgYoYEl.innerHTML = `<span style="color: ${avgColor};">전년 대비 ${avgSign}${avgPct.toFixed(1)}% (${avgSign}${(avgDiff / 10000).toFixed(0)}만)</span>`;
-                    avgCompareEl.style.display = 'block';
-                    avgCompareEl.style.background = avgDiff >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                    avgCompareEl.style.color = avgColor;
-                    avgCompareEl.innerHTML = `${avgSign}${avgPct.toFixed(1)}%`;
-                } else {
-                    avgYoYEl.innerHTML = '';
-                    avgCompareEl.style.display = 'none';
-                }
-
-                // YTD 누적 전년 비교
-                if (totalSales > 0 && compTotalSales > 0) {
-                    const ytdDiff = totalSales - compTotalSales;
-                    const ytdPct = (ytdDiff / compTotalSales * 100);
-                    const ytdSign = ytdDiff >= 0 ? '+' : '';
-                    const ytdColor = ytdDiff >= 0 ? '#10b981' : '#ef4444';
-
-                    ytdYoYEl.innerHTML = `<span style="color: ${ytdColor};">전년 대비 ${ytdSign}${ytdPct.toFixed(1)}% (${ytdSign}${(ytdDiff / 100000000).toFixed(2)}억)</span>`;
-                    ytdCompareEl.style.display = 'block';
-                    ytdCompareEl.style.background = ytdDiff >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                    ytdCompareEl.style.color = ytdColor;
-                    ytdCompareEl.innerHTML = `${ytdSign}${ytdPct.toFixed(1)}%`;
-                } else {
-                    ytdYoYEl.innerHTML = '';
-                    ytdCompareEl.style.display = 'none';
-                }
+            // 최고 매출월 오버레이
+            if (compareData && compMaxSales > 0) {
+                const maxDiff = maxSales - compMaxSales;
+                const maxPct = (maxDiff / compMaxSales * 100);
+                const maxColor = maxDiff >= 0 ? '#10b981' : '#ef4444';
+                const maxSign = maxDiff >= 0 ? '+' : '';
+                monthlyKpiOverlayData.max = `
+                    <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:#94a3b8;">📊 ${compYear}년 대비</div>
+                    <div style="margin-bottom:6px;"><span style="color:#94a3b8;">${compYear}년:</span> <strong>${monthNames[compMaxMonth]}</strong> (${formatCurrency(compMaxSales)})</div>
+                    <div style="margin-bottom:6px;"><span style="color:#94a3b8;">${currYear}년:</span> <strong>${monthNames[maxMonth]}</strong> (${formatCurrency(maxSales)})</div>
+                    <div style="padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);margin-top:8px;">
+                        <span style="color:#94a3b8;">변화:</span> <span style="color:${maxColor};font-weight:bold;">${maxSign}${maxPct.toFixed(1)}%</span>
+                        <span style="color:#94a3b8;font-size:11px;"> (${maxSign}${(maxDiff/10000).toFixed(0)}만)</span>
+                    </div>
+                `;
             } else {
-                // 비교 연도 없을 때 숨기기
-                maxYoYEl.innerHTML = '';
-                minYoYEl.innerHTML = '';
-                avgYoYEl.innerHTML = '';
-                ytdYoYEl.innerHTML = '';
-                maxCompareEl.style.display = 'none';
-                minCompareEl.style.display = 'none';
-                avgCompareEl.style.display = 'none';
-                ytdCompareEl.style.display = 'none';
+                monthlyKpiOverlayData.max = `<div style="color:#94a3b8;">비교 연도를 선택하세요</div>`;
+            }
+
+            // 최저 매출월 오버레이
+            if (compareData && compMinSales > 0 && compMinSales < Infinity) {
+                const minDiff = minSales - compMinSales;
+                const minPct = (minDiff / compMinSales * 100);
+                const minColor = minDiff >= 0 ? '#10b981' : '#ef4444';
+                const minSign = minDiff >= 0 ? '+' : '';
+                monthlyKpiOverlayData.min = `
+                    <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:#94a3b8;">📊 ${compYear}년 대비</div>
+                    <div style="margin-bottom:6px;"><span style="color:#94a3b8;">${compYear}년:</span> <strong>${monthNames[compMinMonth]}</strong> (${formatCurrency(compMinSales)})</div>
+                    <div style="margin-bottom:6px;"><span style="color:#94a3b8;">${currYear}년:</span> <strong>${monthNames[minMonth]}</strong> (${formatCurrency(minSales)})</div>
+                    <div style="padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);margin-top:8px;">
+                        <span style="color:#94a3b8;">변화:</span> <span style="color:${minColor};font-weight:bold;">${minSign}${minPct.toFixed(1)}%</span>
+                        <span style="color:#94a3b8;font-size:11px;"> (${minSign}${(minDiff/10000).toFixed(0)}만)</span>
+                    </div>
+                `;
+            } else {
+                monthlyKpiOverlayData.min = `<div style="color:#94a3b8;">비교 연도를 선택하세요</div>`;
+            }
+
+            // 월평균 오버레이
+            if (compareData && compAvgSales > 0) {
+                const avgDiff = avgSales - compAvgSales;
+                const avgPct = (avgDiff / compAvgSales * 100);
+                const avgColor = avgDiff >= 0 ? '#10b981' : '#ef4444';
+                const avgSign = avgDiff >= 0 ? '+' : '';
+                const countDiff = avgCount - compAvgCount;
+                const countColor = countDiff >= 0 ? '#10b981' : '#ef4444';
+                const countSign = countDiff >= 0 ? '+' : '';
+                monthlyKpiOverlayData.avg = `
+                    <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:#94a3b8;">📊 ${compYear}년 대비</div>
+                    <div style="margin-bottom:4px;"><span style="color:#94a3b8;">${compYear}년 평균:</span></div>
+                    <div style="margin-bottom:8px;margin-left:8px;">${formatCurrency(compAvgSales)} / ${Math.round(compAvgCount).toLocaleString()}건</div>
+                    <div style="margin-bottom:4px;"><span style="color:#94a3b8;">${currYear}년 평균:</span></div>
+                    <div style="margin-bottom:8px;margin-left:8px;">${formatCurrency(avgSales)} / ${Math.round(avgCount).toLocaleString()}건</div>
+                    <div style="padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">
+                        <div><span style="color:#94a3b8;">매출:</span> <span style="color:${avgColor};font-weight:bold;">${avgSign}${avgPct.toFixed(1)}%</span></div>
+                        <div><span style="color:#94a3b8;">건수:</span> <span style="color:${countColor};font-weight:bold;">${countSign}${((countDiff/compAvgCount)*100).toFixed(1)}%</span></div>
+                    </div>
+                `;
+            } else {
+                monthlyKpiOverlayData.avg = `<div style="color:#94a3b8;">비교 연도를 선택하세요</div>`;
+            }
+
+            // YTD 오버레이
+            if (compareData && compTotalSales > 0) {
+                const ytdDiff = totalSales - compTotalSales;
+                const ytdPct = (ytdDiff / compTotalSales * 100);
+                const ytdColor = ytdDiff >= 0 ? '#10b981' : '#ef4444';
+                const ytdSign = ytdDiff >= 0 ? '+' : '';
+                const ytdCountDiff = totalCount - compTotalCount;
+                const ytdCountColor = ytdCountDiff >= 0 ? '#10b981' : '#ef4444';
+                const ytdCountSign = ytdCountDiff >= 0 ? '+' : '';
+                monthlyKpiOverlayData.ytd = `
+                    <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:#94a3b8;">📊 ${compYear}년 대비</div>
+                    <div style="margin-bottom:4px;"><span style="color:#94a3b8;">${compYear}년 누적:</span></div>
+                    <div style="margin-bottom:8px;margin-left:8px;">${formatCurrency(compTotalSales)} / ${compTotalCount.toLocaleString()}건</div>
+                    <div style="margin-bottom:4px;"><span style="color:#94a3b8;">${currYear}년 누적:</span></div>
+                    <div style="margin-bottom:8px;margin-left:8px;">${formatCurrency(totalSales)} / ${totalCount.toLocaleString()}건</div>
+                    <div style="padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">
+                        <div><span style="color:#94a3b8;">매출:</span> <span style="color:${ytdColor};font-weight:bold;">${ytdSign}${ytdPct.toFixed(1)}%</span> <span style="color:#94a3b8;">(${ytdSign}${(ytdDiff/100000000).toFixed(2)}억)</span></div>
+                        <div><span style="color:#94a3b8;">건수:</span> <span style="color:${ytdCountColor};font-weight:bold;">${ytdCountSign}${((ytdCountDiff/compTotalCount)*100).toFixed(1)}%</span> <span style="color:#94a3b8;">(${ytdCountSign}${ytdCountDiff.toLocaleString()}건)</span></div>
+                    </div>
+                `;
+            } else {
+                monthlyKpiOverlayData.ytd = `<div style="color:#94a3b8;">비교 연도를 선택하세요</div>`;
+            }
+        }
+
+        // 월별 KPI 오버레이 표시
+        function showMonthlyKpiOverlay(type) {
+            const overlay = document.getElementById(`monthly${type.charAt(0).toUpperCase() + type.slice(1)}Overlay`);
+            if (overlay && monthlyKpiOverlayData[type]) {
+                overlay.innerHTML = monthlyKpiOverlayData[type];
+                overlay.style.display = 'flex';
+                overlay.style.flexDirection = 'column';
+                overlay.style.justifyContent = 'center';
+            }
+        }
+
+        // 월별 KPI 오버레이 숨기기
+        function hideMonthlyKpiOverlay(type) {
+            const overlay = document.getElementById(`monthly${type.charAt(0).toUpperCase() + type.slice(1)}Overlay`);
+            if (overlay) {
+                overlay.style.display = 'none';
             }
         }
 

@@ -2734,6 +2734,261 @@ HTML_TEMPLATE = '''
         }
         .sortable-table th.sortable:hover { background: var(--gray-100); }
 
+        /* 목적별 카드 그리드 스타일 */
+        .purpose-card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        @media (max-width: 1200px) { .purpose-card-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 900px) { .purpose-card-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .purpose-card-grid { grid-template-columns: 1fr; } }
+
+        .purpose-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            padding: 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            border-left: 4px solid var(--primary);
+        }
+        .purpose-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.18);
+            transform: translateY(-3px);
+        }
+        .purpose-card.top-1 {
+            background: linear-gradient(135deg, #fffbeb, white);
+            border-left-color: #f59e0b;
+        }
+        .purpose-card.top-2 {
+            background: linear-gradient(135deg, #f8fafc, white);
+            border-left-color: #94a3b8;
+        }
+        .purpose-card.top-3 {
+            background: linear-gradient(135deg, #fef3e2, white);
+            border-left-color: #cd7f32;
+        }
+        .purpose-card-rank {
+            position: absolute;
+            top: 10px;
+            left: 12px;
+            font-size: 20px;
+        }
+        .purpose-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding-left: 28px;
+        }
+        .purpose-card-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-800);
+            line-height: 1.3;
+            flex: 1;
+            word-break: keep-all;
+        }
+        .purpose-card-growth {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 12px;
+            white-space: nowrap;
+            margin-left: 8px;
+        }
+        .purpose-card-growth.positive { background: #dcfce7; color: #166534; }
+        .purpose-card-growth.negative { background: #fee2e2; color: #991b1b; }
+        .purpose-card-growth.neutral { background: #f3f4f6; color: #6b7280; }
+        .purpose-card-sales {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 6px;
+            padding-left: 28px;
+        }
+        .purpose-card-count {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-bottom: 12px;
+            padding-left: 28px;
+        }
+        .purpose-card-bar {
+            height: 8px;
+            background: var(--gray-100);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+        .purpose-card-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+        .purpose-card-percent {
+            font-size: 12px;
+            color: var(--gray-500);
+            text-align: right;
+            margin-bottom: 10px;
+        }
+        .purpose-card-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--gray-500);
+            padding-top: 10px;
+            border-top: 1px dashed var(--gray-200);
+        }
+
+        /* 목적별 호버 팝업 */
+        .purpose-hover-popup {
+            position: fixed;
+            z-index: 10000;
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            padding: 20px;
+            min-width: 360px;
+            max-width: 420px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            pointer-events: none;
+        }
+        .purpose-hover-popup.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .popup-purpose-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 14px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .popup-purpose-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .popup-purpose-rank {
+            font-size: 24px;
+        }
+        .popup-purpose-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .popup-stat-item {
+            background: var(--gray-50);
+            padding: 12px;
+            border-radius: 10px;
+        }
+        .popup-stat-label {
+            font-size: 11px;
+            color: var(--gray-500);
+            margin-bottom: 4px;
+        }
+        .popup-stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .popup-stat-sub {
+            font-size: 11px;
+            color: var(--gray-400);
+            margin-top: 2px;
+        }
+        .popup-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 10px;
+        }
+        .popup-manager-section { margin-bottom: 16px; }
+        .popup-manager-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .popup-manager-name {
+            width: 65px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--gray-700);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .popup-manager-bar {
+            flex: 1;
+            height: 18px;
+            background: var(--gray-100);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .popup-manager-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 6px;
+            min-width: 30px;
+        }
+        .popup-manager-bar-text {
+            font-size: 9px;
+            font-weight: 600;
+            color: white;
+        }
+        .popup-manager-sales {
+            width: 60px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--gray-700);
+            text-align: right;
+        }
+        .popup-client-section { margin-bottom: 16px; }
+        .popup-client-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .popup-client-tag {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+        .popup-client-tag.top {
+            background: var(--primary);
+            color: white;
+        }
+        .popup-insight {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-radius: 10px;
+            padding: 12px;
+            border-left: 3px solid #3b82f6;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .popup-insight-icon { font-size: 16px; }
+        .popup-insight-text {
+            font-size: 12px;
+            color: #1e40af;
+            line-height: 1.5;
+        }
+
         /* 모달 스타일 */
         .modal-overlay, .modal {
             position: fixed;
@@ -4722,22 +4977,135 @@ HTML_TEMPLATE = '''
 
         <!-- 목적별 탭 -->
         <div id="purpose" class="tab-content">
-            <div class="content-grid">
-                <div class="card">
-                    <div class="card-header"><div class="card-title">📊 목적별 월별 추이</div></div>
-                    <div class="card-body"><div class="chart-container"><canvas id="purposeMonthlyChart"></canvas></div></div>
+            <!-- 목적별 KPI 카드 -->
+            <section class="kpi-section" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                <div class="kpi-card" style="border-top: 4px solid #6366f1;">
+                    <div class="kpi-header"><div class="kpi-icon">🎯</div></div>
+                    <div class="kpi-label">총 검사목적</div>
+                    <div class="kpi-value" id="purposeTotalCount">-</div>
+                    <div class="kpi-compare">활성 목적 수</div>
                 </div>
-                <div class="card">
-                    <div class="card-header"><div class="card-title">📋 목적별 상세</div></div>
-                    <div class="card-body">
-                        <div class="scroll-table">
-                            <table class="data-table" id="purposeTable">
-                                <thead><tr><th>검사목적</th><th class="text-right">매출액</th><th class="text-right">건수</th><th>비중</th></tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
+                <div class="kpi-card" style="border-top: 4px solid #10b981;">
+                    <div class="kpi-header"><div class="kpi-icon">💰</div></div>
+                    <div class="kpi-label">총 매출액</div>
+                    <div class="kpi-value" id="purposeTotalSales" style="color: #10b981;">-</div>
+                    <div class="kpi-compare" id="purposeTotalSalesCompare">-</div>
+                </div>
+                <div class="kpi-card" style="border-top: 4px solid #f59e0b;">
+                    <div class="kpi-header"><div class="kpi-icon">📋</div></div>
+                    <div class="kpi-label">총 건수</div>
+                    <div class="kpi-value" id="purposeTotalCountNum" style="color: #f59e0b;">-</div>
+                    <div class="kpi-compare" id="purposeTotalCountCompare">-</div>
+                </div>
+                <div class="kpi-card" style="border-top: 4px solid #ec4899;">
+                    <div class="kpi-header"><div class="kpi-icon">🚀</div></div>
+                    <div class="kpi-label">최고 성장 목적</div>
+                    <div class="kpi-value" id="purposeTopGrowth" style="color: #ec4899; font-size: 18px;">-</div>
+                    <div class="kpi-compare" id="purposeTopGrowthRate">-</div>
+                </div>
+            </section>
+
+            <!-- 정렬 컨트롤 + 카드 그리드 -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
+                    <div class="card-title">🎯 검사목적별 현황</div>
+                    <div class="chart-controls">
+                        <button class="filter-btn active" data-sort="sales" onclick="sortPurposeCards('sales')">매출순</button>
+                        <button class="filter-btn" data-sort="count" onclick="sortPurposeCards('count')">건수순</button>
+                        <button class="filter-btn" data-sort="growth" onclick="sortPurposeCards('growth')">성장순</button>
                     </div>
                 </div>
+                <div class="card-body">
+                    <div id="purposeCardGrid" class="purpose-card-grid"></div>
+                </div>
+            </div>
+
+            <!-- 차트 영역 -->
+            <div class="content-grid" style="margin-bottom: 24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📊 TOP 5 월별 추이</div>
+                        <div class="card-badge" id="purposeMonthlyBadge">-</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 320px;"><canvas id="purposeMonthlyChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📈 목적별 성장률</div>
+                        <div class="card-badge" id="purposeGrowthBadge">전년 대비</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 320px;"><canvas id="purposeGrowthChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 목적별 상세 테이블 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">📋 목적별 상세 현황</div>
+                    <div class="card-badge" id="purposeTableBadge">-</div>
+                </div>
+                <div class="card-body">
+                    <div class="scroll-table">
+                        <table class="data-table" id="purposeTable">
+                            <thead><tr>
+                                <th>순위</th>
+                                <th>검사목적</th>
+                                <th class="text-right">매출액</th>
+                                <th class="text-right">전년</th>
+                                <th class="text-right">증감</th>
+                                <th class="text-right">건수</th>
+                                <th class="text-right">건당단가</th>
+                                <th class="text-right">비중</th>
+                                <th>주요 담당자</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 목적별 호버 팝업 -->
+        <div id="purposeHoverPopup" class="purpose-hover-popup">
+            <div class="popup-purpose-header">
+                <span class="popup-purpose-name" id="popupPurposeName">-</span>
+                <span class="popup-purpose-rank" id="popupPurposeRank">-</span>
+            </div>
+            <div class="popup-purpose-stats">
+                <div class="popup-stat-item">
+                    <div class="popup-stat-label">💰 매출액</div>
+                    <div class="popup-stat-value" id="popupPurposeSales">-</div>
+                    <div class="popup-stat-sub" id="popupPurposeLastSales">-</div>
+                </div>
+                <div class="popup-stat-item">
+                    <div class="popup-stat-label">📋 건수</div>
+                    <div class="popup-stat-value" id="popupPurposeCount">-</div>
+                    <div class="popup-stat-sub" id="popupPurposeLastCount">-</div>
+                </div>
+                <div class="popup-stat-item">
+                    <div class="popup-stat-label">📊 비중</div>
+                    <div class="popup-stat-value" id="popupPurposePercent">-</div>
+                </div>
+                <div class="popup-stat-item">
+                    <div class="popup-stat-label">💵 건당 단가</div>
+                    <div class="popup-stat-value" id="popupPurposeAvg">-</div>
+                </div>
+            </div>
+            <div class="popup-manager-section">
+                <div class="popup-section-title">👤 담당자별 매출</div>
+                <div id="popupManagerBars"></div>
+            </div>
+            <div class="popup-client-section">
+                <div class="popup-section-title">🏢 주요 업체</div>
+                <div id="popupClientTags" class="popup-client-tags"></div>
+            </div>
+            <div class="popup-insight" id="popupInsight">
+                <div class="popup-insight-icon">💡</div>
+                <div class="popup-insight-text" id="popupInsightText">-</div>
             </div>
         </div>
 
@@ -17033,21 +17401,402 @@ HTML_TEMPLATE = '''
             }).join('');
         }
 
+        // 목적별 데이터 저장
+        let purposeAnalysisData = [];
+        let purposeSortType = 'sales';
+
         function updatePurposeTab() {
             const purposes = currentData.by_purpose || [];
-            const total = purposes.reduce((s, p) => s + p[1].sales, 0) || 1;
+            const clients = currentData.by_client || [];
+            const comparePurposes = compareData?.by_purpose || [];
+            const compareMap = Object.fromEntries(comparePurposes.map(p => [p[0], p[1]]));
+            const hasCompare = compareData && comparePurposes.length > 0;
 
-            const ctx = document.getElementById('purposeMonthlyChart').getContext('2d');
+            // 접수취소 제외한 총계 계산
+            const validPurposes = purposes.filter(p => p[0] !== '접수취소' && p[1].sales > 0);
+            const totalSales = validPurposes.reduce((s, p) => s + p[1].sales, 0) || 1;
+            const totalCount = validPurposes.reduce((s, p) => s + p[1].count, 0);
+            const compTotalSales = comparePurposes.filter(p => p[0] !== '접수취소' && p[1].sales > 0)
+                .reduce((s, p) => s + p[1].sales, 0) || 1;
+
+            // 목적별 상세 데이터 계산
+            purposeAnalysisData = validPurposes.map(([name, data]) => {
+                const compData = compareMap[name];
+                const growth = hasCompare && compData && compData.sales > 0
+                    ? ((data.sales - compData.sales) / compData.sales * 100)
+                    : null;
+                const percent = (data.sales / totalSales * 100);
+                const avgPrice = data.count > 0 ? data.sales / data.count : 0;
+
+                // 담당자별 집계
+                const managerData = {};
+                clients.forEach(([clientName, clientData]) => {
+                    const clientPurpose = clientData.purpose || '';
+                    if (clientPurpose === name || (clientData.byPurpose && clientData.byPurpose[name])) {
+                        const mgr = clientData.manager || '미지정';
+                        const purposeSales = clientData.byPurpose?.[name]?.sales || (clientPurpose === name ? clientData.sales : 0);
+                        const purposeCount = clientData.byPurpose?.[name]?.count || (clientPurpose === name ? clientData.count : 0);
+                        if (!managerData[mgr]) managerData[mgr] = { sales: 0, count: 0, clients: [] };
+                        managerData[mgr].sales += purposeSales;
+                        managerData[mgr].count += purposeCount;
+                        if (purposeSales > 0 && !managerData[mgr].clients.includes(clientName)) {
+                            managerData[mgr].clients.push(clientName);
+                        }
+                    }
+                });
+
+                const managers = Object.entries(managerData)
+                    .map(([mgrName, mgrData]) => ({
+                        name: mgrName,
+                        sales: mgrData.sales,
+                        count: mgrData.count,
+                        clients: mgrData.clients,
+                        percent: data.sales > 0 ? (mgrData.sales / data.sales * 100) : 0
+                    }))
+                    .filter(m => m.sales > 0)
+                    .sort((a, b) => b.sales - a.sales)
+                    .slice(0, 5);
+
+                // 주요 업체 TOP 5
+                const topClients = clients
+                    .filter(([_, d]) => d.purpose === name || (d.byPurpose && d.byPurpose[name]))
+                    .map(([n, d]) => ({
+                        name: n,
+                        sales: d.byPurpose?.[name]?.sales || (d.purpose === name ? d.sales : 0)
+                    }))
+                    .filter(c => c.sales > 0)
+                    .sort((a, b) => b.sales - a.sales)
+                    .slice(0, 5);
+
+                return {
+                    name,
+                    sales: data.sales,
+                    count: data.count,
+                    percent,
+                    avgPrice,
+                    growth,
+                    lastYearSales: compData?.sales || 0,
+                    lastYearCount: compData?.count || 0,
+                    managers,
+                    topClients,
+                    clientCount: topClients.length
+                };
+            });
+
+            // KPI 업데이트
+            document.getElementById('purposeTotalCount').textContent = validPurposes.length + '개';
+            document.getElementById('purposeTotalSales').textContent = formatCurrency(totalSales);
+            document.getElementById('purposeTotalCountNum').textContent = totalCount.toLocaleString() + '건';
+
+            if (hasCompare) {
+                const salesGrowth = ((totalSales - compTotalSales) / compTotalSales * 100);
+                const growthColor = salesGrowth >= 0 ? '#10b981' : '#ef4444';
+                document.getElementById('purposeTotalSalesCompare').innerHTML =
+                    `전년 ${formatCurrency(compTotalSales)} <span style="color:${growthColor};">(${salesGrowth >= 0 ? '+' : ''}${salesGrowth.toFixed(1)}%)</span>`;
+            } else {
+                document.getElementById('purposeTotalSalesCompare').textContent = '-';
+            }
+
+            // 최고 성장 목적
+            const growthData = purposeAnalysisData.filter(p => p.growth !== null).sort((a, b) => b.growth - a.growth);
+            if (growthData.length > 0) {
+                const top = growthData[0];
+                document.getElementById('purposeTopGrowth').textContent =
+                    top.name.length > 12 ? top.name.substring(0, 12) + '..' : top.name;
+                document.getElementById('purposeTopGrowthRate').innerHTML =
+                    `<span style="color:#10b981;">+${top.growth.toFixed(1)}%</span> 성장`;
+            } else {
+                document.getElementById('purposeTopGrowth').textContent = '-';
+                document.getElementById('purposeTopGrowthRate').textContent = '전년 비교 필요';
+            }
+
+            // 카드 그리드 렌더링
+            renderPurposeCards();
+
+            // 차트 업데이트
+            updatePurposeMonthlyChart();
+            updatePurposeGrowthChart();
+
+            // 테이블 업데이트
+            updatePurposeDetailTable();
+        }
+
+        // 정렬 기능
+        function sortPurposeCards(sortType) {
+            purposeSortType = sortType;
+
+            // 버튼 상태 업데이트
+            document.querySelectorAll('#purpose .filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.sort === sortType);
+            });
+
+            renderPurposeCards();
+        }
+
+        // 카드 그리드 렌더링
+        function renderPurposeCards() {
+            let sorted = [...purposeAnalysisData];
+
+            if (purposeSortType === 'sales') {
+                sorted.sort((a, b) => b.sales - a.sales);
+            } else if (purposeSortType === 'count') {
+                sorted.sort((a, b) => b.count - a.count);
+            } else if (purposeSortType === 'growth') {
+                sorted.sort((a, b) => (b.growth ?? -9999) - (a.growth ?? -9999));
+            }
+
+            const grid = document.getElementById('purposeCardGrid');
+            grid.innerHTML = sorted.map((p, idx) => {
+                const rank = idx + 1;
+                const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+                const topClass = rank === 1 ? 'top-1' : rank === 2 ? 'top-2' : rank === 3 ? 'top-3' : '';
+
+                let growthBadge = '';
+                if (p.growth !== null) {
+                    const growthClass = p.growth >= 0 ? 'positive' : 'negative';
+                    growthBadge = `<span class="purpose-card-growth ${growthClass}">${p.growth >= 0 ? '+' : ''}${p.growth.toFixed(1)}%</span>`;
+                } else {
+                    growthBadge = `<span class="purpose-card-growth neutral">-</span>`;
+                }
+
+                const topManager = p.managers[0];
+                const managerText = topManager ? `👤 ${topManager.name} ${topManager.percent.toFixed(0)}%` : '👤 -';
+
+                return `
+                    <div class="purpose-card ${topClass}"
+                         data-purpose="${p.name}"
+                         onmouseenter="showPurposePopup(event, '${p.name.replace(/'/g, "\\'")}')"
+                         onmouseleave="hidePurposePopup()">
+                        <div class="purpose-card-rank">${rankIcon}</div>
+                        <div class="purpose-card-header">
+                            <div class="purpose-card-name">${p.name}</div>
+                            ${growthBadge}
+                        </div>
+                        <div class="purpose-card-sales">${formatCurrency(p.sales)}</div>
+                        <div class="purpose-card-count">📋 ${p.count.toLocaleString()}건</div>
+                        <div class="purpose-card-bar">
+                            <div class="purpose-card-bar-fill" style="width: ${p.percent}%;"></div>
+                        </div>
+                        <div class="purpose-card-percent">${p.percent.toFixed(1)}%</div>
+                        <div class="purpose-card-footer">
+                            <span>${managerText}</span>
+                            <span>🏢 ${p.clientCount}개</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 팝업 표시
+        function showPurposePopup(event, purposeName) {
+            const popup = document.getElementById('purposeHoverPopup');
+            const p = purposeAnalysisData.find(d => d.name === purposeName);
+            if (!p) return;
+
+            // 순위 계산
+            const sortedBySales = [...purposeAnalysisData].sort((a, b) => b.sales - a.sales);
+            const rank = sortedBySales.findIndex(d => d.name === purposeName) + 1;
+            const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}위`;
+
+            document.getElementById('popupPurposeName').textContent = p.name;
+            document.getElementById('popupPurposeRank').textContent = rankIcon;
+            document.getElementById('popupPurposeSales').textContent = formatCurrency(p.sales);
+            document.getElementById('popupPurposeCount').textContent = p.count.toLocaleString() + '건';
+            document.getElementById('popupPurposePercent').textContent = p.percent.toFixed(1) + '%';
+            document.getElementById('popupPurposeAvg').textContent = formatCurrency(p.avgPrice);
+
+            if (p.lastYearSales > 0) {
+                document.getElementById('popupPurposeLastSales').textContent = `전년 ${formatCurrency(p.lastYearSales)}`;
+                document.getElementById('popupPurposeLastCount').textContent = `전년 ${p.lastYearCount.toLocaleString()}건`;
+            } else {
+                document.getElementById('popupPurposeLastSales').textContent = '';
+                document.getElementById('popupPurposeLastCount').textContent = '';
+            }
+
+            // 담당자별 바
+            const maxMgrSales = p.managers[0]?.sales || 1;
+            document.getElementById('popupManagerBars').innerHTML = p.managers.slice(0, 4).map(m => `
+                <div class="popup-manager-row">
+                    <span class="popup-manager-name">${m.name}</span>
+                    <div class="popup-manager-bar">
+                        <div class="popup-manager-bar-fill" style="width: ${(m.sales / maxMgrSales * 100)}%;">
+                            <span class="popup-manager-bar-text">${m.percent.toFixed(0)}%</span>
+                        </div>
+                    </div>
+                    <span class="popup-manager-sales">${formatCurrency(m.sales)}</span>
+                </div>
+            `).join('') || '<div style="color: #94a3b8; font-size: 12px;">데이터 없음</div>';
+
+            // 주요 업체 태그
+            document.getElementById('popupClientTags').innerHTML = p.topClients.map((c, i) =>
+                `<span class="popup-client-tag ${i === 0 ? 'top' : ''}">${i === 0 ? '👑 ' : ''}${c.name}</span>`
+            ).join('') || '<span style="color: #94a3b8; font-size: 12px;">데이터 없음</span>';
+
+            // AI 인사이트
+            let insight = '';
+            if (p.growth !== null) {
+                if (p.growth > 10) {
+                    insight = `전년 대비 <strong>${p.growth.toFixed(1)}%</strong> 성장 중입니다. ${p.managers[0]?.name || '담당자'}의 기여도가 높습니다.`;
+                } else if (p.growth < -10) {
+                    insight = `전년 대비 <strong>${Math.abs(p.growth).toFixed(1)}%</strong> 감소했습니다. 원인 분석이 필요합니다.`;
+                } else {
+                    insight = `전년과 비슷한 수준을 유지하고 있습니다.`;
+                }
+            } else {
+                insight = `비중 ${p.percent.toFixed(1)}%로 ${p.percent > 10 ? '주요' : '소규모'} 검사 목적입니다.`;
+            }
+            document.getElementById('popupInsightText').innerHTML = insight;
+
+            // 위치 계산
+            const rect = event.currentTarget.getBoundingClientRect();
+            const popupWidth = 400;
+            const popupHeight = popup.offsetHeight || 450;
+
+            let x = rect.right + 15;
+            let y = rect.top;
+
+            if (x + popupWidth > window.innerWidth - 20) {
+                x = rect.left - popupWidth - 15;
+            }
+            if (y + popupHeight > window.innerHeight - 20) {
+                y = window.innerHeight - popupHeight - 20;
+            }
+            y = Math.max(20, y);
+
+            popup.style.left = x + 'px';
+            popup.style.top = y + 'px';
+            popup.classList.add('active');
+        }
+
+        function hidePurposePopup() {
+            document.getElementById('purposeHoverPopup').classList.remove('active');
+        }
+
+        // TOP 5 월별 추이 차트
+        function updatePurposeMonthlyChart() {
+            const ctx = document.getElementById('purposeMonthlyChart');
+            if (!ctx) return;
             if (charts.purposeMonthly) charts.purposeMonthly.destroy();
 
             const monthMap = Object.fromEntries(currentData.by_month || []);
             const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-            charts.purposeMonthly = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: '매출', data: labels.map((_, i) => monthMap[i+1]?.sales || 0), borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => formatCurrency(v) } } } } });
+            const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
 
+            // TOP 5 목적별 월별 데이터
+            const top5 = [...purposeAnalysisData].sort((a, b) => b.sales - a.sales).slice(0, 5);
+            const datasets = top5.map((p, i) => {
+                const monthlyData = labels.map((_, mIdx) => {
+                    const monthData = monthMap[mIdx + 1]?.byPurpose?.[p.name];
+                    return monthData?.sales || 0;
+                });
+                return {
+                    label: p.name.length > 10 ? p.name.substring(0, 10) + '..' : p.name,
+                    data: monthlyData,
+                    borderColor: colors[i],
+                    backgroundColor: colors[i] + '20',
+                    tension: 0.4,
+                    fill: false,
+                    borderWidth: 2
+                };
+            });
+
+            document.getElementById('purposeMonthlyBadge').textContent = `TOP 5 · ${currentData.year}년`;
+
+            charts.purposeMonthly = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } }
+                    }
+                }
+            });
+        }
+
+        // 목적별 성장률 차트
+        function updatePurposeGrowthChart() {
+            const ctx = document.getElementById('purposeGrowthChart');
+            if (!ctx) return;
+            if (charts.purposeGrowth) charts.purposeGrowth.destroy();
+
+            const hasCompare = compareData && compareData.by_purpose;
+            document.getElementById('purposeGrowthBadge').textContent = hasCompare ? `${compareData.year} → ${currentData.year}` : '전년 비교 필요';
+
+            if (!hasCompare) {
+                charts.purposeGrowth = new Chart(ctx.getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: ['전년 데이터를 선택하세요'], datasets: [{ data: [0], backgroundColor: '#e2e8f0' }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+                return;
+            }
+
+            const growthData = purposeAnalysisData
+                .filter(p => p.growth !== null)
+                .sort((a, b) => b.growth - a.growth)
+                .slice(0, 12);
+
+            charts.purposeGrowth = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: growthData.map(p => p.name.length > 10 ? p.name.substring(0, 10) + '..' : p.name),
+                    datasets: [{
+                        label: '성장률(%)',
+                        data: growthData.map(p => p.growth),
+                        backgroundColor: growthData.map(p => p.growth >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { callback: v => v.toFixed(0) + '%' } }
+                    }
+                }
+            });
+        }
+
+        // 목적별 상세 테이블
+        function updatePurposeDetailTable() {
             const tbody = document.querySelector('#purposeTable tbody');
-            tbody.innerHTML = purposes.map(p => {
-                const percent = (p[1].sales / total * 100).toFixed(1);
-                return `<tr><td><strong>${p[0]}</strong></td><td class="text-right">${formatCurrency(p[1].sales)}</td><td class="text-right">${p[1].count.toLocaleString()}</td><td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td></tr>`;
+            const sorted = [...purposeAnalysisData].sort((a, b) => b.sales - a.sales);
+            document.getElementById('purposeTableBadge').textContent = sorted.length + '개 목적';
+
+            tbody.innerHTML = sorted.map((p, idx) => {
+                const rank = idx + 1;
+                const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+
+                let growthCell = '-';
+                if (p.growth !== null) {
+                    const color = p.growth >= 0 ? '#10b981' : '#ef4444';
+                    const icon = p.growth >= 0 ? '▲' : '▼';
+                    growthCell = `<span style="color:${color};font-weight:600;">${icon} ${p.growth >= 0 ? '+' : ''}${p.growth.toFixed(1)}%</span>`;
+                }
+
+                const topManager = p.managers[0];
+                const managerCell = topManager
+                    ? `<span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:11px;">${topManager.name} (${topManager.percent.toFixed(0)}%)</span>`
+                    : '-';
+
+                return `<tr>
+                    <td style="text-align:center;font-weight:600;">${rankIcon}</td>
+                    <td style="font-weight:600;">${p.name}</td>
+                    <td class="text-right" style="font-weight:600;">${formatCurrency(p.sales)}</td>
+                    <td class="text-right" style="color:#94a3b8;">${p.lastYearSales > 0 ? formatCurrency(p.lastYearSales) : '-'}</td>
+                    <td class="text-right">${growthCell}</td>
+                    <td class="text-right">${p.count.toLocaleString()}건</td>
+                    <td class="text-right">${formatCurrency(p.avgPrice)}</td>
+                    <td class="text-right"><span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;">${p.percent.toFixed(1)}%</span></td>
+                    <td>${managerCell}</td>
+                </tr>`;
             }).join('');
         }
 

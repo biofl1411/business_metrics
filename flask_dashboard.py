@@ -14283,7 +14283,7 @@ HTML_TEMPLATE = '''
             if (!heatmapTooltipEl) {
                 heatmapTooltipEl = document.createElement('div');
                 heatmapTooltipEl.id = 'heatmapTooltip';
-                heatmapTooltipEl.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:10px;padding:14px;z-index:99999;font-size:12px;color:#e2e8f0;box-shadow:0 10px 30px rgba(0,0,0,0.4);min-width:220px;max-width:280px;pointer-events:none;';
+                heatmapTooltipEl.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;z-index:99999;font-size:12px;color:#e2e8f0;box-shadow:0 10px 30px rgba(0,0,0,0.4);min-width:280px;max-width:340px;pointer-events:none;';
                 document.body.appendChild(heatmapTooltipEl);
             }
 
@@ -14291,39 +14291,108 @@ HTML_TEMPLATE = '''
             const currYear = currentData.year || '2025';
             const compYear = compareData?.year || '2024';
 
-            let html = `<div style="font-weight:bold;margin-bottom:10px;font-size:14px;border-bottom:1px solid rgba(255,255,255,0.2);padding-bottom:8px;">📊 ${purpose} - ${monthNames[month]}</div>`;
+            const currSales = currData.sales || 0;
+            const currCount = currData.count || 0;
+            const compSales = compData?.sales || 0;
+            const compCount = compData?.count || 0;
+            const hasComp = compSales > 0 || compCount > 0;
 
-            // 현재 연도
-            html += `<div style="background:rgba(96,165,250,0.15);padding:8px;border-radius:6px;margin-bottom:8px;">`;
-            html += `<div style="color:#60a5fa;font-weight:600;margin-bottom:4px;">${currYear}년</div>`;
-            html += `<div style="display:flex;justify-content:space-between;"><span>매출</span><strong>${formatCurrency(currData.sales || 0)}</strong></div>`;
-            html += `<div style="display:flex;justify-content:space-between;"><span>건수</span><strong>${(currData.count || 0).toLocaleString()}건</strong></div>`;
-            if (currData.count > 0) {
-                html += `<div style="display:flex;justify-content:space-between;"><span>건당</span><strong>${formatCurrency(Math.round((currData.sales || 0) / currData.count))}</strong></div>`;
-            }
+            // 증감 계산
+            const salesDiff = currSales - compSales;
+            const salesPct = compSales > 0 ? (salesDiff / compSales * 100) : (currSales > 0 ? 100 : 0);
+            const countDiff = currCount - compCount;
+            const countPct = compCount > 0 ? (countDiff / compCount * 100) : (currCount > 0 ? 100 : 0);
+
+            const currAvg = currCount > 0 ? currSales / currCount : 0;
+            const compAvg = compCount > 0 ? compSales / compCount : 0;
+            const avgDiff = currAvg - compAvg;
+            const avgPct = compAvg > 0 ? (avgDiff / compAvg * 100) : 0;
+
+            // 상승/하락 판정
+            const isGrowth = salesDiff >= 0;
+            const mainColor = isGrowth ? '#10b981' : '#ef4444';
+            const mainIcon = isGrowth ? '📈' : '📉';
+            const mainLabel = isGrowth ? '상승' : '하락';
+
+            let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.15);">`;
+            html += `<span style="font-size:20px;">${mainIcon}</span>`;
+            html += `<div><div style="font-weight:bold;font-size:14px;">${purpose}</div>`;
+            html += `<div style="color:#94a3b8;font-size:11px;">${monthNames[month]} 전년 비교</div></div>`;
             html += `</div>`;
 
-            // 비교 연도
-            if (compData && (compData.sales > 0 || compData.count > 0)) {
-                html += `<div style="background:rgba(245,158,11,0.15);padding:8px;border-radius:6px;margin-bottom:8px;">`;
-                html += `<div style="color:#f59e0b;font-weight:600;margin-bottom:4px;">${compYear}년</div>`;
-                html += `<div style="display:flex;justify-content:space-between;"><span>매출</span><strong>${formatCurrency(compData.sales || 0)}</strong></div>`;
-                html += `<div style="display:flex;justify-content:space-between;"><span>건수</span><strong>${(compData.count || 0).toLocaleString()}건</strong></div>`;
-                if (compData.count > 0) {
-                    html += `<div style="display:flex;justify-content:space-between;"><span>건당</span><strong>${formatCurrency(Math.round((compData.sales || 0) / compData.count))}</strong></div>`;
+            // 전년 대비 요약 (상단에 크게)
+            if (hasComp) {
+                html += `<div style="background:${isGrowth ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'};padding:12px;border-radius:8px;margin-bottom:12px;text-align:center;">`;
+                html += `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">전년 대비 매출</div>`;
+                html += `<div style="font-size:22px;font-weight:bold;color:${mainColor};">${salesDiff >= 0 ? '+' : ''}${salesPct.toFixed(1)}%</div>`;
+                html += `<div style="font-size:11px;color:${mainColor};margin-top:2px;">${salesDiff >= 0 ? '+' : ''}${formatCurrency(salesDiff)}</div>`;
+                html += `</div>`;
+            }
+
+            // 상세 비교 테이블
+            html += `<table style="width:100%;font-size:11px;border-collapse:collapse;">`;
+            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.1);">`;
+            html += `<th style="text-align:left;padding:6px 4px;color:#94a3b8;">항목</th>`;
+            html += `<th style="text-align:right;padding:6px 4px;color:#60a5fa;">${currYear}</th>`;
+            html += `<th style="text-align:right;padding:6px 4px;color:#f59e0b;">${compYear}</th>`;
+            html += `<th style="text-align:right;padding:6px 4px;color:#94a3b8;">증감</th>`;
+            html += `</tr>`;
+
+            // 매출
+            const salesColor = salesDiff >= 0 ? '#10b981' : '#ef4444';
+            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">`;
+            html += `<td style="padding:6px 4px;">매출</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;font-weight:600;">${formatCurrency(currSales)}</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;">${formatCurrency(compSales)}</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;color:${salesColor};font-weight:600;">${salesDiff >= 0 ? '▲' : '▼'} ${Math.abs(salesPct).toFixed(1)}%</td>`;
+            html += `</tr>`;
+
+            // 건수
+            const countColor = countDiff >= 0 ? '#10b981' : '#ef4444';
+            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">`;
+            html += `<td style="padding:6px 4px;">건수</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;font-weight:600;">${currCount.toLocaleString()}건</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;">${compCount.toLocaleString()}건</td>`;
+            html += `<td style="text-align:right;padding:6px 4px;color:${countColor};font-weight:600;">${countDiff >= 0 ? '▲' : '▼'} ${Math.abs(countPct).toFixed(1)}%</td>`;
+            html += `</tr>`;
+
+            // 건당 단가
+            if (currCount > 0 || compCount > 0) {
+                const avgColor = avgDiff >= 0 ? '#10b981' : '#ef4444';
+                html += `<tr>`;
+                html += `<td style="padding:6px 4px;">건당단가</td>`;
+                html += `<td style="text-align:right;padding:6px 4px;font-weight:600;">${formatCurrency(Math.round(currAvg))}</td>`;
+                html += `<td style="text-align:right;padding:6px 4px;">${formatCurrency(Math.round(compAvg))}</td>`;
+                if (compAvg > 0) {
+                    html += `<td style="text-align:right;padding:6px 4px;color:${avgColor};font-weight:600;">${avgDiff >= 0 ? '▲' : '▼'} ${Math.abs(avgPct).toFixed(1)}%</td>`;
+                } else {
+                    html += `<td style="text-align:right;padding:6px 4px;color:#94a3b8;">-</td>`;
+                }
+                html += `</tr>`;
+            }
+            html += `</table>`;
+
+            // 분석 코멘트
+            if (hasComp) {
+                html += `<div style="margin-top:10px;padding:8px;background:rgba(99,102,241,0.1);border-radius:6px;font-size:11px;color:#a5b4fc;">`;
+                if (Math.abs(salesPct) >= 20) {
+                    if (salesDiff >= 0) {
+                        html += `💡 <strong>대폭 상승</strong>: 전년 대비 ${salesPct.toFixed(0)}% 성장`;
+                    } else {
+                        html += `⚠️ <strong>대폭 하락</strong>: 전년 대비 ${Math.abs(salesPct).toFixed(0)}% 감소`;
+                    }
+                } else if (Math.abs(salesPct) >= 10) {
+                    if (salesDiff >= 0) {
+                        html += `📊 <strong>상승세</strong>: 전년 대비 ${salesPct.toFixed(0)}% 증가`;
+                    } else {
+                        html += `📉 <strong>하락세</strong>: 전년 대비 ${Math.abs(salesPct).toFixed(0)}% 감소`;
+                    }
+                } else if (Math.abs(salesPct) >= 5) {
+                    html += `📌 <strong>소폭 ${salesDiff >= 0 ? '상승' : '하락'}</strong>: 비교적 안정적`;
+                } else {
+                    html += `✅ <strong>유지</strong>: 전년과 유사한 수준`;
                 }
                 html += `</div>`;
-
-                // 증감
-                if (compData.sales > 0) {
-                    const salesDiff = (currData.sales || 0) - compData.sales;
-                    const salesPct = (salesDiff / compData.sales * 100);
-                    const color = salesDiff >= 0 ? '#10b981' : '#ef4444';
-                    const sign = salesDiff >= 0 ? '+' : '';
-                    html += `<div style="background:rgba(99,102,241,0.15);padding:6px 8px;border-radius:4px;text-align:center;">`;
-                    html += `<span style="color:#94a3b8;">전년 대비</span> <strong style="color:${color};">${sign}${salesPct.toFixed(1)}%</strong>`;
-                    html += `</div>`;
-                }
             }
 
             heatmapTooltipEl.innerHTML = html;
@@ -14332,8 +14401,9 @@ HTML_TEMPLATE = '''
             // 위치 계산
             let left = e.clientX + 15;
             let top = e.clientY - 10;
-            if (left + 280 > window.innerWidth) left = e.clientX - 290;
-            if (top + 200 > window.innerHeight) top = e.clientY - 200;
+            if (left + 340 > window.innerWidth) left = e.clientX - 355;
+            if (top + 350 > window.innerHeight) top = window.innerHeight - 360;
+            if (top < 10) top = 10;
             heatmapTooltipEl.style.left = left + 'px';
             heatmapTooltipEl.style.top = top + 'px';
         }

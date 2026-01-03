@@ -4734,14 +4734,14 @@ HTML_TEMPLATE = '''
                 const res = await fetch('/api/token-usage');
                 const data = await res.json();
                 if (data.this_month) {
-                    document.getElementById('thisMonthTokens').textContent = data.this_month.total_tokens.toLocaleString();
-                    document.getElementById('thisMonthKRW').textContent = Math.round(data.this_month.total_cost_krw).toLocaleString();
+                    document.getElementById('thisMonthTokens').textContent = (data.this_month.tokens || 0).toLocaleString();
+                    document.getElementById('thisMonthKRW').textContent = Math.round(data.this_month.cost_krw || 0).toLocaleString();
                 }
                 if (data.last_month) {
-                    document.getElementById('lastMonthTokens').textContent = data.last_month.total_tokens.toLocaleString();
-                    document.getElementById('lastMonthKRW').textContent = Math.round(data.last_month.total_cost_krw).toLocaleString();
+                    document.getElementById('lastMonthTokens').textContent = (data.last_month.tokens || 0).toLocaleString();
+                    document.getElementById('lastMonthKRW').textContent = Math.round(data.last_month.cost_krw || 0).toLocaleString();
                 }
-            } catch (e) { console.log('토큰 로드 실패'); }
+            } catch (e) { console.log('토큰 로드 실패', e); }
         }
 
         // 데이터 로드 (실제 API 호출)

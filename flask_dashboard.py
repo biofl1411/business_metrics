@@ -3870,34 +3870,35 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
 
-            <!-- 거래처 중복 분석 필터 -->
-            <div class="card" style="margin-bottom: 16px; padding: 12px 16px;">
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                    <span style="font-weight: 600; color: #64748b;">📊 거래처 분석 필터</span>
-                    <select id="clientChartPurposeFilter" class="filter-select" style="min-width: 150px;" onchange="updateClientRetentionCharts()">
-                        <option value="전체">전체 검사목적</option>
-                    </select>
-                    <select id="clientChartBranchFilter" class="filter-select" style="min-width: 120px;" onchange="updateClientRetentionCharts()">
-                        <option value="전체">전체 팀</option>
-                    </select>
-                </div>
-            </div>
-
             <!-- 거래처 중복 분석 -->
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 8px;">
                         <div class="card-title">🔄 월별 기존/신규 거래처 현황</div>
-                        <div class="card-badge">기존 거래처 vs 신규</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="clientChart1PurposeFilter" class="filter-select" style="min-width: 120px; padding: 4px 8px; font-size: 12px;" onchange="applyClientChartFilters()">
+                                <option value="전체">전체 검사목적</option>
+                            </select>
+                            <select id="clientChart1BranchFilter" class="filter-select" style="min-width: 100px; padding: 4px 8px; font-size: 12px;" onchange="applyClientChartFilters()">
+                                <option value="전체">전체 팀</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-container" style="height: 300px;"><canvas id="clientRetentionChart"></canvas></div>
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 8px;">
                         <div class="card-title">📊 거래처 리텐션율 추이</div>
-                        <div class="card-badge">이전달 대비 유지율</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="clientChart2PurposeFilter" class="filter-select" style="min-width: 120px; padding: 4px 8px; font-size: 12px;" onchange="applyClientChartFilters()">
+                                <option value="전체">전체 검사목적</option>
+                            </select>
+                            <select id="clientChart2BranchFilter" class="filter-select" style="min-width: 100px; padding: 4px 8px; font-size: 12px;" onchange="applyClientChartFilters()">
+                                <option value="전체">전체 팀</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-container" style="height: 300px;"><canvas id="retentionRateChart"></canvas></div>
@@ -4646,6 +4647,7 @@ HTML_TEMPLATE = '''
         let currentTab = 'main';
         let managerTableSort = { column: null, direction: 'desc' };
         let branchTableSort = { column: null, direction: 'desc' };
+        let clientChartFiltersInitialized = false;  // 거래처 차트 필터 초기화 여부
         const availableYears = [2025, 2024];  // 사용 가능한 연도 목록
 
         // 담당자-팀 매핑 (JavaScript용)
@@ -4776,6 +4778,7 @@ HTML_TEMPLATE = '''
             btn.disabled = true;
             btn.innerHTML = '⏳ 로딩중...';
             showToast('데이터를 불러오는 중...', 'loading');
+            clientChartFiltersInitialized = false;  // 필터 초기화 플래그 리셋
 
             try {
                 const year = document.getElementById('yearSelect').value;
@@ -10580,21 +10583,49 @@ HTML_TEMPLATE = '''
             });
         }
 
-        // 거래처 차트 필터 초기화
+        // 거래처 차트 필터 초기화 (최초 1회만)
         function initClientChartFilters() {
-            const purposeSelect = document.getElementById('clientChartPurposeFilter');
-            const branchSelect = document.getElementById('clientChartBranchFilter');
-            if (!purposeSelect || !branchSelect) return;
+            if (clientChartFiltersInitialized) return;
 
-            // 검사목적 드롭다운
             const purposes = currentData.purposes || [];
-            purposeSelect.innerHTML = '<option value="전체">전체 검사목적</option>' +
-                purposes.map(p => `<option value="${p}">${p}</option>`).join('');
-
-            // 팀 드롭다운
             const branches = (currentData.by_branch || []).map(b => b[0]);
-            branchSelect.innerHTML = '<option value="전체">전체 팀</option>' +
+
+            const purposeOptions = '<option value="전체">전체 검사목적</option>' +
+                purposes.map(p => `<option value="${p}">${p}</option>`).join('');
+            const branchOptions = '<option value="전체">전체 팀</option>' +
                 branches.map(b => `<option value="${b}">${b}</option>`).join('');
+
+            // 차트1 필터
+            const p1 = document.getElementById('clientChart1PurposeFilter');
+            const b1 = document.getElementById('clientChart1BranchFilter');
+            if (p1) p1.innerHTML = purposeOptions;
+            if (b1) b1.innerHTML = branchOptions;
+
+            // 차트2 필터
+            const p2 = document.getElementById('clientChart2PurposeFilter');
+            const b2 = document.getElementById('clientChart2BranchFilter');
+            if (p2) p2.innerHTML = purposeOptions;
+            if (b2) b2.innerHTML = branchOptions;
+
+            clientChartFiltersInitialized = true;
+        }
+
+        // 필터 적용 및 차트 업데이트 (동기화)
+        function applyClientChartFilters() {
+            // 변경된 필터 값 가져오기
+            const p1 = document.getElementById('clientChart1PurposeFilter');
+            const b1 = document.getElementById('clientChart1BranchFilter');
+            const p2 = document.getElementById('clientChart2PurposeFilter');
+            const b2 = document.getElementById('clientChart2BranchFilter');
+
+            // 두 차트 필터 동기화 (변경된 값으로)
+            if (p1 && p2) { p2.value = p1.value; }
+            if (b1 && b2) { b2.value = b1.value; }
+            if (p2 && p1 && document.activeElement === p2) { p1.value = p2.value; }
+            if (b2 && b1 && document.activeElement === b2) { b1.value = b2.value; }
+
+            updateClientRetentionChart();
+            updateRetentionRateChart();
         }
 
         // 거래처 차트 통합 업데이트
@@ -10606,8 +10637,8 @@ HTML_TEMPLATE = '''
 
         // 필터링된 거래처 데이터 계산
         function getFilteredClientRetention() {
-            const purposeFilter = document.getElementById('clientChartPurposeFilter')?.value || '전체';
-            const branchFilter = document.getElementById('clientChartBranchFilter')?.value || '전체';
+            const purposeFilter = document.getElementById('clientChart1PurposeFilter')?.value || '전체';
+            const branchFilter = document.getElementById('clientChart1BranchFilter')?.value || '전체';
 
             // 필터가 전체이면 기존 데이터 사용
             if (purposeFilter === '전체' && branchFilter === '전체') {

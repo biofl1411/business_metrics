@@ -4118,13 +4118,22 @@ HTML_TEMPLATE = '''
 
             <!-- 월별 상세 테이블 -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
                     <div class="card-title">📋 월별 상세</div>
-                    <div class="card-badge" id="monthlyTableBadge">12개월</div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="card-badge" id="monthlyTableBadge">12개월</div>
+                        <select id="monthlyDetailSort" onchange="updateMonthlyDetailTable()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                            <option value="month">월순</option>
+                            <option value="sales_desc">매출 높은순</option>
+                            <option value="sales_asc">매출 낮은순</option>
+                            <option value="growth_desc">성장률 높은순</option>
+                            <option value="growth_asc">성장률 낮은순</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="card-body">
                     <!-- 범례 -->
-                    <div id="monthlyTableLegend" style="display: none; margin-bottom: 12px; font-size: 12px; color: #64748b; flex-wrap: wrap; gap: 20px;">
+                    <div id="monthlyTableLegend" style="display: none; margin-bottom: 16px; font-size: 11px; color: #64748b; flex-wrap: wrap; gap: 16px; padding: 10px; background: #f8fafc; border-radius: 8px;">
                         <span><strong>전년 대비:</strong></span>
                         <span><span style="color: #10b981;">▲</span> 증가</span>
                         <span><span style="color: #ef4444;">▼</span> 감소</span>
@@ -4132,16 +4141,21 @@ HTML_TEMPLATE = '''
                         <span><span style="background: rgba(16,185,129,0.2); padding: 2px 6px; border-radius: 4px; color: #10b981;">+10%↑</span> 고성장</span>
                         <span><span style="background: rgba(239,68,68,0.2); padding: 2px 6px; border-radius: 4px; color: #ef4444;">-10%↓</span> 역성장</span>
                     </div>
+                    <!-- 요약 통계 -->
+                    <div id="monthlyDetailSummary" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;"></div>
                     <div class="scroll-table">
                         <table class="data-table" id="monthlyDetailTable">
                             <thead><tr>
                                 <th>월</th>
                                 <th class="text-right">매출액</th>
-                                <th class="text-right" id="monthlyYoySalesHeader" style="display: none;">전년대비</th>
+                                <th class="text-right monthlyYoyCol" style="display: none;">전년매출</th>
+                                <th class="text-right monthlyYoyCol" style="display: none;">증감</th>
                                 <th class="text-right">건수</th>
-                                <th class="text-right" id="monthlyYoyCountHeader" style="display: none;">전년대비</th>
+                                <th class="text-right monthlyYoyCol" style="display: none;">전년건수</th>
+                                <th class="text-right monthlyYoyCol" style="display: none;">증감</th>
                                 <th class="text-right">평균단가</th>
                                 <th class="text-right">비중</th>
+                                <th>주요 검사목적</th>
                                 <th>상세</th>
                             </tr></thead>
                             <tbody></tbody>
@@ -14646,79 +14660,179 @@ HTML_TEMPLATE = '''
 
             // 헤더 및 범례 표시
             const legendEl = document.getElementById('monthlyTableLegend');
-            const salesHeaderEl = document.getElementById('monthlyYoySalesHeader');
-            const countHeaderEl = document.getElementById('monthlyYoyCountHeader');
+            const yoyCols = document.querySelectorAll('.monthlyYoyCol');
 
             if (hasCompare) {
                 legendEl.style.display = 'flex';
-                salesHeaderEl.style.display = '';
-                countHeaderEl.style.display = '';
+                yoyCols.forEach(el => el.style.display = '');
             } else {
                 legendEl.style.display = 'none';
-                salesHeaderEl.style.display = 'none';
-                countHeaderEl.style.display = 'none';
+                yoyCols.forEach(el => el.style.display = 'none');
             }
 
-            const tbody = document.querySelector('#monthlyDetailTable tbody');
-            let rows = [];
-            let activeMonths = 0;
+            // 월별 데이터 구성
+            let monthlyData = [];
+            let maxSales = 0;
+            let totalGrowthCount = 0, totalDeclineCount = 0;
+            let bestMonth = null, worstMonth = null;
+            let bestGrowth = -Infinity, worstGrowth = Infinity;
 
             for (let m = 1; m <= 12; m++) {
                 const data = monthMap[m];
                 if (data && data.sales > 0) {
-                    activeMonths++;
                     const avgPrice = data.count > 0 ? data.sales / data.count : 0;
-                    const percent = (data.sales / totalSales * 100).toFixed(1);
-
-                    // 전년 대비 계산
+                    const percent = (data.sales / totalSales * 100);
                     const compData = compMap[m];
-                    let salesYoY = '', countYoY = '';
 
+                    let salesPct = null, countPct = null;
                     if (hasCompare && compData && compData.sales > 0) {
-                        const salesDiff = data.sales - compData.sales;
-                        const salesPct = (salesDiff / compData.sales * 100);
-                        const salesColor = salesDiff >= 0 ? '#10b981' : '#ef4444';
-                        const salesIcon = salesDiff >= 0 ? '▲' : '▼';
-                        const salesSign = salesDiff >= 0 ? '+' : '';
-
-                        // 성장률에 따른 강조
-                        let salesBg = '';
-                        if (salesPct >= 10) salesBg = 'background: rgba(16,185,129,0.15); padding: 4px 8px; border-radius: 4px;';
-                        else if (salesPct <= -10) salesBg = 'background: rgba(239,68,68,0.15); padding: 4px 8px; border-radius: 4px;';
-
-                        salesYoY = `<td class="text-right"><span style="color: ${salesColor}; ${salesBg}">${salesIcon} ${salesSign}${salesPct.toFixed(1)}%</span></td>`;
-
-                        const countDiff = data.count - compData.count;
-                        const countPct = (countDiff / compData.count * 100);
-                        const countColor = countDiff >= 0 ? '#10b981' : '#ef4444';
-                        const countIcon = countDiff >= 0 ? '▲' : '▼';
-                        const countSign = countDiff >= 0 ? '+' : '';
-
-                        let countBg = '';
-                        if (countPct >= 10) countBg = 'background: rgba(16,185,129,0.15); padding: 4px 8px; border-radius: 4px;';
-                        else if (countPct <= -10) countBg = 'background: rgba(239,68,68,0.15); padding: 4px 8px; border-radius: 4px;';
-
-                        countYoY = `<td class="text-right"><span style="color: ${countColor}; ${countBg}">${countIcon} ${countSign}${countPct.toFixed(1)}%</span></td>`;
-                    } else if (hasCompare) {
-                        salesYoY = `<td class="text-right" style="color: #94a3b8;">-</td>`;
-                        countYoY = `<td class="text-right" style="color: #94a3b8;">-</td>`;
+                        salesPct = ((data.sales - compData.sales) / compData.sales * 100);
+                        countPct = compData.count > 0 ? ((data.count - compData.count) / compData.count * 100) : 0;
+                        if (salesPct >= 0) totalGrowthCount++;
+                        else totalDeclineCount++;
+                        if (salesPct > bestGrowth) { bestGrowth = salesPct; bestMonth = m; }
+                        if (salesPct < worstGrowth) { worstGrowth = salesPct; worstMonth = m; }
                     }
 
-                    rows.push(`<tr>
-                        <td>${m}월</td>
-                        <td class="text-right">${formatCurrency(data.sales)}</td>
-                        ${salesYoY}
-                        <td class="text-right">${data.count.toLocaleString()}건</td>
-                        ${countYoY}
-                        <td class="text-right">${formatCurrency(avgPrice)}</td>
-                        <td class="text-right">${percent}%</td>
-                        <td class="text-center"><button class="btn btn-sm" onclick="showMonthDetail(${m})">상세</button></td>
-                    </tr>`);
+                    // 주요 검사목적 찾기
+                    const byPurpose = data.byPurpose || {};
+                    const topPurposes = Object.entries(byPurpose)
+                        .sort((a, b) => b[1].sales - a[1].sales)
+                        .slice(0, 2);
+
+                    monthlyData.push({
+                        month: m,
+                        sales: data.sales,
+                        count: data.count,
+                        avgPrice,
+                        percent,
+                        compSales: compData?.sales || 0,
+                        compCount: compData?.count || 0,
+                        salesPct,
+                        countPct,
+                        topPurposes
+                    });
+
+                    if (data.sales > maxSales) maxSales = data.sales;
                 }
             }
 
+            // 정렬
+            const sortBy = document.getElementById('monthlyDetailSort')?.value || 'month';
+            if (sortBy === 'sales_desc') monthlyData.sort((a, b) => b.sales - a.sales);
+            else if (sortBy === 'sales_asc') monthlyData.sort((a, b) => a.sales - b.sales);
+            else if (sortBy === 'growth_desc') monthlyData.sort((a, b) => (b.salesPct || -999) - (a.salesPct || -999));
+            else if (sortBy === 'growth_asc') monthlyData.sort((a, b) => (a.salesPct || 999) - (b.salesPct || 999));
+
+            // 요약 통계 표시
+            const summaryEl = document.getElementById('monthlyDetailSummary');
+            if (hasCompare && monthlyData.length > 0) {
+                const avgGrowth = monthlyData.filter(d => d.salesPct !== null).reduce((s, d) => s + d.salesPct, 0) / monthlyData.filter(d => d.salesPct !== null).length;
+                summaryEl.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #dbeafe, #eff6ff); padding: 12px; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px;">📈 성장 월</div>
+                        <div style="font-size: 20px; font-weight: 700; color: #10b981;">${totalGrowthCount}개월</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fee2e2, #fef2f2); padding: 12px; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 11px; color: #ef4444; margin-bottom: 4px;">📉 하락 월</div>
+                        <div style="font-size: 20px; font-weight: 700; color: #ef4444;">${totalDeclineCount}개월</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #dcfce7, #f0fdf4); padding: 12px; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 11px; color: #22c55e; margin-bottom: 4px;">🏆 최고 성장</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #16a34a;">${bestMonth}월 (+${bestGrowth.toFixed(1)}%)</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fef3c7, #fffbeb); padding: 12px; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 11px; color: #f59e0b; margin-bottom: 4px;">📊 평균 성장률</div>
+                        <div style="font-size: 20px; font-weight: 700; color: ${avgGrowth >= 0 ? '#10b981' : '#ef4444'};">${avgGrowth >= 0 ? '+' : ''}${avgGrowth.toFixed(1)}%</div>
+                    </div>
+                `;
+                summaryEl.style.display = 'grid';
+            } else {
+                summaryEl.style.display = 'none';
+            }
+
+            // 테이블 본문 구성
+            const tbody = document.querySelector('#monthlyDetailTable tbody');
+            let rows = [];
+
+            for (const d of monthlyData) {
+                // 매출 바 너비 계산
+                const barWidth = maxSales > 0 ? (d.sales / maxSales * 100) : 0;
+
+                // 전년 대비 셀
+                let compSalesCell = '', salesYoYCell = '', compCountCell = '', countYoYCell = '';
+
+                if (hasCompare) {
+                    compSalesCell = `<td class="text-right monthlyYoyCol" style="color: #94a3b8;">${d.compSales > 0 ? formatCurrency(d.compSales) : '-'}</td>`;
+                    compCountCell = `<td class="text-right monthlyYoyCol" style="color: #94a3b8;">${d.compCount > 0 ? d.compCount.toLocaleString() + '건' : '-'}</td>`;
+
+                    if (d.salesPct !== null) {
+                        const salesColor = d.salesPct >= 0 ? '#10b981' : '#ef4444';
+                        const salesIcon = d.salesPct >= 0 ? '▲' : '▼';
+                        let salesBg = '';
+                        if (d.salesPct >= 10) salesBg = 'background: rgba(16,185,129,0.15);';
+                        else if (d.salesPct <= -10) salesBg = 'background: rgba(239,68,68,0.15);';
+                        salesYoYCell = `<td class="text-right monthlyYoyCol"><span style="color: ${salesColor}; ${salesBg} padding: 3px 6px; border-radius: 4px; font-weight: 600;">${salesIcon} ${d.salesPct >= 0 ? '+' : ''}${d.salesPct.toFixed(1)}%</span></td>`;
+                    } else {
+                        salesYoYCell = `<td class="text-right monthlyYoyCol" style="color: #94a3b8;">-</td>`;
+                    }
+
+                    if (d.countPct !== null && d.compCount > 0) {
+                        const countColor = d.countPct >= 0 ? '#10b981' : '#ef4444';
+                        const countIcon = d.countPct >= 0 ? '▲' : '▼';
+                        let countBg = '';
+                        if (d.countPct >= 10) countBg = 'background: rgba(16,185,129,0.15);';
+                        else if (d.countPct <= -10) countBg = 'background: rgba(239,68,68,0.15);';
+                        countYoYCell = `<td class="text-right monthlyYoyCol"><span style="color: ${countColor}; ${countBg} padding: 3px 6px; border-radius: 4px; font-weight: 600;">${countIcon} ${d.countPct >= 0 ? '+' : ''}${d.countPct.toFixed(1)}%</span></td>`;
+                    } else {
+                        countYoYCell = `<td class="text-right monthlyYoyCol" style="color: #94a3b8;">-</td>`;
+                    }
+                }
+
+                // 주요 검사목적 표시
+                let purposeCell = '';
+                if (d.topPurposes.length > 0) {
+                    const purposeTags = d.topPurposes.map((p, i) => {
+                        const pct = (p[1].sales / d.sales * 100).toFixed(0);
+                        const bg = i === 0 ? 'background:#6366f1;color:white;' : 'background:#e2e8f0;color:#475569;';
+                        return `<span style="${bg} padding:2px 6px;border-radius:4px;font-size:10px;white-space:nowrap;">${p[0].substring(0, 8)} ${pct}%</span>`;
+                    }).join(' ');
+                    purposeCell = `<td style="white-space:nowrap;">${purposeTags}</td>`;
+                } else {
+                    purposeCell = `<td style="color:#94a3b8;">-</td>`;
+                }
+
+                // 행 배경색 (성장/하락에 따라)
+                let rowBg = '';
+                if (hasCompare && d.salesPct !== null) {
+                    if (d.salesPct >= 10) rowBg = 'background: rgba(16,185,129,0.03);';
+                    else if (d.salesPct <= -10) rowBg = 'background: rgba(239,68,68,0.03);';
+                }
+
+                rows.push(`<tr style="${rowBg}">
+                    <td style="font-weight: 600;">${d.month}월</td>
+                    <td class="text-right">
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                            <span style="font-weight:600;">${formatCurrency(d.sales)}</span>
+                            <div style="width:100%;max-width:80px;height:4px;background:#e2e8f0;border-radius:2px;overflow:hidden;">
+                                <div style="width:${barWidth}%;height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:2px;"></div>
+                            </div>
+                        </div>
+                    </td>
+                    ${compSalesCell}
+                    ${salesYoYCell}
+                    <td class="text-right" style="font-weight:500;">${d.count.toLocaleString()}건</td>
+                    ${compCountCell}
+                    ${countYoYCell}
+                    <td class="text-right">${formatCurrency(d.avgPrice)}</td>
+                    <td class="text-right"><span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;">${d.percent.toFixed(1)}%</span></td>
+                    ${purposeCell}
+                    <td class="text-center"><button class="btn btn-sm" onclick="showMonthDetail(${d.month})" style="padding:4px 10px;">상세</button></td>
+                </tr>`);
+            }
+
             tbody.innerHTML = rows.join('');
-            document.getElementById('monthlyTableBadge').textContent = `${activeMonths}개월`;
+            document.getElementById('monthlyTableBadge').textContent = `${monthlyData.length}개월`;
         }
 
         // 월 상세 모달

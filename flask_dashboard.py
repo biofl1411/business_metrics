@@ -3830,7 +3830,7 @@ HTML_TEMPLATE = '''
                 </div>
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">📆 팀별 월별 추이 <span id="branchMonthlyAvgDisplay" style="font-size: 12px; font-weight: normal; color: #64748b; margin-left: 12px;"></span></div>
+                        <div class="card-title">📆 팀별 월별 추이 <span id="branchMonthlyAvgDisplay" style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 12px;"></span></div>
                         <div class="chart-controls" style="display: flex; gap: 8px; align-items: center;">
                             <button class="filter-btn" onclick="setBranchMonthlyFilter('all')" id="branchMonthlyAll">전체</button>
                             <button class="filter-btn active" onclick="setBranchMonthlyFilter('top3')" id="branchMonthlyTop3">TOP 3</button>
@@ -10154,13 +10154,33 @@ HTML_TEMPLATE = '''
                 });
             });
 
-            // 전체 월별 평균 계산
+            // 전체 월별 평균 계산 (차트에 표시되는 팀 기준)
             const monthlyAvg = labels.map((_, mi) => {
                 const monthData = monthMap[mi+1];
                 if (!monthData || !monthData.byBranch) return 0;
                 const branchSales = Object.values(monthData.byBranch).map(b => b.sales || 0);
                 return branchSales.length > 0 ? branchSales.reduce((a,b) => a+b, 0) / branchSales.length : 0;
             });
+
+            // 전체 팀 평균 계산 (모든 팀 기준)
+            const allBranchMonthlyAvg = labels.map((_, mi) => {
+                const monthData = monthMap[mi+1];
+                if (!monthData || !monthData.byBranch) return 0;
+                const allBranchSales = Object.values(monthData.byBranch).map(b => b.sales || 0).filter(v => v > 0);
+                return allBranchSales.length > 0 ? allBranchSales.reduce((a,b) => a+b, 0) / allBranchSales.length : 0;
+            });
+            const allBranchAvgNonZero = allBranchMonthlyAvg.filter(v => v > 0);
+            const allBranchAvgValue = allBranchAvgNonZero.length > 0 ? allBranchAvgNonZero.reduce((a,b) => a+b, 0) / allBranchAvgNonZero.length : 0;
+
+            // 전체 인원 평균 계산 (모든 담당자 기준)
+            const allManagerMonthlyAvg = labels.map((_, mi) => {
+                const monthData = monthMap[mi+1];
+                if (!monthData || !monthData.byManager) return 0;
+                const allManagerSales = Object.values(monthData.byManager).map(m => m.sales || 0).filter(v => v > 0);
+                return allManagerSales.length > 0 ? allManagerSales.reduce((a,b) => a+b, 0) / allManagerSales.length : 0;
+            });
+            const allManagerAvgNonZero = allManagerMonthlyAvg.filter(v => v > 0);
+            const allManagerAvgValue = allManagerAvgNonZero.length > 0 ? allManagerAvgNonZero.reduce((a,b) => a+b, 0) / allManagerAvgNonZero.length : 0;
 
             // 데이터셋 생성 (자체 월평균 포함) - 더 굵고 명확한 라인
             const datasets = branchMonthlyData.map((b, i) => ({
@@ -10181,10 +10201,8 @@ HTML_TEMPLATE = '''
                 borderWidth: 3,
             }));
 
-            // 전체 평균 계산 및 표시
-            const overallAvg = monthlyAvg.filter(v => v > 0);
-            const avgValue = overallAvg.length > 0 ? overallAvg.reduce((a,b) => a+b, 0) / overallAvg.length : 0;
-            document.getElementById('branchMonthlyAvgDisplay').textContent = `평균: ${formatCurrency(avgValue)}`;
+            // 전체 평균 표시 (팀 평균 + 인원 평균)
+            document.getElementById('branchMonthlyAvgDisplay').innerHTML = `<span style="color: #6366f1;">팀평균: ${formatCurrency(allBranchAvgValue)}</span> · <span style="color: #10b981;">인원평균: ${formatCurrency(allManagerAvgValue)}</span>`;
 
             // 평균선 추가
             datasets.push({

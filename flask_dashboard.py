@@ -3830,18 +3830,16 @@ HTML_TEMPLATE = '''
                 </div>
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">📆 팀별 월별 추이</div>
+                        <div class="card-title">📆 팀별 월별 추이 <span id="branchMonthlyAvgDisplay" style="font-size: 12px; font-weight: normal; color: #64748b; margin-left: 12px;"></span></div>
                         <div class="chart-controls" style="display: flex; gap: 8px; align-items: center;">
                             <button class="filter-btn" onclick="setBranchMonthlyFilter('all')" id="branchMonthlyAll">전체</button>
                             <button class="filter-btn active" onclick="setBranchMonthlyFilter('top3')" id="branchMonthlyTop3">TOP 3</button>
-                            <button class="filter-btn" onclick="setBranchMonthlyFilter('top5')" id="branchMonthlyTop5">TOP 5</button>
                             <select id="branchMonthlySelect" class="filter-select" style="min-width: 120px;" onchange="setBranchMonthlyFilter('select')">
                                 <option value="">팀 선택</option>
                             </select>
-                            <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; cursor: pointer;">
-                                <input type="checkbox" id="branchMonthlyCompareToggle" onchange="updateBranchMonthlyChart()" checked style="cursor: pointer;">
-                                전년비교
-                            </label>
+                            <select id="branchMonthlyCompareSelect" class="filter-select" style="min-width: 100px;" onchange="updateBranchMonthlyChart()">
+                                <option value="">비교 없음</option>
+                            </select>
                         </div>
                     </div>
                     <div class="card-body">
@@ -10072,13 +10070,20 @@ HTML_TEMPLATE = '''
                 select.innerHTML = '<option value="">팀 선택</option>' +
                     branches.map(b => `<option value="${b[0]}">${b[0]}</option>`).join('');
             }
+            // 비교년도 드롭다운 초기화
+            const compareSelect = document.getElementById('branchMonthlyCompareSelect');
+            if (compareSelect && availableYears && availableYears.length > 0) {
+                const currentVal = compareSelect.value;
+                compareSelect.innerHTML = '<option value="">비교 없음</option>' +
+                    availableYears.filter(y => y !== currentData.year).map(y => `<option value="${y}">${y}년</option>`).join('');
+                if (currentVal) compareSelect.value = currentVal;
+            }
         }
 
         function setBranchMonthlyFilter(type) {
             branchMonthlyFilter = type;
             document.getElementById('branchMonthlyAll').classList.toggle('active', type === 'all');
             document.getElementById('branchMonthlyTop3').classList.toggle('active', type === 'top3');
-            document.getElementById('branchMonthlyTop5')?.classList.toggle('active', type === 'top5');
             if (type === 'select') {
                 branchMonthlySelected = document.getElementById('branchMonthlySelect').value;
             } else {
@@ -10102,13 +10107,12 @@ HTML_TEMPLATE = '''
             // "기타" 팀 제외
             let branches = [...(currentData.by_branch || [])].filter(b => b[0] !== '기타');
             const monthMap = Object.fromEntries(currentData.by_month || []);
-            const showComparison = document.getElementById('branchMonthlyCompareToggle')?.checked ?? true;
+            // 비교년도 드롭다운에서 선택된 값 확인
+            const selectedCompareYear = document.getElementById('branchMonthlyCompareSelect')?.value;
 
             // 필터 적용
             if (branchMonthlyFilter === 'top3') {
                 branches = branches.slice(0, 3);
-            } else if (branchMonthlyFilter === 'top5') {
-                branches = branches.slice(0, 5);
             } else if (branchMonthlyFilter === 'select' && branchMonthlySelected) {
                 branches = branches.filter(b => b[0] === branchMonthlySelected);
             }
@@ -10175,6 +10179,11 @@ HTML_TEMPLATE = '''
                 borderWidth: 3,
             }));
 
+            // 전체 평균 계산 및 표시
+            const overallAvg = monthlyAvg.filter(v => v > 0);
+            const avgValue = overallAvg.length > 0 ? overallAvg.reduce((a,b) => a+b, 0) / overallAvg.length : 0;
+            document.getElementById('branchMonthlyAvgDisplay').textContent = `평균: ${formatCurrency(avgValue)}`;
+
             // 평균선 추가
             datasets.push({
                 label: '평균',
@@ -10186,8 +10195,8 @@ HTML_TEMPLATE = '''
                 fill: false,
             });
 
-            // 전년도 비교 데이터 추가 (토글이 켜져 있을 때만)
-            if (showComparison && compareData && compareData.by_month) {
+            // 선택된 비교년도 데이터 추가
+            if (selectedCompareYear && compareData && compareData.year == selectedCompareYear && compareData.by_month) {
                 const compMonthMap = Object.fromEntries(compareData.by_month || []);
                 branchMonthlyData.forEach((b, i) => {
                     const monthlyInfo = labels.map((_, mi) => {
@@ -10197,9 +10206,10 @@ HTML_TEMPLATE = '''
                         return { sales, count, perCase: count > 0 ? sales / count : 0 };
                     });
                     datasets.push({
-                        label: b.name + ' (' + compareData.year + ')',
+                        label: b.name + ' (' + selectedCompareYear + ')',
                         data: monthlyInfo.map(d => d.sales),
                         monthlyInfo,
+                        compareYear: selectedCompareYear,
                         borderColor: colors[i % colors.length] + '40',
                         backgroundColor: 'transparent',
                         fill: false,
@@ -10271,15 +10281,17 @@ HTML_TEMPLATE = '''
                     const monthIdx = dataPoints[0]?.dataIndex;
                     const monthLabel = labels[monthIdx];
 
+                    // 현재 연도 데이터만 필터링
+                    const currentYearPoints = dataPoints.filter(p => !p.dataset.isComparison && p.dataset.label !== '평균');
+                    const compYearPoints = dataPoints.filter(p => p.dataset.isComparison);
+
                     let html = `<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px; color: #60a5fa;">📅 ${currentData.year}년 ${monthLabel}</div>`;
 
-                    dataPoints.forEach(point => {
+                    currentYearPoints.forEach(point => {
                         const ds = point.dataset;
                         const branchName = ds.label;
                         const value = point.raw || 0;
                         const info = ds.monthlyInfo?.[monthIdx];
-
-                        if (branchName === '평균' || ds.isComparison) return;
 
                         const borderColor = ds.borderColor || '#6366f1';
                         html += `<div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid ${borderColor};">`;
@@ -10303,8 +10315,8 @@ HTML_TEMPLATE = '''
                             html += `<div style="color: #94a3b8; margin: 8px 0 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.2);">── 비교 분석 ──</div>`;
                             html += `<div style="margin-bottom: 4px;">📊 월평균 대비: <span style="color: ${avgColor}; font-weight: bold;">${avgSign}${diffPct.toFixed(1)}% (${avgSign}${(diff / 10000).toFixed(0)}만)</span></div>`;
 
-                            // 전년 동월 대비
-                            if (compareData && compareData.by_month) {
+                            // 비교년도 동월 대비
+                            if (selectedCompareYear && compareData && compareData.year == selectedCompareYear && compareData.by_month) {
                                 const compMonthMap = Object.fromEntries(compareData.by_month || []);
                                 const compMonthData = compMonthMap[monthIdx + 1];
                                 const compSales = compMonthData?.byBranch?.[branchName]?.sales || 0;
@@ -10313,7 +10325,7 @@ HTML_TEMPLATE = '''
                                     const yoyPct = (yoyDiff / compSales * 100);
                                     const yoyColor = yoyDiff >= 0 ? '#10b981' : '#ef4444';
                                     const yoySign = yoyDiff >= 0 ? '+' : '';
-                                    html += `<div style="margin-bottom: 4px;">📆 전년 동월 대비: <span style="color: ${yoyColor}; font-weight: bold;">${yoySign}${yoyPct.toFixed(1)}% (${yoySign}${(yoyDiff / 10000).toFixed(0)}만)</span></div>`;
+                                    html += `<div style="margin-bottom: 4px;">📆 ${selectedCompareYear}년 동월 대비: <span style="color: ${yoyColor}; font-weight: bold;">${yoySign}${yoyPct.toFixed(1)}% (${yoySign}${(yoyDiff / 10000).toFixed(0)}만)</span></div>`;
                                 }
                             }
 

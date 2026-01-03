@@ -3887,7 +3887,7 @@ HTML_TEMPLATE = '''
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">🔄 월별 거래처 중복 현황</div>
+                        <div class="card-title">🔄 월별 기존/신규 거래처 현황</div>
                         <div class="card-badge">기존 거래처 vs 신규</div>
                     </div>
                     <div class="card-body">
@@ -10666,7 +10666,7 @@ HTML_TEMPLATE = '''
             return result;
         }
 
-        // 월별 거래처 중복 현황 (Stacked Bar: 기존 vs 신규)
+        // 월별 기존/신규 거래처 현황 (Stacked Bar: 기존 vs 신규)
         function updateClientRetentionChart() {
             const ctx = document.getElementById('clientRetentionChart');
             if (!ctx) return;

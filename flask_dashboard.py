@@ -12890,8 +12890,10 @@ HTML_TEMPLATE = '''
                     switch(col) {
                         case 'name': aVal = a.name; bVal = b.name; return dir * aVal.localeCompare(bVal);
                         case 'sales': aVal = a.sales || 0; bVal = b.sales || 0; break;
+                        case 'count': aVal = a.count || 0; bVal = b.count || 0; break;
                         case 'avgPrice': aVal = (a.count > 0 ? a.sales / a.count : 0); bVal = (b.count > 0 ? b.sales / b.count : 0); break;
                         case 'compSales': aVal = aComp.sales || 0; bVal = bComp.sales || 0; break;
+                        case 'compCount': aVal = aComp.count || 0; bVal = bComp.count || 0; break;
                         case 'compAvgPrice': aVal = aComp.count > 0 ? aComp.sales / aComp.count : 0; bVal = bComp.count > 0 ? bComp.sales / bComp.count : 0; break;
                         case 'urgent': aVal = a.urgent || 0; bVal = b.urgent || 0; break;
                         case 'change':
@@ -12926,9 +12928,11 @@ HTML_TEMPLATE = '''
                 document.getElementById('branchTableHead').innerHTML = `<tr>
                     <th class="${sortClass('name')}" onclick="sortBranchTable('name')">팀명</th>
                     <th class="text-right ${sortClass('sales')}" onclick="sortBranchTable('sales')">${currentData.year}년</th>
-                    <th class="text-right ${sortClass('avgPrice')}" onclick="sortBranchTable('avgPrice')">${currentData.year}년 평균단가</th>
+                    <th class="text-right ${sortClass('count')}" onclick="sortBranchTable('count')">건수</th>
+                    <th class="text-right ${sortClass('avgPrice')}" onclick="sortBranchTable('avgPrice')">평균단가</th>
                     <th class="text-right ${sortClass('compSales')}" onclick="sortBranchTable('compSales')">${compareData.year}년</th>
-                    <th class="text-right ${sortClass('compAvgPrice')}" onclick="sortBranchTable('compAvgPrice')">${compareData.year}년 평균단가</th>
+                    <th class="text-right ${sortClass('compCount')}" onclick="sortBranchTable('compCount')">건수</th>
+                    <th class="text-right ${sortClass('compAvgPrice')}" onclick="sortBranchTable('compAvgPrice')">평균단가</th>
                     <th class="text-right ${sortClass('urgent')}" onclick="sortBranchTable('urgent')">긴급</th>
                     <th class="text-right ${sortClass('change')}" onclick="sortBranchTable('change')">증감</th>
                     <th class="${sortClass('percent')}" onclick="sortBranchTable('percent')">비중</th>
@@ -12936,6 +12940,7 @@ HTML_TEMPLATE = '''
 
                 // 평균 계산
                 const avgBranchSales = branchData.reduce((s, b) => s + b.sales, 0) / (branchData.length || 1);
+                const avgBranchCount = branchData.reduce((s, b) => s + b.count, 0) / (branchData.length || 1);
                 const avgBranchPrice = branchData.reduce((s, b) => s + (b.count > 0 ? b.sales / b.count : 0), 0) / (branchData.length || 1);
 
                 tbody.innerHTML = branchData.map((d, idx) => {
@@ -12968,6 +12973,9 @@ HTML_TEMPLATE = '''
                     // 매출액 강조
                     const salesStyle = d.sales >= avgBranchSales ? 'color: #10b981; font-weight: 600;' : '';
 
+                    // 건수 강조
+                    const countStyle = d.count >= avgBranchCount ? 'color: #6366f1; font-weight: 600;' : '';
+
                     // 단가 강조
                     const priceStyle = avgPrice >= avgBranchPrice ? 'background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px;' : '';
 
@@ -12977,8 +12985,10 @@ HTML_TEMPLATE = '''
                     return `<tr style="${rowStyle}">
                         <td>${rankBadge}<strong>${d.name}</strong></td>
                         <td class="text-right" style="${salesStyle}">${formatCurrency(d.sales)}</td>
+                        <td class="text-right" style="${countStyle}">${d.count.toLocaleString()}건</td>
                         <td class="text-right"><span style="${priceStyle}">${formatCurrency(avgPrice)}</span></td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compSales)}</td>
+                        <td class="text-right" style="color: var(--gray-400);">${compCount.toLocaleString()}건</td>
                         <td class="text-right" style="color: var(--gray-400);">${formatCurrency(compAvgPrice)}</td>
                         <td class="text-right"><span class="urgent-badge">🚨 ${d.urgent}건</span></td>
                         <td class="text-right">${trendIcon}<span class="change-badge ${diff >= 0 ? 'positive' : 'negative'}">${diff >= 0 ? '+' : ''}${diffRate}%</span></td>

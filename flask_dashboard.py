@@ -1327,7 +1327,7 @@ def process_data(data, purpose_filter=None):
 
         # 거래처별
         if client not in by_client:
-            by_client[client] = {'sales': 0, 'count': 0, 'purposes': {}, 'managers': {}, 'months': set(), 'monthlyData': {}}
+            by_client[client] = {'sales': 0, 'count': 0, 'purposes': {}, 'managers': {}, 'months': set()}
         by_client[client]['sales'] += sales
         by_client[client]['count'] += 1
         # 거래처별 담당자 집계
@@ -1339,11 +1339,6 @@ def process_data(data, purpose_filter=None):
         # 거래처별 거래 월 추적
         if month > 0:
             by_client[client]['months'].add(month)
-            # 월별 매출/건수 추적
-            if month not in by_client[client]['monthlyData']:
-                by_client[client]['monthlyData'][month] = {'sales': 0, 'count': 0}
-            by_client[client]['monthlyData'][month]['sales'] += sales
-            by_client[client]['monthlyData'][month]['count'] += 1
         if purpose:
             if purpose not in by_client[client]['purposes']:
                 by_client[client]['purposes'][purpose] = {'sales': 0, 'count': 0}
@@ -1692,8 +1687,7 @@ def process_data(data, purpose_filter=None):
             'tradeMonths': len(d.get('months', set())),
             'purposes': d.get('purposes', {}),
             'byPurpose': {p: {'sales': pd['sales'], 'count': pd['count']} for p, pd in d.get('purposes', {}).items()},
-            'byManager': {m: {'sales': md['sales'], 'count': md['count']} for m, md in d.get('managers', {}).items()},
-            'monthlyData': {m: {'sales': md['sales'], 'count': md['count']} for m, md in d.get('monthlyData', {}).items()}
+            'byManager': {m: {'sales': md['sales'], 'count': md['count']} for m, md in d.get('managers', {}).items()}
         }) for c, d in sorted_clients],
         'by_purpose': sorted_purposes,
         'by_defect': sorted_defects[:30],
@@ -4520,35 +4514,35 @@ HTML_TEMPLATE = '''
 
             <!-- 업체 현황 KPI 카드 -->
             <section class="kpi-section client-kpi-section" style="grid-template-columns: repeat(5, 1fr);">
-                <div class="kpi-card sales client-kpi-hover" id="kpiTotalCard" style="border-top: 4px solid var(--primary); cursor: pointer; position: relative;">
+                <div class="kpi-card sales" style="border-top: 4px solid var(--primary);">
                     <div class="kpi-header"><div class="kpi-icon">🏢</div></div>
                     <div class="kpi-label">총 거래업체</div>
                     <div class="kpi-value" id="clientTotalCount">-</div>
                     <div class="kpi-compare" id="clientTotalCompare">전년: -</div>
                 </div>
-                <div class="kpi-card count client-kpi-hover" id="kpiNewCard" style="border-top: 4px solid var(--success); cursor: pointer; position: relative;">
+                <div class="kpi-card count" style="border-top: 4px solid var(--success);">
                     <div class="kpi-header"><div class="kpi-icon">🆕</div></div>
                     <div class="kpi-label">신규 업체</div>
                     <div class="kpi-value" id="clientNewCount" style="color: var(--success);">-</div>
-                    <div class="kpi-compare" id="clientNewCompare">올해 첫 거래</div>
+                    <div class="kpi-compare">올해 첫 거래</div>
                 </div>
-                <div class="kpi-card price client-kpi-hover" id="kpiRetainedCard" style="border-top: 4px solid var(--primary); cursor: pointer; position: relative;">
+                <div class="kpi-card price" style="border-top: 4px solid var(--primary);">
                     <div class="kpi-header"><div class="kpi-icon">🔄</div></div>
                     <div class="kpi-label">유지 업체</div>
                     <div class="kpi-value" id="clientRetainedCount">-</div>
-                    <div class="kpi-compare" id="clientRetainedCompare">전년부터 지속</div>
+                    <div class="kpi-compare">전년부터 지속</div>
                 </div>
-                <div class="kpi-card goal client-kpi-hover" id="kpiChurnedCard" style="border-top: 4px solid var(--danger); cursor: pointer; position: relative;">
+                <div class="kpi-card goal" style="border-top: 4px solid var(--danger);">
                     <div class="kpi-header"><div class="kpi-icon">📤</div></div>
                     <div class="kpi-label">이탈 업체</div>
                     <div class="kpi-value" id="clientChurnedCount" style="color: var(--danger);">-</div>
-                    <div class="kpi-compare" id="clientChurnedCompare">올해 거래 없음</div>
+                    <div class="kpi-compare">올해 거래 없음</div>
                 </div>
-                <div class="kpi-card client-kpi-hover" id="kpiVipCard" style="border-top: 4px solid var(--warning); cursor: pointer; position: relative;">
+                <div class="kpi-card" style="border-top: 4px solid var(--warning);">
                     <div class="kpi-header"><div class="kpi-icon">⭐</div></div>
                     <div class="kpi-label">VIP 업체</div>
                     <div class="kpi-value" id="clientVipCount" style="color: var(--warning);">-</div>
-                    <div class="kpi-compare" id="clientVipNames" style="font-size: 11px; color: #64748b; max-height: 40px; overflow: hidden;">매출 1억 이상</div>
+                    <div class="kpi-compare">매출 1억 이상</div>
                 </div>
             </section>
 
@@ -15982,28 +15976,6 @@ HTML_TEMPLATE = '''
             document.getElementById('clientChurnedCount').textContent = churnedClients.length + '개';
             document.getElementById('clientVipCount').textContent = vipClients.length + '개';
 
-            // VIP 업체명 표시
-            const vipNames = vipClients.slice(0, 5).map(c => c[0]).join(', ');
-            document.getElementById('clientVipNames').textContent = vipNames || '매출 1억 이상';
-            document.getElementById('clientVipNames').title = vipClients.map(c => c[0] + ' (' + formatCurrency(c[1].sales) + ')').join('\n');
-
-            // 전년 비교 데이터 계산
-            const compVipClients = compareClients.filter(c => c[1].sales >= 100000000);
-            const totalDiff = clients.length - compareClients.length;
-            const newDiff = newClients.length;
-            const retainedGrowth = retainedClients.filter(r => r.growthRate > 0).length;
-            const retainedDecline = retainedClients.filter(r => r.growthRate < 0).length;
-            const vipDiff = vipClients.length - compVipClients.length;
-
-            // KPI 카드 호버 툴팁 설정
-            setupClientKpiTooltips({
-                total: { current: clients.length, prev: compareClients.length, diff: totalDiff },
-                new: { current: newClients.length, topClients: newClients.slice(0, 3) },
-                retained: { current: retainedClients.length, growth: retainedGrowth, decline: retainedDecline },
-                churned: { current: churnedClients.length, topClients: churnedClients.slice(0, 3) },
-                vip: { current: vipClients.length, prev: compVipClients.length, diff: vipDiff, clients: vipClients }
-            });
-
             // 담당자별 통계 계산
             updateManagerKPIs(clients, newClients, retainedClients, churnedClients, vipClients, compareClientMap);
 
@@ -16341,143 +16313,6 @@ HTML_TEMPLATE = '''
             if (e.target === this) closeClientModal();
         });
 
-        // KPI 카드 호버 툴팁 설정
-        function setupClientKpiTooltips(data) {
-            const getOrCreateKpiTooltip = () => {
-                let el = document.getElementById('clientKpiTooltip');
-                if (!el) {
-                    el = document.createElement('div');
-                    el.id = 'clientKpiTooltip';
-                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:0;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:280px;max-width:350px;overflow:hidden;transition:opacity 0.15s ease;line-height:1.5;opacity:0;';
-                    document.body.appendChild(el);
-                    el.addEventListener('mouseenter', () => el.dataset.hovered = 'true');
-                    el.addEventListener('mouseleave', () => {
-                        el.dataset.hovered = 'false';
-                        setTimeout(() => { if (el.dataset.hovered !== 'true') el.style.opacity = '0'; }, 200);
-                    });
-                }
-                return el;
-            };
-
-            const showTooltip = (card, html, color) => {
-                const tooltipEl = getOrCreateKpiTooltip();
-                tooltipEl.innerHTML = html;
-                tooltipEl.style.opacity = '1';
-                const rect = card.getBoundingClientRect();
-                tooltipEl.style.left = (rect.left + window.pageXOffset) + 'px';
-                tooltipEl.style.top = (rect.bottom + window.pageYOffset + 8) + 'px';
-            };
-
-            const hideTooltip = () => {
-                const tooltipEl = document.getElementById('clientKpiTooltip');
-                if (tooltipEl && tooltipEl.dataset.hovered !== 'true') {
-                    setTimeout(() => {
-                        if (tooltipEl.dataset.hovered !== 'true') tooltipEl.style.opacity = '0';
-                    }, 200);
-                }
-            };
-
-            // 총 거래업체 카드
-            const totalCard = document.getElementById('kpiTotalCard');
-            totalCard?.addEventListener('mouseenter', () => {
-                const d = data.total;
-                const diffColor = d.diff >= 0 ? '#10b981' : '#ef4444';
-                const diffSign = d.diff >= 0 ? '+' : '';
-                let html = '<div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                html += '<div style="font-size: 14px; font-weight: 700;">🏢 총 거래업체 현황</div></div>';
-                html += '<div style="padding: 14px 16px;">';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>올해</span><span style="font-weight: 700;">' + d.current + '개</span></div>';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>전년</span><span>' + d.prev + '개</span></div>';
-                html += '<div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);"><span>증감</span><span style="color:' + diffColor + '; font-weight: 700;">' + diffSign + d.diff + '개</span></div>';
-                html += '</div>';
-                showTooltip(totalCard, html);
-            });
-            totalCard?.addEventListener('mouseleave', hideTooltip);
-
-            // 신규 업체 카드
-            const newCard = document.getElementById('kpiNewCard');
-            newCard?.addEventListener('mouseenter', () => {
-                const d = data.new;
-                let html = '<div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                html += '<div style="font-size: 14px; font-weight: 700;">🆕 신규 업체 상세</div></div>';
-                html += '<div style="padding: 14px 16px;">';
-                html += '<div style="margin-bottom: 10px;"><span style="font-weight: 600;">총 ' + d.current + '개</span> 신규 업체 확보</div>';
-                if (d.topClients && d.topClients.length > 0) {
-                    html += '<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">주요 신규 업체 (매출순)</div>';
-                    d.topClients.forEach((c, i) => {
-                        html += '<div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">';
-                        html += '<span>' + (i+1) + '. ' + (c.name.length > 12 ? c.name.substring(0,12)+'..' : c.name) + '</span>';
-                        html += '<span style="color: #10b981;">' + formatCurrency(c.sales) + '</span></div>';
-                    });
-                }
-                html += '</div>';
-                showTooltip(newCard, html);
-            });
-            newCard?.addEventListener('mouseleave', hideTooltip);
-
-            // 유지 업체 카드
-            const retainedCard = document.getElementById('kpiRetainedCard');
-            retainedCard?.addEventListener('mouseenter', () => {
-                const d = data.retained;
-                let html = '<div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                html += '<div style="font-size: 14px; font-weight: 700;">🔄 유지 업체 상세</div></div>';
-                html += '<div style="padding: 14px 16px;">';
-                html += '<div style="margin-bottom: 10px;"><span style="font-weight: 600;">총 ' + d.current + '개</span> 업체 유지</div>';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>📈 성장 업체</span><span style="color: #10b981; font-weight: 600;">' + d.growth + '개</span></div>';
-                html += '<div style="display: flex; justify-content: space-between;"><span>📉 감소 업체</span><span style="color: #ef4444; font-weight: 600;">' + d.decline + '개</span></div>';
-                html += '</div>';
-                showTooltip(retainedCard, html);
-            });
-            retainedCard?.addEventListener('mouseleave', hideTooltip);
-
-            // 이탈 업체 카드
-            const churnedCard = document.getElementById('kpiChurnedCard');
-            churnedCard?.addEventListener('mouseenter', () => {
-                const d = data.churned;
-                let html = '<div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                html += '<div style="font-size: 14px; font-weight: 700;">📤 이탈 업체 상세</div></div>';
-                html += '<div style="padding: 14px 16px;">';
-                html += '<div style="margin-bottom: 10px;"><span style="font-weight: 600;">총 ' + d.current + '개</span> 업체 이탈</div>';
-                if (d.topClients && d.topClients.length > 0) {
-                    html += '<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">주요 이탈 업체 (전년 매출순)</div>';
-                    d.topClients.forEach((c, i) => {
-                        html += '<div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">';
-                        html += '<span>' + (i+1) + '. ' + (c.name.length > 12 ? c.name.substring(0,12)+'..' : c.name) + '</span>';
-                        html += '<span style="color: #ef4444;">' + formatCurrency(c.lastYearSales) + '</span></div>';
-                    });
-                }
-                html += '</div>';
-                showTooltip(churnedCard, html);
-            });
-            churnedCard?.addEventListener('mouseleave', hideTooltip);
-
-            // VIP 업체 카드
-            const vipCard = document.getElementById('kpiVipCard');
-            vipCard?.addEventListener('mouseenter', () => {
-                const d = data.vip;
-                const diffColor = d.diff >= 0 ? '#10b981' : '#ef4444';
-                const diffSign = d.diff >= 0 ? '+' : '';
-                let html = '<div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                html += '<div style="font-size: 14px; font-weight: 700;">⭐ VIP 업체 상세</div></div>';
-                html += '<div style="padding: 14px 16px;">';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>올해</span><span style="font-weight: 700;">' + d.current + '개</span></div>';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>전년</span><span>' + d.prev + '개</span></div>';
-                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);"><span>증감</span><span style="color:' + diffColor + '; font-weight: 600;">' + diffSign + d.diff + '개</span></div>';
-                if (d.clients && d.clients.length > 0) {
-                    html += '<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">VIP 업체 목록</div>';
-                    d.clients.slice(0, 5).forEach((c, i) => {
-                        html += '<div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">';
-                        html += '<span>' + (c[0].length > 12 ? c[0].substring(0,12)+'..' : c[0]) + '</span>';
-                        html += '<span style="color: #f59e0b;">' + formatCurrency(c[1].sales) + '</span></div>';
-                    });
-                    if (d.clients.length > 5) html += '<div style="font-size: 11px; color: #94a3b8; text-align: center;">외 ' + (d.clients.length - 5) + '개 업체</div>';
-                }
-                html += '</div>';
-                showTooltip(vipCard, html);
-            });
-            vipCard?.addEventListener('mouseleave', hideTooltip);
-        }
-
         function updateManagerKPIs(clients, newClients, retainedClients, churnedClients, vipClients, compareClientMap) {
             // 담당자별 집계
             const managerStats = {};
@@ -16540,13 +16375,6 @@ HTML_TEMPLATE = '''
             const avgChurn = managerArray.reduce((s, m) => s + m.churnedClients, 0) / (managerArray.length || 1);
 
             // KPI 카드 업데이트 함수
-            const kpiCardTitles = {
-                'kpiClientKing': { title: '👑 업체 보유왕', desc: '담당 업체 수 기준', color: '#6366f1' },
-                'kpiNewKing': { title: '🌱 신규 확보왕', desc: '올해 신규 업체 유치 수', color: '#10b981' },
-                'kpiGrowthKing': { title: '💰 성장 기여왕', desc: '전년 대비 매출 증가액', color: '#8b5cf6' },
-                'kpiVipKing': { title: '💎 VIP 확보왕', desc: '1억 이상 업체 보유 수', color: '#f59e0b' }
-            };
-
             const updateKpiCard = (id, data, valueFormatter, avgValue, isLowerBetter = false) => {
                 const sorted = [...data].sort((a, b) => isLowerBetter ? a.value - b.value : b.value - a.value);
                 const qualified = sorted.filter(d => isLowerBetter ? d.value <= avgValue : d.value >= avgValue);
@@ -16565,39 +16393,20 @@ HTML_TEMPLATE = '''
                     valueEl.textContent = '평균 ' + valueFormatter(avgValue) + '↑';
                 }
 
-                // 오버레이 생성 (상세 스타일)
+                // 오버레이 생성
                 const overlay = document.getElementById(id + 'Overlay');
-                const cardInfo = kpiCardTitles[id] || { title: '상세', desc: '', color: '#6366f1' };
                 if (overlay) {
-                    const aboveAvgCount = sorted.filter(d => isLowerBetter ? d.value <= avgValue : d.value >= avgValue).length;
-                    let html = '';
-                    html += '<div style="background: linear-gradient(135deg, ' + cardInfo.color + ' 0%, ' + cardInfo.color + 'cc 100%); color: white; padding: 10px 14px; border-radius: 10px 10px 0 0; margin: -12px -12px 12px -12px;">';
-                    html += '<div style="font-size: 13px; font-weight: 700;">' + cardInfo.title + '</div>';
-                    html += '<div style="font-size: 10px; opacity: 0.9;">' + cardInfo.desc + '</div>';
-                    html += '</div>';
-                    html += '<div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #f8fafc; border-radius: 6px;">';
-                    html += '<div style="text-align: center;">';
-                    html += '<div style="font-size: 16px; font-weight: 700; color: ' + cardInfo.color + ';">' + valueFormatter(avgValue) + '</div>';
-                    html += '<div style="font-size: 10px; color: #64748b;">전체 평균</div>';
-                    html += '</div>';
-                    html += '<div style="text-align: center;">';
-                    html += '<div style="font-size: 16px; font-weight: 700; color: #10b981;">' + aboveAvgCount + '명</div>';
-                    html += '<div style="font-size: 10px; color: #64748b;">평균 이상</div>';
-                    html += '</div>';
-                    html += '</div>';
-                    html += '<div style="font-size: 10px; color: #64748b; margin-bottom: 6px;">📊 담당자별 순위</div>';
-                    html += '<div style="max-height: 200px; overflow-y: auto;">';
-                    sorted.forEach(function(d, i) {
-                        var isAboveAvg = isLowerBetter ? d.value <= avgValue : d.value >= avgValue;
-                        var bgColor = isAboveAvg ? 'rgba(16,185,129,0.1)' : 'transparent';
-                        var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
-                        html += '<div style="display: flex; justify-content: space-between; padding: 6px 8px; background: ' + bgColor + '; border-radius: 4px; margin-bottom: 2px;">';
-                        html += '<span style="font-weight: ' + (i < 3 ? '600' : '400') + ';">' + medal + ' ' + d.name + '</span>';
-                        html += '<span style="color: ' + (isAboveAvg ? '#10b981' : '#64748b') + '; font-weight: 600;">' + valueFormatter(d.value) + '</span>';
-                        html += '</div>';
-                    });
-                    html += '</div>';
-                    overlay.innerHTML = html;
+                    overlay.innerHTML = `
+                        <div style="font-weight: 600; margin-bottom: 8px;">평균: ${valueFormatter(avgValue)}</div>
+                        <div style="border-top: 1px dashed #e2e8f0; margin: 8px 0;"></div>
+                        ${sorted.map((d, i) => {
+                            const isAboveAvg = isLowerBetter ? d.value <= avgValue : d.value >= avgValue;
+                            return `<div style="display: flex; justify-content: space-between; padding: 4px 0; ${i === sorted.findIndex(x => isLowerBetter ? x.value > avgValue : x.value < avgValue) ? 'border-top: 1px dashed #94a3b8; margin-top: 4px; padding-top: 8px;' : ''}">
+                                <span>${i + 1}. ${d.name}</span>
+                                <span>${valueFormatter(d.value)} ${isAboveAvg ? '⭐' : ''}</span>
+                            </div>`;
+                        }).join('')}
+                    `;
                 }
             };
 
@@ -16620,15 +16429,14 @@ HTML_TEMPLATE = '''
                         overlay.style.position = 'absolute';
                         overlay.style.top = '100%';
                         overlay.style.left = '0';
-                        overlay.style.width = '260px';
+                        overlay.style.width = '220px';
                         overlay.style.background = 'white';
-                        overlay.style.border = 'none';
-                        overlay.style.borderRadius = '12px';
+                        overlay.style.border = '2px solid #6366f1';
+                        overlay.style.borderRadius = '8px';
                         overlay.style.padding = '12px';
-                        overlay.style.boxShadow = '0 20px 40px rgba(0,0,0,0.25)';
+                        overlay.style.boxShadow = '0 10px 40px rgba(0,0,0,0.2)';
                         overlay.style.zIndex = '1000';
                         overlay.style.fontSize = '12px';
-                        overlay.style.marginTop = '8px';
                     });
                     card.addEventListener('mouseleave', () => { overlay.style.display = 'none'; });
                 }
@@ -16886,11 +16694,6 @@ HTML_TEMPLATE = '''
             const newClientNames = new Set(newClients.map(c => c.name));
             const retainedMap = Object.fromEntries(retainedClients.map(c => [c.name, c]));
             const totalCount = clients.reduce((s, c) => s + c[1].count, 0);
-            const totalSales = clients.reduce((s, c) => s + c[1].sales, 0);
-            const avgClientCount = clients.length > 0 ? totalCount / clients.length : 0;
-            const hasCompare = compareData && compareData.by_client;
-            const compareClientMap = hasCompare ? Object.fromEntries(compareData.by_client.map(c => [c[0], c[1]])) : {};
-            const compTotalCount = hasCompare ? compareData.by_client.reduce((s, c) => s + c[1].count, 0) : 0;
 
             document.getElementById('clientCountChartBadge').textContent = currentData.year + '년';
 
@@ -16904,7 +16707,7 @@ HTML_TEMPLATE = '''
                 if (!el) {
                     el = document.createElement('div');
                     el.id = 'clientCountChartTooltip';
-                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:340px;max-width:420px;max-height:85vh;overflow-y:auto;transition:opacity 0.15s ease;line-height:1.5;';
+                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:300px;max-width:380px;max-height:85vh;overflow-y:auto;transition:opacity 0.15s ease;line-height:1.5;';
                     document.body.appendChild(el); setupTooltipHover(el);
                 }
                 return el;
@@ -16940,112 +16743,44 @@ HTML_TEMPLATE = '''
                                 const c = top10[idx][1];
                                 const isNew = newClientNames.has(name);
                                 const retained = retainedMap[name];
-                                const compData = compareClientMap[name];
                                 const percent = totalCount > 0 ? (c.count / totalCount * 100) : 0;
                                 const avgPrice = c.count > 0 ? c.sales / c.count : 0;
-                                const rank = idx + 1;
 
-                                // 스타일 결정
-                                let borderColor, headerBg, rankIcon;
-                                if (rank === 1) {
-                                    borderColor = 'rgba(255, 215, 0, 0.8)';
-                                    headerBg = 'linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 180, 0, 0.2))';
-                                    rankIcon = '🏆';
-                                } else if (rank === 2) {
-                                    borderColor = 'rgba(192, 192, 192, 0.8)';
-                                    headerBg = 'linear-gradient(135deg, rgba(192, 192, 192, 0.3), rgba(169, 169, 169, 0.2))';
-                                    rankIcon = '🥈';
-                                } else if (rank === 3) {
-                                    borderColor = 'rgba(205, 127, 50, 0.8)';
-                                    headerBg = 'linear-gradient(135deg, rgba(205, 127, 50, 0.3), rgba(184, 115, 51, 0.2))';
-                                    rankIcon = '🥉';
-                                } else {
-                                    borderColor = isNew ? 'rgba(16, 185, 129, 0.8)' : 'rgba(99, 102, 241, 0.6)';
-                                    headerBg = isNew ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)';
-                                    rankIcon = '';
-                                }
-                                tooltipEl.style.border = '2px solid ' + borderColor;
-
+                                const rankIcon = idx === 0 ? '🏆' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
                                 const statusColor = isNew ? '#10b981' : '#6366f1';
                                 const statusText = isNew ? '신규' : '유지';
 
-                                let html = '';
+                                let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                    <span style="font-size:15px;font-weight:bold;">${rankIcon} ${name}</span>
+                                    <span style="background:${statusColor}22;color:${statusColor};padding:4px 10px;border-radius:6px;font-size:12px;">${statusText} · ${idx + 1}위</span>
+                                </div>`;
 
-                                // 1. 헤더
-                                html += '<div style="font-size:16px;font-weight:bold;color:#fff;margin:-16px -16px 12px -16px;padding:12px 16px;background:' + headerBg + ';border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">';
-                                html += '<span>' + rankIcon + ' ' + name + '</span>';
-                                html += '<span style="background:' + statusColor + '33;color:' + statusColor + ';padding:4px 10px;border-radius:6px;font-size:12px;">' + statusText + ' · ' + rank + '위</span>';
-                                html += '</div>';
+                                html += `<div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;margin-bottom:10px;">`;
+                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>📋 연간 건수</span><strong>${c.count.toLocaleString()}건</strong></div>`;
+                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>💰 연간 매출</span><strong>${formatCurrency(c.sales)}</strong></div>`;
+                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>📊 건당 매출</span><strong>${formatCurrency(Math.round(avgPrice))}</strong></div>`;
+                                html += `<div style="display:flex;justify-content:space-between;"><span>📈 건수 비중</span><strong>${percent.toFixed(1)}%</strong></div>`;
+                                html += `</div>`;
 
-                                // 2. 기본 지표
-                                html += '<div style="margin-bottom:4px;">📋 ' + currentData.year + '년 건수: <strong style="color:#60a5fa;">' + c.count.toLocaleString() + '건</strong></div>';
-                                if (compData && compData.count > 0) {
-                                    html += '<div style="margin-bottom:4px;">📋 ' + compareData.year + '년 건수: <strong style="color:#f59e0b;">' + compData.count.toLocaleString() + '건</strong></div>';
-                                }
-                                html += '<div style="margin-bottom:4px;">💰 연간 매출: <strong>' + formatCurrency(c.sales) + '</strong></div>';
-                                html += '<div style="margin-bottom:8px;">💵 건당 단가: <strong>' + formatCurrency(avgPrice) + '</strong></div>';
-
-                                // 3. 거래 현황
-                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 거래 현황 ──</div>';
-                                html += '<div style="margin-bottom:4px;">📅 거래월수: <strong>' + (c.tradeMonths || '-') + '개월</strong></div>';
-                                html += '<div style="margin-bottom:4px;">👤 주 담당자: <strong>' + (c.manager || '미지정') + '</strong></div>';
-
-                                // 평균 대비
-                                const vsAvgCount = avgClientCount > 0 ? ((c.count - avgClientCount) / avgClientCount * 100) : 0;
-                                const vsAvgColor = vsAvgCount >= 0 ? '#10b981' : '#ef4444';
-                                const vsAvgSign = vsAvgCount >= 0 ? '+' : '';
-                                html += '<div style="margin-bottom:4px;">📊 평균 대비: <span style="color:' + vsAvgColor + ';">' + vsAvgSign + vsAvgCount.toFixed(1) + '%</span> <span style="color:#94a3b8;">(평균: ' + Math.round(avgClientCount).toLocaleString() + '건)</span></div>';
-
-                                // 4. 점유율
-                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전체 대비 점유율 ──</div>';
-                                html += '<div style="margin-bottom:4px;">📈 건수 점유율: <strong>' + percent.toFixed(2) + '%</strong> (' + rank + '위/' + clients.length + '업체)</div>';
-
-                                if (compData && compData.count > 0 && compTotalCount > 0) {
-                                    const compShare = (compData.count / compTotalCount * 100);
-                                    const shareDiff = percent - compShare;
-                                    const shareColor = shareDiff >= 0 ? '#10b981' : '#ef4444';
-                                    const shareSign = shareDiff >= 0 ? '+' : '';
-                                    html += '<div style="margin-bottom:4px;">📊 점유율 변화: <span style="color:' + shareColor + ';">' + shareSign + shareDiff.toFixed(2) + '%p</span></div>';
-                                }
-
-                                // 5. 전년 대비
                                 if (retained && retained.lastYearCount > 0) {
-                                    const countDiff = c.count - retained.lastYearCount;
-                                    const countGrowth = (countDiff / retained.lastYearCount * 100);
-                                    const growthColor = countDiff >= 0 ? '#10b981' : '#ef4444';
-                                    const growthSign = countDiff >= 0 ? '+' : '';
-
-                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전년 대비 성장률 ──</div>';
-                                    html += '<div style="margin-bottom:4px;">📋 건수: <span style="color:' + growthColor + ';font-weight:bold;">' + growthSign + countDiff.toLocaleString() + '건 (' + growthSign + countGrowth.toFixed(1) + '%)</span></div>';
-
-                                    if (retained.lastYearSales > 0) {
-                                        const salesDiff = c.sales - retained.lastYearSales;
-                                        const salesGrowth = (salesDiff / retained.lastYearSales * 100);
-                                        const salesColor = salesDiff >= 0 ? '#10b981' : '#ef4444';
-                                        const salesSign = salesDiff >= 0 ? '+' : '';
-                                        html += '<div style="margin-bottom:4px;">💰 매출: <span style="color:' + salesColor + ';font-weight:bold;">' + salesSign + formatCurrency(salesDiff) + ' (' + salesSign + salesGrowth.toFixed(1) + '%)</span></div>';
-                                    }
+                                    const countGrowth = ((c.count - retained.lastYearCount) / retained.lastYearCount * 100);
+                                    const growthColor = countGrowth >= 0 ? '#10b981' : '#ef4444';
+                                    html += `<div style="padding:8px;border-radius:6px;background:rgba(99,102,241,0.1);margin-bottom:10px;">
+                                        📅 건수 증감: <span style="color:${growthColor};font-weight:bold;">${countGrowth >= 0 ? '+' : ''}${countGrowth.toFixed(1)}%</span>
+                                        <span style="color:#94a3b8;font-size:11px;">(${retained.lastYearCount.toLocaleString()}건 → ${c.count.toLocaleString()}건)</span>
+                                    </div>`;
                                 }
 
-                                // 6. 주요 검사목적
-                                if (c.byPurpose && Object.keys(c.byPurpose).length > 0) {
-                                    const purposeEntries = Object.entries(c.byPurpose)
-                                        .sort((a, b) => b[1].count - a[1].count)
-                                        .slice(0, 3);
-
-                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 주요 검사목적 TOP 3 ──</div>';
-                                    purposeEntries.forEach((p, i) => {
-                                        const purposeShare = c.count > 0 ? (p[1].count / c.count * 100) : 0;
-                                        const emoji = i === 0 ? '🥇' : (i === 1 ? '🥈' : '🥉');
-                                        html += '<div style="margin-left:8px;margin-bottom:2px;">' + emoji + ' ' + p[0] + ': ' + p[1].count.toLocaleString() + '건 <span style="color:#94a3b8;">(' + purposeShare.toFixed(0) + '%)</span></div>';
-                                    });
-                                }
+                                html += `<div style="color:#94a3b8;font-size:12px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">`;
+                                html += `👤 담당자: ${c.manager || '미지정'}<br>`;
+                                html += `🔬 주요 검사: ${c.purpose || '-'}`;
+                                html += `</div>`;
 
                                 tooltipEl.innerHTML = html;
                                 tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
                                 const pos = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 430) + 'px';
-                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 500) + 'px';
+                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 390) + 'px';
+                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 350) + 'px';
                             }
                         }
                     },
@@ -17068,36 +16803,12 @@ HTML_TEMPLATE = '''
             const monthMap = Object.fromEntries(monthData.map(m => [m[0], m[1]]));
 
             const currentCounts = labels.map((_, i) => monthMap[i + 1]?.clientCount || 0);
-            const currentSales = labels.map((_, i) => monthMap[i + 1]?.sales || 0);
-            const currentTxCounts = labels.map((_, i) => monthMap[i + 1]?.count || 0);
             const hasCompare = compareData && compareData.by_month;
             const compMonthMap = hasCompare ? Object.fromEntries(compareData.by_month.map(m => [m[0], m[1]])) : {};
             const compareCounts = hasCompare ? labels.map((_, i) => compMonthMap[i + 1]?.clientCount || 0) : [];
-            const compareSales = hasCompare ? labels.map((_, i) => compMonthMap[i + 1]?.sales || 0) : [];
-            const compareTxCounts = hasCompare ? labels.map((_, i) => compMonthMap[i + 1]?.count || 0) : [];
-
-            // 평균 계산
-            const validMonths = currentCounts.filter(c => c > 0);
-            const avgClients = validMonths.length > 0 ? validMonths.reduce((a, b) => a + b, 0) / validMonths.length : 0;
-            const maxClients = Math.max(...currentCounts);
-            const minClients = Math.min(...currentCounts.filter(c => c > 0));
-            const maxMonth = currentCounts.indexOf(maxClients) + 1;
-            const minMonth = currentCounts.indexOf(minClients) + 1;
 
             document.getElementById('clientMonthlyCountBadge').textContent = hasCompare ?
                 currentData.year + ' vs ' + compareData.year : currentData.year + '년';
-
-            // 외부 툴팁
-            const getOrCreateMonthlyTooltip = () => {
-                let el = document.getElementById('clientMonthlyCountTooltip');
-                if (!el) {
-                    el = document.createElement('div');
-                    el.id = 'clientMonthlyCountTooltip';
-                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:16px;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:320px;max-width:400px;max-height:85vh;overflow-y:auto;transition:opacity 0.15s ease;line-height:1.5;';
-                    document.body.appendChild(el); setupTooltipHover(el);
-                }
-                return el;
-            };
 
             const datasets = [{
                 label: currentData.year + '년',
@@ -17128,97 +16839,11 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: { display: hasCompare, position: 'top', labels: { boxWidth: 12 } },
                         tooltip: {
-                            enabled: false,
-                            external: function(context) {
-                                const tooltipEl = getOrCreateMonthlyTooltip();
-                                if (context.tooltip.opacity === 0 && !isTooltipHovered(tooltipEl)) { hideTooltipWithDelay(tooltipEl); return; }
-
-                                const idx = context.tooltip.dataPoints?.[0]?.dataIndex;
-                                if (idx === undefined) return;
-
-                                const month = idx + 1;
-                                const currCount = currentCounts[idx];
-                                const currSales = currentSales[idx];
-                                const currTxCount = currentTxCounts[idx];
-                                const compCount = hasCompare ? compareCounts[idx] : 0;
-                                const compSales = hasCompare ? compareSales[idx] : 0;
-                                const compTxCount = hasCompare ? compareTxCounts[idx] : 0;
-
-                                // 최고/최저 표시
-                                const isMax = currCount === maxClients;
-                                const isMin = currCount === minClients && currCount > 0;
-                                let headerBg = 'rgba(99, 102, 241, 0.2)';
-                                let borderColor = 'rgba(99, 102, 241, 0.6)';
-                                let badge = '';
-                                if (isMax) {
-                                    headerBg = 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.2))';
-                                    borderColor = 'rgba(16, 185, 129, 0.8)';
-                                    badge = '<span style="background:#10b98133;color:#10b981;padding:2px 8px;border-radius:4px;font-size:11px;">최고</span>';
-                                } else if (isMin) {
-                                    headerBg = 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.2))';
-                                    borderColor = 'rgba(239, 68, 68, 0.8)';
-                                    badge = '<span style="background:#ef444433;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:11px;">최저</span>';
-                                }
-                                tooltipEl.style.border = '2px solid ' + borderColor;
-
-                                let html = '';
-
-                                // 헤더
-                                html += '<div style="font-size:16px;font-weight:bold;color:#fff;margin:-16px -16px 12px -16px;padding:12px 16px;background:' + headerBg + ';border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">';
-                                html += '<span>📅 ' + month + '월</span>' + badge;
-                                html += '</div>';
-
-                                // 기본 지표
-                                html += '<div style="margin-bottom:4px;">🏢 ' + currentData.year + '년 거래 업체: <strong style="color:#60a5fa;">' + currCount.toLocaleString() + '개</strong></div>';
-                                if (hasCompare) {
-                                    html += '<div style="margin-bottom:4px;">🏢 ' + compareData.year + '년 거래 업체: <strong style="color:#f59e0b;">' + compCount.toLocaleString() + '개</strong></div>';
-                                }
-                                html += '<div style="margin-bottom:4px;">💰 매출: <strong>' + formatCurrency(currSales) + '</strong></div>';
-                                html += '<div style="margin-bottom:8px;">📋 검사 건수: <strong>' + currTxCount.toLocaleString() + '건</strong></div>';
-
-                                // 평균 대비
-                                html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 평균 대비 ──</div>';
-                                const vsAvg = avgClients > 0 ? ((currCount - avgClients) / avgClients * 100) : 0;
-                                const vsAvgColor = vsAvg >= 0 ? '#10b981' : '#ef4444';
-                                const vsAvgSign = vsAvg >= 0 ? '+' : '';
-                                html += '<div style="margin-bottom:4px;">📊 평균(' + Math.round(avgClients) + '개) 대비: <span style="color:' + vsAvgColor + ';font-weight:bold;">' + vsAvgSign + vsAvg.toFixed(1) + '%</span></div>';
-
-                                // 전년 대비
-                                if (hasCompare && compCount > 0) {
-                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 전년 대비 ──</div>';
-                                    const yoyDiff = currCount - compCount;
-                                    const yoyPct = (yoyDiff / compCount * 100);
-                                    const yoyColor = yoyDiff >= 0 ? '#10b981' : '#ef4444';
-                                    const yoySign = yoyDiff >= 0 ? '+' : '';
-                                    html += '<div style="margin-bottom:4px;">🏢 업체 수: <span style="color:' + yoyColor + ';font-weight:bold;">' + yoySign + yoyDiff.toLocaleString() + '개 (' + yoySign + yoyPct.toFixed(1) + '%)</span></div>';
-
-                                    if (compSales > 0) {
-                                        const salesDiff = currSales - compSales;
-                                        const salesPct = (salesDiff / compSales * 100);
-                                        const salesColor = salesDiff >= 0 ? '#10b981' : '#ef4444';
-                                        const salesSign = salesDiff >= 0 ? '+' : '';
-                                        html += '<div style="margin-bottom:4px;">💰 매출: <span style="color:' + salesColor + ';font-weight:bold;">' + salesSign + formatCurrency(salesDiff) + ' (' + salesSign + salesPct.toFixed(1) + '%)</span></div>';
-                                    }
-                                }
-
-                                // 업체당 평균
-                                if (currCount > 0) {
-                                    html += '<div style="color:#94a3b8;margin:12px 0 8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.2);">── 업체당 평균 ──</div>';
-                                    const perClientSales = currSales / currCount;
-                                    const perClientCount = currTxCount / currCount;
-                                    html += '<div style="margin-bottom:4px;">💵 업체당 매출: <strong>' + formatCurrency(perClientSales) + '</strong></div>';
-                                    html += '<div style="margin-bottom:4px;">📋 업체당 건수: <strong>' + perClientCount.toFixed(1) + '건</strong></div>';
-                                }
-
-                                tooltipEl.innerHTML = html;
-                                tooltipEl.style.opacity = 1; tooltipEl.style.pointerEvents = 'auto';
-                                const pos = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.left = Math.min(pos.left + context.tooltip.caretX + 10, window.innerWidth - 410) + 'px';
-                                tooltipEl.style.top = Math.min(pos.top + context.tooltip.caretY, window.innerHeight - 400) + 'px';
+                            callbacks: {
+                                label: ctx => ctx.dataset.label + ': ' + ctx.raw.toLocaleString() + '개 업체'
                             }
                         }
                     },
@@ -17229,7 +16854,7 @@ HTML_TEMPLATE = '''
             });
         }
 
-        // 효율 기준 업체 분류 차트 및 테이블 (월별 추세선)
+        // 효율 기준 업체 분류 차트 및 테이블
         function updateClientEfficiencyChart(clients) {
             const ctx = document.getElementById('clientEfficiencyChart');
             if (!ctx) return;
@@ -17245,20 +16870,19 @@ HTML_TEMPLATE = '''
                 return;
             }
 
-            // 평균 건당 단가 계산 (전체 기준)
+            // 평균 건당 단가 계산
             const totalSales = sustainedClients.reduce((s, c) => s + c[1].sales, 0);
             const totalCount = sustainedClients.reduce((s, c) => s + c[1].count, 0);
             const avgPrice = totalCount > 0 ? totalSales / totalCount : 0;
             const avgCount = sustainedClients.length > 0 ? totalCount / sustainedClients.length : 0;
 
             // 효율 기준 분류 (단가 기준)
-            const lowThreshold = avgPrice * 0.7;
-            const highThreshold = avgPrice * 1.3;
+            const lowThreshold = avgPrice * 0.7;   // 평균의 70% 미만
+            const highThreshold = avgPrice * 1.3; // 평균의 130% 초과
 
-            // 연간 효율 분류
-            const lowEfficiency = [];
-            const midEfficiency = [];
-            const highEfficiency = [];
+            const lowEfficiency = [];   // 건수 많고 단가 낮음
+            const midEfficiency = [];   // 평균 수준
+            const highEfficiency = [];  // 건수 적고 단가 높음
 
             sustainedClients.forEach(c => {
                 const clientAvgPrice = c[1].count > 0 ? c[1].sales / c[1].count : 0;
@@ -17267,16 +16891,15 @@ HTML_TEMPLATE = '''
                     count: c[1].count,
                     sales: c[1].sales,
                     avgPrice: clientAvgPrice,
-                    manager: c[1].manager || '미지정',
-                    monthlyData: c[1].monthlyData || {}
+                    manager: c[1].manager || '미지정'
                 };
 
                 if (clientAvgPrice < lowThreshold && c[1].count >= avgCount) {
-                    lowEfficiency.push(clientData);
+                    lowEfficiency.push(clientData);  // 건수 많고 단가 낮음
                 } else if (clientAvgPrice > highThreshold) {
-                    highEfficiency.push(clientData);
+                    highEfficiency.push(clientData); // 단가 높음
                 } else {
-                    midEfficiency.push(clientData);
+                    midEfficiency.push(clientData);  // 평균 수준
                 }
             });
 
@@ -17290,220 +16913,34 @@ HTML_TEMPLATE = '''
             document.getElementById('midEfficiencyBadge').textContent = midEfficiency.length + '개';
             document.getElementById('highEfficiencyBadge').textContent = highEfficiency.length + '개';
 
-            // 월별 효율 분류 계산
-            const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-            const monthlyLow = [];
-            const monthlyMid = [];
-            const monthlyHigh = [];
-            const monthlyDetails = {}; // 월별 상세 데이터
-
-            for (let m = 1; m <= 12; m++) {
-                let lowCount = 0, midCount = 0, highCount = 0;
-                const lowClients = [], midClients = [], highClients = [];
-
-                sustainedClients.forEach(c => {
-                    const monthData = c[1].monthlyData?.[m];
-                    if (monthData && monthData.count > 0) {
-                        const monthAvgPrice = monthData.sales / monthData.count;
-                        const clientInfo = { name: c[0], sales: monthData.sales, count: monthData.count, avgPrice: monthAvgPrice };
-
-                        if (monthAvgPrice < lowThreshold) {
-                            lowCount++;
-                            lowClients.push(clientInfo);
-                        } else if (monthAvgPrice > highThreshold) {
-                            highCount++;
-                            highClients.push(clientInfo);
-                        } else {
-                            midCount++;
-                            midClients.push(clientInfo);
-                        }
-                    }
-                });
-
-                monthlyLow.push(lowCount);
-                monthlyMid.push(midCount);
-                monthlyHigh.push(highCount);
-                monthlyDetails[m] = {
-                    low: lowClients.sort((a, b) => b.sales - a.sales).slice(0, 3),
-                    mid: midClients.sort((a, b) => b.sales - a.sales).slice(0, 3),
-                    high: highClients.sort((a, b) => b.sales - a.sales).slice(0, 3),
-                    lowCount, midCount, highCount
-                };
-            }
-
-            // 전년 비교 데이터
-            const hasCompare = compareData && compareData.by_client;
-            let compMonthlyLow = [], compMonthlyMid = [], compMonthlyHigh = [];
-            if (hasCompare) {
-                const compClients = compareData.by_client.filter(c => (c[1].tradeMonths || 0) >= 3);
-                const compTotalSales = compClients.reduce((s, c) => s + c[1].sales, 0);
-                const compTotalCount = compClients.reduce((s, c) => s + c[1].count, 0);
-                const compAvgPrice = compTotalCount > 0 ? compTotalSales / compTotalCount : 0;
-                const compLowThresh = compAvgPrice * 0.7;
-                const compHighThresh = compAvgPrice * 1.3;
-
-                for (let m = 1; m <= 12; m++) {
-                    let lowC = 0, midC = 0, highC = 0;
-                    compClients.forEach(c => {
-                        const md = c[1].monthlyData?.[m];
-                        if (md && md.count > 0) {
-                            const mp = md.sales / md.count;
-                            if (mp < compLowThresh) lowC++;
-                            else if (mp > compHighThresh) highC++;
-                            else midC++;
-                        }
-                    });
-                    compMonthlyLow.push(lowC);
-                    compMonthlyMid.push(midC);
-                    compMonthlyHigh.push(highC);
-                }
-            }
-
-            // 외부 툴팁
-            const getOrCreateEfficiencyTooltip = () => {
-                let el = document.getElementById('clientEfficiencyTooltip');
-                if (!el) {
-                    el = document.createElement('div');
-                    el.id = 'clientEfficiencyTooltip';
-                    el.style.cssText = 'position:fixed;background:rgba(30,41,59,0.98);border-radius:12px;padding:0;pointer-events:auto;z-index:99999;font-size:13px;color:#e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.4);min-width:320px;max-width:400px;overflow:hidden;transition:opacity 0.15s ease;line-height:1.5;';
-                    document.body.appendChild(el); setupTooltipHover(el);
-                }
-                return el;
-            };
-
-            // 데이터셋 구성
-            const datasets = [
-                {
-                    label: '🔺 고효율',
-                    data: monthlyHigh,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                },
-                {
-                    label: '➖ 중효율',
-                    data: monthlyMid,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                },
-                {
-                    label: '🔻 저효율',
-                    data: monthlyLow,
-                    borderColor: '#ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }
-            ];
-
-            // 전년 비교 데이터셋 추가
-            if (hasCompare) {
-                datasets.push(
-                    { label: compareData.year + ' 고효율', data: compMonthlyHigh, borderColor: 'rgba(16,185,129,0.3)', borderWidth: 2, borderDash: [5,5], tension: 0.3, pointRadius: 0 },
-                    { label: compareData.year + ' 중효율', data: compMonthlyMid, borderColor: 'rgba(245,158,11,0.3)', borderWidth: 2, borderDash: [5,5], tension: 0.3, pointRadius: 0 },
-                    { label: compareData.year + ' 저효율', data: compMonthlyLow, borderColor: 'rgba(239,68,68,0.3)', borderWidth: 2, borderDash: [5,5], tension: 0.3, pointRadius: 0 }
-                );
-            }
-
-            // 라인 차트
+            // 파이 차트
             charts.clientEfficiency = new Chart(ctx.getContext('2d'), {
-                type: 'line',
-                data: { labels, datasets },
+                type: 'doughnut',
+                data: {
+                    labels: ['저효율 (단가↓)', '중효율', '고효율 (단가↑)'],
+                    datasets: [{
+                        data: [lowEfficiency.length, midEfficiency.length, highEfficiency.length],
+                        backgroundColor: ['rgba(239, 68, 68, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(16, 185, 129, 0.8)'],
+                        borderWidth: 0
+                    }]
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 12, filter: item => !item.text.includes(compareData?.year || 'NONE') } },
+                        legend: { position: 'bottom', labels: { boxWidth: 12 } },
                         tooltip: {
-                            enabled: false,
-                            external: function(context) {
-                                const tooltipEl = getOrCreateEfficiencyTooltip();
-                                const tooltipModel = context.tooltip;
-
-                                if (tooltipModel.opacity === 0 && !isTooltipHovered(tooltipEl)) {
-                                    hideTooltipWithDelay(tooltipEl);
-                                    return;
+                            callbacks: {
+                                label: ctx => {
+                                    const total = lowEfficiency.length + midEfficiency.length + highEfficiency.length;
+                                    const percent = total > 0 ? (ctx.raw / total * 100).toFixed(1) : 0;
+                                    return ctx.label + ': ' + ctx.raw + '개 (' + percent + '%)';
                                 }
-
-                                if (tooltipModel.body && tooltipModel.dataPoints?.length > 0) {
-                                    const monthIdx = tooltipModel.dataPoints[0].dataIndex;
-                                    const month = monthIdx + 1;
-                                    const detail = monthlyDetails[month];
-                                    const total = detail.lowCount + detail.midCount + detail.highCount;
-
-                                    let html = '<div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 12px 16px; border-radius: 12px 12px 0 0;">';
-                                    html += '<div style="font-size: 16px; font-weight: 700;">📊 ' + month + '월 효율 분포</div>';
-                                    html += '<div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">총 ' + total + '개 업체 (3개월↑ 지속거래)</div>';
-                                    html += '</div>';
-
-                                    html += '<div style="padding: 14px 16px;">';
-
-                                    // 효율별 현황
-                                    const categories = [
-                                        { name: '고효율', icon: '🔺', color: '#10b981', count: detail.highCount, clients: detail.high },
-                                        { name: '중효율', icon: '➖', color: '#f59e0b', count: detail.midCount, clients: detail.mid },
-                                        { name: '저효율', icon: '🔻', color: '#ef4444', count: detail.lowCount, clients: detail.low }
-                                    ];
-
-                                    categories.forEach(cat => {
-                                        const pct = total > 0 ? (cat.count / total * 100).toFixed(1) : 0;
-                                        html += '<div style="margin-bottom: 12px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 3px solid ' + cat.color + ';">';
-                                        html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">';
-                                        html += '<span style="font-weight: 600;">' + cat.icon + ' ' + cat.name + '</span>';
-                                        html += '<span style="font-size: 14px; font-weight: 700; color: ' + cat.color + ';">' + cat.count + '개 <span style="font-size: 11px; opacity: 0.7;">(' + pct + '%)</span></span>';
-                                        html += '</div>';
-                                        if (cat.clients.length > 0) {
-                                            html += '<div style="font-size: 10px; color: #94a3b8;">';
-                                            html += cat.clients.map(c => c.name.length > 8 ? c.name.substring(0, 8) + '..' : c.name).join(', ');
-                                            html += '</div>';
-                                        }
-                                        html += '</div>';
-                                    });
-
-                                    // 전년 비교
-                                    if (hasCompare) {
-                                        const compTotal = compMonthlyLow[monthIdx] + compMonthlyMid[monthIdx] + compMonthlyHigh[monthIdx];
-                                        const diff = total - compTotal;
-                                        const diffColor = diff >= 0 ? '#10b981' : '#ef4444';
-                                        const diffSign = diff >= 0 ? '+' : '';
-                                        html += '<div style="background: rgba(255,255,255,0.05); padding: 8px 10px; border-radius: 6px; font-size: 11px;">';
-                                        html += '<span style="color: #94a3b8;">' + compareData.year + '년 동월: </span>';
-                                        html += '<span style="font-weight: 600;">' + compTotal + '개</span>';
-                                        html += '<span style="color: ' + diffColor + '; margin-left: 8px;">(' + diffSign + diff + '개)</span>';
-                                        html += '</div>';
-                                    }
-
-                                    html += '</div>';
-                                    tooltipEl.innerHTML = html;
-                                }
-
-                                tooltipEl.style.opacity = '1';
-                                const position = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.left = position.left + window.pageXOffset + tooltipModel.caretX + 'px';
-                                tooltipEl.style.top = position.top + window.pageYOffset + tooltipModel.caretY + 'px';
                             }
                         }
-                    },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { callback: v => v + '개' } }
                     }
                 }
             });
-
-            setupTooltipHover(ctx);
 
             // 테이블 업데이트
             const renderTable = (tableId, data) => {

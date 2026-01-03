@@ -13707,6 +13707,12 @@ HTML_TEMPLATE = '''
                                 const curr = monthMap[m] || { sales: 0, count: 0 };
                                 const comp = compMap[m] || { sales: 0, count: 0 };
 
+                                // 원본 데이터에서 검사목적별 정보 가져오기
+                                const origCurr = originalMonthMap[m] || {};
+                                const origComp = originalCompMap[m] || {};
+                                const currByPurpose = origCurr.byPurpose || {};
+                                const compByPurpose = origComp.byPurpose || {};
+
                                 let html = `<div style="font-size:16px;font-weight:bold;margin-bottom:12px;">📅 ${labels[idx]} 전년 대비</div>`;
 
                                 // 매출 성장률
@@ -13729,6 +13735,68 @@ HTML_TEMPLATE = '''
                                             <span style="color:${salesColor};font-weight:bold;">${salesPct >= 0 ? '+' : ''}${salesPct.toFixed(1)}% (${salesDiff >= 0 ? '+' : ''}${(salesDiff/10000).toFixed(0)}만)</span>
                                         </div>
                                     </div>`;
+
+                                    // 검사목적별 기여도 분석
+                                    const purposeChanges = [];
+                                    const allPurposes = new Set([...Object.keys(currByPurpose), ...Object.keys(compByPurpose)]);
+                                    allPurposes.forEach(purpose => {
+                                        if (purpose === '접수취소') return;
+                                        const currP = currByPurpose[purpose]?.sales || 0;
+                                        const compP = compByPurpose[purpose]?.sales || 0;
+                                        const diff = currP - compP;
+                                        const pct = compP > 0 ? ((currP - compP) / compP * 100) : (currP > 0 ? 100 : 0);
+                                        if (diff !== 0) {
+                                            purposeChanges.push({ purpose, diff, pct, currP, compP });
+                                        }
+                                    });
+
+                                    // 기여도 순으로 정렬
+                                    purposeChanges.sort((a, b) => b.diff - a.diff);
+
+                                    if (purposeChanges.length > 0) {
+                                        const isGrowth = salesDiff >= 0;
+                                        const topContributors = isGrowth ? purposeChanges.filter(p => p.diff > 0).slice(0, 3) : [];
+                                        const topDecliners = !isGrowth ? purposeChanges.filter(p => p.diff < 0).slice(0, 3) : [];
+
+                                        if (isGrowth && topContributors.length > 0) {
+                                            html += `<div style="margin-bottom:8px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;">
+                                                <div style="margin-bottom:6px;color:#10b981;font-weight:600;">📈 상승 주요 원인</div>`;
+                                            topContributors.forEach((p, i) => {
+                                                const icon = i === 0 ? '🥇' : (i === 1 ? '🥈' : '🥉');
+                                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px;">
+                                                    <span>${icon} ${p.purpose}</span>
+                                                    <span style="color:#10b981;">+${(p.diff/10000).toFixed(0)}만 (+${p.pct.toFixed(0)}%)</span>
+                                                </div>`;
+                                            });
+                                            html += `</div>`;
+                                        } else if (!isGrowth && topDecliners.length > 0) {
+                                            html += `<div style="margin-bottom:8px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px;border-left:3px solid #ef4444;">
+                                                <div style="margin-bottom:6px;color:#ef4444;font-weight:600;">📉 하락 주요 원인</div>`;
+                                            topDecliners.forEach((p, i) => {
+                                                const icon = i === 0 ? '⚠️' : (i === 1 ? '🔻' : '▼');
+                                                html += `<div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px;">
+                                                    <span>${icon} ${p.purpose}</span>
+                                                    <span style="color:#ef4444;">${(p.diff/10000).toFixed(0)}만 (${p.pct.toFixed(0)}%)</span>
+                                                </div>`;
+                                            });
+                                            html += `</div>`;
+                                        }
+
+                                        // 반대 요인도 표시 (성장 시 하락 요인, 하락 시 상승 요인)
+                                        if (isGrowth && purposeChanges.filter(p => p.diff < 0).length > 0) {
+                                            const decliners = purposeChanges.filter(p => p.diff < 0).slice(0, 2);
+                                            html += `<div style="padding:6px 8px;background:rgba(239,68,68,0.05);border-radius:4px;font-size:11px;color:#94a3b8;">
+                                                <span style="color:#f59e0b;">⚠️ 하락 요인:</span> `;
+                                            html += decliners.map(p => `${p.purpose}(${(p.diff/10000).toFixed(0)}만)`).join(', ');
+                                            html += `</div>`;
+                                        } else if (!isGrowth && purposeChanges.filter(p => p.diff > 0).length > 0) {
+                                            const growers = purposeChanges.filter(p => p.diff > 0).slice(0, 2);
+                                            html += `<div style="padding:6px 8px;background:rgba(16,185,129,0.05);border-radius:4px;font-size:11px;color:#94a3b8;">
+                                                <span style="color:#10b981;">💡 상승 요인:</span> `;
+                                            html += growers.map(p => `${p.purpose}(+${(p.diff/10000).toFixed(0)}만)`).join(', ');
+                                            html += `</div>`;
+                                        }
+                                    }
                                 }
 
                                 // 건수 성장률
@@ -13736,7 +13804,7 @@ HTML_TEMPLATE = '''
                                     const countPct = ((curr.count - comp.count) / comp.count) * 100;
                                     const countDiff = curr.count - comp.count;
                                     const countColor = countPct >= 0 ? '#3b82f6' : '#f97316';
-                                    html += `<div style="padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;">
+                                    html += `<div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;">
                                         <div style="margin-bottom:4px;">📋 <strong>건수 성장률</strong></div>
                                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                             <span style="color:#94a3b8;">${compareData.year}년:</span>

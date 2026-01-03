@@ -1158,7 +1158,7 @@ def process_data(data, purpose_filter=None):
     by_sample_type_purpose = {}  # 검체유형별-목적 데이터
     by_urgent_month = {}  # 월별 긴급 데이터
     by_branch_month_clients = {}  # 지사별 월별 거래처 (중복 분석용)
-    month_client_details = {}  # 월별 거래처 상세 정보 (검사목적/팀 필터링용)
+    purpose_month_clients = {}  # 목적별 월별 거래처 (필터링용)
     by_department = {}  # 부서별 데이터 (본사, 마케팅, 영업부, 지사)
     purposes = set()
     sample_types = set()  # 검체유형 목록
@@ -1311,13 +1311,13 @@ def process_data(data, purpose_filter=None):
             if client and client != '미지정':
                 by_branch_month_clients[branch][month].add(client)
 
-            # 월별 거래처 상세 (검사목적/팀 필터링용)
-            if month not in month_client_details:
-                month_client_details[month] = {}
-            if client and client != '미지정':
-                if client not in month_client_details[month]:
-                    month_client_details[month][client] = {'branch': branch, 'purposes': set()}
-                month_client_details[month][client]['purposes'].add(purpose if purpose else '미지정')
+            # 목적별 월별 거래처 (필터링용)
+            if purpose and client and client != '미지정':
+                if purpose not in purpose_month_clients:
+                    purpose_month_clients[purpose] = {}
+                if month not in purpose_month_clients[purpose]:
+                    purpose_month_clients[purpose][month] = set()
+                purpose_month_clients[purpose][month].add(client)
 
         # 거래처별
         if client not in by_client:
@@ -1604,6 +1604,30 @@ def process_data(data, purpose_filter=None):
             all_clients.update(clients)
         branch_client_retention[branch] = retention_data
 
+    # 목적별 월별 거래처 중복률 계산
+    purpose_client_retention = {}
+    for purpose, month_clients in purpose_month_clients.items():
+        months = sorted(month_clients.keys())
+        retention_data = []
+        all_clients = set()
+        for month in months:
+            clients = month_clients[month]
+            if all_clients:
+                overlap = len(clients & all_clients)
+                retention_rate = (overlap / len(all_clients) * 100) if all_clients else 0
+            else:
+                overlap = 0
+                retention_rate = 0
+            retention_data.append({
+                'month': month,
+                'total': len(clients),
+                'overlap': overlap,
+                'retention': round(retention_rate, 1),
+                'new': len(clients - all_clients) if all_clients else len(clients)
+            })
+            all_clients.update(clients)
+        purpose_client_retention[purpose] = retention_data
+
     # 전체 월별 거래처 중복률 (모든 지사 합산)
     all_month_clients = {}
     for branch, month_clients in by_branch_month_clients.items():
@@ -1672,7 +1696,7 @@ def process_data(data, purpose_filter=None):
         'sample_types': sorted(list(sample_types)),
         'branch_client_retention': branch_client_retention,
         'total_client_retention': total_retention,
-        'month_client_details': {m: {c: {'branch': d['branch'], 'purposes': list(d['purposes'])} for c, d in clients.items()} for m, clients in month_client_details.items()},
+        'purpose_client_retention': purpose_client_retention,
         'by_department': by_department,
         'total_sales': total_sales,
         'total_count': total_count
@@ -10655,51 +10679,47 @@ HTML_TEMPLATE = '''
                 }
             }
 
-            // month_client_details 데이터에서 필터링된 거래처 계산
-            const monthDetails = currentData.month_client_details || {};
-            const seenClients = new Set();
+            // 검사목적만 필터링 (팀은 전체)
+            if (purposeFilter !== '전체' && branchFilter === '전체') {
+                const purposeRetention = currentData.purpose_client_retention?.[purposeFilter];
+                if (purposeRetention && purposeRetention.length > 0) {
+                    return purposeRetention;
+                }
+            }
+
+            // 둘 다 필터링 - 교집합 계산 필요
+            // 팀별 월별 거래처와 목적별 월별 거래처의 교집합
+            const branchData = currentData.branch_client_retention?.[branchFilter] || [];
+            const purposeData = currentData.purpose_client_retention?.[purposeFilter] || [];
+
+            // 데이터가 없으면 빈 배열 리턴
+            if (branchData.length === 0 && purposeData.length === 0) {
+                return Array.from({length: 12}, (_, i) => ({
+                    month: i + 1, total: 0, overlap: 0, new: 0, retention: 0
+                }));
+            }
+
+            // 둘 중 하나만 있으면 그것 사용
+            if (branchData.length > 0 && purposeData.length === 0) return branchData;
+            if (purposeData.length > 0 && branchData.length === 0) return purposeData;
+
+            // 둘 다 있으면 더 작은 값 사용 (교집합 근사치)
             const result = [];
+            for (let i = 0; i < 12; i++) {
+                const month = i + 1;
+                const bd = branchData.find(d => d.month === month) || { total: 0, overlap: 0, new: 0, retention: 0 };
+                const pd = purposeData.find(d => d.month === month) || { total: 0, overlap: 0, new: 0, retention: 0 };
 
-            for (let month = 1; month <= 12; month++) {
-                // JSON 키는 문자열이므로 명시적 변환
-                const monthKey = String(month);
-                const monthClients = monthDetails[monthKey] || monthDetails[month] || {};
-
-                // 필터 적용
-                const filteredClients = [];
-                Object.entries(monthClients).forEach(([clientName, clientData]) => {
-                    // 팀 필터
-                    if (branchFilter !== '전체') {
-                        if (clientData.branch !== branchFilter) {
-                            return;
-                        }
-                    }
-                    // 검사목적 필터
-                    if (purposeFilter !== '전체') {
-                        const purposes = clientData.purposes || [];
-                        if (!purposes.includes(purposeFilter)) {
-                            return;
-                        }
-                    }
-                    filteredClients.push(clientName);
-                });
-
-                const total = filteredClients.length;
-                let overlap = 0, newCount = 0;
-
-                filteredClients.forEach(name => {
-                    if (seenClients.has(name)) {
-                        overlap++;
-                    } else {
-                        newCount++;
-                        seenClients.add(name);
-                    }
-                });
-
+                // 교집합은 두 집합 중 더 작은 값을 넘지 않음
+                const total = Math.min(bd.total, pd.total);
+                const overlap = Math.min(bd.overlap, pd.overlap);
+                const newCount = Math.min(bd.new, pd.new);
                 const prevMonth = result[result.length - 1];
-                const retention = prevMonth && prevMonth.total > 0 ? (overlap / prevMonth.total * 100).toFixed(1) : 0;
+                const retention = prevMonth && prevMonth.total > 0
+                    ? Math.round(overlap / prevMonth.total * 100 * 10) / 10
+                    : 0;
 
-                result.push({ month, total, overlap, new: newCount, retention: parseFloat(retention) });
+                result.push({ month, total, overlap, new: newCount, retention });
             }
             return result;
         }

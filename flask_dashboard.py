@@ -1158,6 +1158,7 @@ def process_data(data, purpose_filter=None):
     by_sample_type_purpose = {}  # 검체유형별-목적 데이터
     by_urgent_month = {}  # 월별 긴급 데이터
     by_branch_month_clients = {}  # 지사별 월별 거래처 (중복 분석용)
+    month_client_details = {}  # 월별 거래처 상세 정보 (검사목적/팀 필터링용)
     by_department = {}  # 부서별 데이터 (본사, 마케팅, 영업부, 지사)
     purposes = set()
     sample_types = set()  # 검체유형 목록
@@ -1309,6 +1310,14 @@ def process_data(data, purpose_filter=None):
                 by_branch_month_clients[branch][month] = set()
             if client and client != '미지정':
                 by_branch_month_clients[branch][month].add(client)
+
+            # 월별 거래처 상세 (검사목적/팀 필터링용)
+            if month not in month_client_details:
+                month_client_details[month] = {}
+            if client and client != '미지정':
+                if client not in month_client_details[month]:
+                    month_client_details[month][client] = {'branch': branch, 'purposes': set()}
+                month_client_details[month][client]['purposes'].add(purpose if purpose else '미지정')
 
         # 거래처별
         if client not in by_client:
@@ -1663,6 +1672,7 @@ def process_data(data, purpose_filter=None):
         'sample_types': sorted(list(sample_types)),
         'branch_client_retention': branch_client_retention,
         'total_client_retention': total_retention,
+        'month_client_details': {m: {c: {'branch': d['branch'], 'purposes': list(d['purposes'])} for c, d in clients.items()} for m, clients in month_client_details.items()},
         'by_department': by_department,
         'total_sales': total_sales,
         'total_count': total_count
@@ -10637,42 +10647,35 @@ HTML_TEMPLATE = '''
                 return currentData.total_client_retention || [];
             }
 
-            // by_month 데이터에서 필터링된 거래처 계산
-            const monthMap = Object.fromEntries(currentData.by_month || []);
+            // month_client_details 데이터에서 필터링된 거래처 계산
+            const monthDetails = currentData.month_client_details || {};
             const seenClients = new Set();
             const result = [];
 
             for (let month = 1; month <= 12; month++) {
-                const monthData = monthMap[month];
-                if (!monthData) {
-                    result.push({ month, total: 0, overlap: 0, new: 0, retention: 0 });
-                    continue;
-                }
+                const monthClients = monthDetails[month] || {};
 
-                // 해당 월의 거래처들
-                let clients = {};
-                if (monthData.byClient) {
-                    Object.entries(monthData.byClient).forEach(([clientName, clientData]) => {
-                        // 팀 필터
-                        if (branchFilter !== '전체') {
-                            const manager = clientData.manager || '';
-                            const branch = MANAGER_TO_BRANCH_JS[manager] || '기타';
-                            if (branch !== branchFilter) return;
+                // 필터 적용
+                const filteredClients = [];
+                Object.entries(monthClients).forEach(([clientName, clientData]) => {
+                    // 팀 필터
+                    if (branchFilter !== '전체' && clientData.branch !== branchFilter) {
+                        return;
+                    }
+                    // 검사목적 필터
+                    if (purposeFilter !== '전체') {
+                        const purposes = clientData.purposes || [];
+                        if (!purposes.includes(purposeFilter)) {
+                            return;
                         }
-                        // 검사목적 필터
-                        if (purposeFilter !== '전체') {
-                            const purposeData = clientData.byPurpose?.[purposeFilter];
-                            if (!purposeData || purposeData.count === 0) return;
-                        }
-                        clients[clientName] = clientData;
-                    });
-                }
+                    }
+                    filteredClients.push(clientName);
+                });
 
-                const clientNames = Object.keys(clients);
-                const total = clientNames.length;
+                const total = filteredClients.length;
                 let overlap = 0, newCount = 0;
 
-                clientNames.forEach(name => {
+                filteredClients.forEach(name => {
                     if (seenClients.has(name)) {
                         overlap++;
                     } else {

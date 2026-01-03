@@ -12473,7 +12473,37 @@ HTML_TEMPLATE = '''
             const originalMonthMap = Object.fromEntries(monthly);
             const filteredMap = getFilteredMonthlyData(purposeFilter, managerFilter);
             const monthMap = (purposeFilter === '전체' && managerFilter === '전체') ? originalMonthMap : filteredMap;
-            const compMonthMap = compareData ? Object.fromEntries(compareData.by_month || []) : {};
+
+            // 비교 연도 데이터도 동일한 필터 적용
+            const compMonthly = compareData?.by_month || [];
+            const originalCompMonthMap = Object.fromEntries(compMonthly);
+            let compMonthMap = originalCompMonthMap;
+
+            // 필터가 있으면 비교 데이터도 필터링
+            if (purposeFilter !== '전체' || managerFilter !== '전체') {
+                compMonthMap = {};
+                for (let m = 1; m <= 12; m++) {
+                    const data = originalCompMonthMap[m];
+                    if (data) {
+                        let sales = 0, count = 0;
+                        if (purposeFilter !== '전체' && managerFilter === '전체') {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            if (purposeData) { sales = purposeData.sales || 0; count = purposeData.count || 0; }
+                        } else if (purposeFilter === '전체' && managerFilter !== '전체') {
+                            const managerData = data.byManager?.[managerFilter];
+                            if (managerData) { sales = managerData.sales || 0; count = managerData.count || 0; }
+                        } else {
+                            const purposeData = data.byPurpose?.[purposeFilter];
+                            const managerData = data.byManager?.[managerFilter];
+                            if (purposeData && managerData) {
+                                sales = Math.min(purposeData.sales || 0, managerData.sales || 0);
+                                count = Math.min(purposeData.count || 0, managerData.count || 0);
+                            }
+                        }
+                        compMonthMap[m] = { sales, count, byPurpose: data.byPurpose || {}, byManager: data.byManager || {} };
+                    }
+                }
+            }
 
             // 월별 데이터 배열 생성
             const monthlyData = labels.map((label, i) => {
@@ -12486,7 +12516,9 @@ HTML_TEMPLATE = '''
                 const sales = filtData.sales || 0;
                 const count = filtData.count || 0;
                 const avgPrice = count > 0 ? sales / count : 0;
-                const compAvgPrice = compData.count > 0 ? compData.sales / compData.count : 0;
+                const compSales = compData.sales || 0;
+                const compCount = compData.count || 0;
+                const compAvgPrice = compCount > 0 ? compSales / compCount : 0;
 
                 return {
                     month: m,
@@ -12496,8 +12528,8 @@ HTML_TEMPLATE = '''
                     avgPrice,
                     byPurpose: origData.byPurpose || {},
                     byManager: origData.byManager || {},
-                    compSales: compData.sales,
-                    compCount: compData.count,
+                    compSales,
+                    compCount,
                     compAvgPrice,
                     compByPurpose: compData.byPurpose || {},
                     compByManager: compData.byManager || {}
@@ -13011,9 +13043,32 @@ HTML_TEMPLATE = '''
             const totalCount = data.reduce((s, v) => s + v, 0);
             const avgCount = validMonths.length > 0 ? totalCount / validMonths.length : 0;
 
-            // 전년도 데이터
+            // 전년도 데이터 (동일한 필터 적용)
             const compMonthly = compareData?.by_month || [];
-            const compMap = Object.fromEntries(compMonthly);
+            const originalCompMap = Object.fromEntries(compMonthly);
+            let compMap = originalCompMap;
+
+            // 필터가 있으면 비교 데이터도 필터링
+            if (purposeFilter !== '전체' || managerFilter !== '전체') {
+                compMap = {};
+                for (let m = 1; m <= 12; m++) {
+                    const mData = originalCompMap[m];
+                    if (mData) {
+                        let count = 0;
+                        if (purposeFilter !== '전체' && managerFilter === '전체') {
+                            count = mData.byPurpose?.[purposeFilter]?.count || 0;
+                        } else if (purposeFilter === '전체' && managerFilter !== '전체') {
+                            count = mData.byManager?.[managerFilter]?.count || 0;
+                        } else {
+                            const pCount = mData.byPurpose?.[purposeFilter]?.count || 0;
+                            const mCount = mData.byManager?.[managerFilter]?.count || 0;
+                            count = Math.min(pCount, mCount);
+                        }
+                        compMap[m] = { count };
+                    }
+                }
+            }
+
             const compData = labels.map((_, i) => compMap[i+1]?.count || 0);
             const compValidMonths = compData.filter(c => c > 0);
             const compTotalCount = compData.reduce((s, v) => s + v, 0);

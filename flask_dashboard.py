@@ -1669,8 +1669,10 @@ def process_data(data, purpose_filter=None):
             'manager': max(d.get('managers', {}).items(), key=lambda x: x[1]['sales'])[0] if d.get('managers') else '미지정',
             'purpose': max(d.get('purposes', {}).items(), key=lambda x: x[1]['sales'])[0] if d.get('purposes') else '',
             'tradeMonths': len(d.get('months', set())),
-            'purposes': d.get('purposes', {})
-        }) for c, d in sorted_clients[:100]],
+            'purposes': d.get('purposes', {}),
+            'byPurpose': {p: {'sales': pd['sales'], 'count': pd['count']} for p, pd in d.get('purposes', {}).items()},
+            'byManager': {m: {'sales': md['sales'], 'count': md['count']} for m, md in d.get('managers', {}).items()}
+        }) for c, d in sorted_clients],
         'by_purpose': sorted_purposes,
         'by_defect': sorted_defects[:30],
         'by_defect_month': {d: sorted(months.items()) for d, months in by_defect_month.items()},
@@ -16320,14 +16322,14 @@ HTML_TEMPLATE = '''
             };
 
             // 각 KPI 업데이트
-            updateKpiCard('kpiClientKing', managerArray.map(m => ({ name: m.name, value: m.totalClients })), v => v + '개', avgClients);
-            updateKpiCard('kpiNewKing', managerArray.map(m => ({ name: m.name, value: m.newClients })), v => v + '개 유치', avgNew);
+            updateKpiCard('kpiClientKing', managerArray.map(m => ({ name: m.name, value: m.totalClients })), v => Math.round(v) + '개', avgClients);
+            updateKpiCard('kpiNewKing', managerArray.map(m => ({ name: m.name, value: m.newClients })), v => Math.round(v) + '개 유치', avgNew);
             updateKpiCard('kpiGrowthKing', managerArray.map(m => ({ name: m.name, value: m.salesGrowth })), v => (v >= 0 ? '+' : '') + formatCurrency(v), avgGrowth);
-            updateKpiCard('kpiVipKing', managerArray.map(m => ({ name: m.name, value: m.vipClients })), v => v + '개 VIP', avgVip);
+            updateKpiCard('kpiVipKing', managerArray.map(m => ({ name: m.name, value: m.vipClients })), v => (v % 1 === 0 ? v : v.toFixed(1)) + '개 VIP', avgVip);
             updateKpiCard('kpiRetentionKing', managerArray.map(m => ({ name: m.name, value: m.retentionRate })), v => v.toFixed(0) + '% 유지', avgRetention);
-            updateKpiCard('kpiSteadyKing', managerArray.map(m => ({ name: m.name, value: m.avgTradeMonths })), v => '평균 ' + v.toFixed(1) + '월', avgTradeMonths);
+            updateKpiCard('kpiSteadyKing', managerArray.map(m => ({ name: m.name, value: m.avgTradeMonths })), v => v.toFixed(1) + '월', avgTradeMonths);
             updateKpiCard('kpiActiveKing', managerArray.map(m => ({ name: m.name, value: m.activeRate })), v => v.toFixed(0) + '% 활성', avgActiveRate);
-            updateKpiCard('kpiChurnWarning', managerArray.map(m => ({ name: m.name, value: m.churnedClients })), v => v + '개 이탈', avgChurn, true);
+            updateKpiCard('kpiChurnWarning', managerArray.map(m => ({ name: m.name, value: m.churnedClients })), v => Math.round(v) + '개 이탈', avgChurn, true);
 
             // 오버레이 이벤트 등록
             document.querySelectorAll('.manager-kpi-card').forEach(card => {

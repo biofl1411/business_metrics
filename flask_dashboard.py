@@ -19796,12 +19796,92 @@ HTML_TEMPLATE = '''
         function updateDefectMonthlyChart(monthlyData) {
             const months = [];
             const counts = [];
+            const monthDataArr = [];
             for (let i = 1; i <= 12; i++) {
                 months.push(i + '월');
-                counts.push(monthlyData[i]?.count || 0);
+                const count = monthlyData[i]?.count || 0;
+                counts.push(count);
+                monthDataArr.push({ month: i, count, byPurpose: monthlyData[i]?.by_purpose || {} });
             }
             const total = counts.reduce((s, c) => s + c, 0);
+            const maxCount = Math.max(...counts);
+            const avgCount = total / 12;
             document.getElementById('defectMonthlyBadge').textContent = '총 ' + total.toLocaleString() + '건';
+
+            // 오버레이 툴팁
+            const getOrCreateTooltip = () => {
+                let el = document.getElementById('defectMonthlyTooltip');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'defectMonthlyTooltip';
+                    el.style.cssText = 'position:fixed;pointer-events:none;background:linear-gradient(135deg,#1e293b 0%,#334155 100%);color:#f8fafc;padding:16px;border-radius:12px;font-size:12px;z-index:9999;min-width:220px;box-shadow:0 20px 40px rgba(0,0,0,0.4);transition:opacity 0.15s;';
+                    document.body.appendChild(el);
+                }
+                return el;
+            };
+
+            const externalTooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip();
+                if (tooltip.opacity === 0) { tooltipEl.style.opacity = 0; return; }
+
+                const idx = tooltip.dataPoints?.[0]?.dataIndex;
+                if (idx === undefined) return;
+
+                const data = monthDataArr[idx];
+                const count = data.count;
+                const percent = total > 0 ? (count / total * 100).toFixed(1) : 0;
+                const vsAvg = avgCount > 0 ? ((count - avgCount) / avgCount * 100).toFixed(1) : 0;
+                const rank = [...counts].sort((a, b) => b - a).indexOf(count) + 1;
+
+                // 검사목적별 TOP 3
+                const purposeTop = Object.entries(data.byPurpose).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                const maxPurpose = purposeTop.length > 0 ? purposeTop[0][1] : 1;
+
+                let html = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #475569;padding-bottom:10px;margin-bottom:10px;">
+                        <div style="font-size:18px;font-weight:700;">📅 ${data.month}월</div>
+                        <div style="background:${rank <= 3 ? '#ef4444' : '#64748b'};padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;">${rank}위</div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                        <div style="background:#334155;padding:8px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">부적합 건수</div>
+                            <div style="font-size:16px;font-weight:700;color:#f87171;">${count.toLocaleString()}건</div>
+                        </div>
+                        <div style="background:#334155;padding:8px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">전체 비중</div>
+                            <div style="font-size:16px;font-weight:700;color:#fbbf24;">${percent}%</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:8px;padding:6px 10px;background:${parseFloat(vsAvg) >= 0 ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)'};border-radius:6px;">
+                        <span style="color:#94a3b8;">평균 대비:</span>
+                        <span style="color:${parseFloat(vsAvg) >= 0 ? '#f87171' : '#4ade80'};font-weight:600;">${parseFloat(vsAvg) >= 0 ? '+' : ''}${vsAvg}%</span>
+                    </div>
+                `;
+
+                if (purposeTop.length > 0) {
+                    html += `<div style="font-size:11px;color:#94a3b8;margin:10px 0 6px 0;">── 검사목적별 부적합 ──</div>`;
+                    purposeTop.forEach(([name, cnt]) => {
+                        const pct = (cnt / maxPurpose * 100).toFixed(0);
+                        html += `
+                            <div style="margin:4px 0;">
+                                <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+                                    <span>${name}</span><span style="color:#fbbf24;font-weight:600;">${cnt}건</span>
+                                </div>
+                                <div style="background:#475569;border-radius:4px;height:4px;overflow:hidden;">
+                                    <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#f87171,#fbbf24);"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                tooltipEl.innerHTML = html;
+                tooltipEl.style.opacity = 1;
+                const pos = chart.canvas.getBoundingClientRect();
+                tooltipEl.style.left = Math.min(pos.left + tooltip.caretX + 15, window.innerWidth - 250) + 'px';
+                tooltipEl.style.top = pos.top + tooltip.caretY - 20 + 'px';
+            };
 
             const ctx = document.getElementById('defectMonthlyChart').getContext('2d');
             if (charts.defectMonthly) charts.defectMonthly.destroy();
@@ -19816,14 +19896,15 @@ HTML_TEMPLATE = '''
                         backgroundColor: 'rgba(239, 68, 68, 0.1)',
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#ef4444'
+                        pointRadius: 5,
+                        pointBackgroundColor: '#ef4444',
+                        pointHoverRadius: 8
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false, external: externalTooltipHandler } },
                     scales: {
                         y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
                         x: { grid: { display: false } }
@@ -19837,20 +19918,91 @@ HTML_TEMPLATE = '''
             const seasonColors = {
                 '봄': '#f472b6', '여름': '#34d399', '가을': '#fbbf24', '겨울': '#60a5fa'
             };
+            const seasonIcons = { '봄': '🌸', '여름': '☀️', '가을': '🍂', '겨울': '❄️' };
+            const seasonMonths = { '봄': '3~5월', '여름': '6~8월', '가을': '9~11월', '겨울': '12~2월' };
             const labels = [];
-            const data = [];
+            const dataArr = [];
             const colors = [];
 
             seasonOrder.forEach(s => {
                 if (seasonData[s]) {
                     labels.push(s);
-                    data.push(seasonData[s].count);
+                    dataArr.push({ name: s, count: seasonData[s].count, defects: seasonData[s].defects || [], byPurpose: seasonData[s].by_purpose || {} });
                     colors.push(seasonColors[s]);
                 }
             });
 
-            const total = data.reduce((s, c) => s + c, 0);
+            const total = dataArr.reduce((s, d) => s + d.count, 0);
             document.getElementById('defectSeasonBadge').textContent = '총 ' + total.toLocaleString() + '건';
+
+            // 오버레이 툴팁
+            const getOrCreateTooltip = () => {
+                let el = document.getElementById('defectSeasonTooltip');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'defectSeasonTooltip';
+                    el.style.cssText = 'position:fixed;pointer-events:none;background:linear-gradient(135deg,#1e293b 0%,#334155 100%);color:#f8fafc;padding:16px;border-radius:12px;font-size:12px;z-index:9999;min-width:240px;box-shadow:0 20px 40px rgba(0,0,0,0.4);transition:opacity 0.15s;';
+                    document.body.appendChild(el);
+                }
+                return el;
+            };
+
+            const externalTooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip();
+                if (tooltip.opacity === 0) { tooltipEl.style.opacity = 0; return; }
+
+                const idx = tooltip.dataPoints?.[0]?.dataIndex;
+                if (idx === undefined) return;
+
+                const d = dataArr[idx];
+                const percent = total > 0 ? (d.count / total * 100).toFixed(1) : 0;
+                const rank = [...dataArr].sort((a, b) => b.count - a.count).findIndex(x => x.name === d.name) + 1;
+                const topDefects = d.defects.slice(0, 5);
+                const maxDefect = topDefects.length > 0 ? topDefects[0][1] : 1;
+
+                let html = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #475569;padding-bottom:10px;margin-bottom:10px;">
+                        <div style="font-size:20px;font-weight:700;">${seasonIcons[d.name]} ${d.name}</div>
+                        <div style="background:${seasonColors[d.name]};padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;">${rank}위</div>
+                    </div>
+                    <div style="color:#94a3b8;font-size:11px;margin-bottom:10px;">${seasonMonths[d.name]}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                        <div style="background:#334155;padding:10px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">부적합 건수</div>
+                            <div style="font-size:18px;font-weight:700;color:${seasonColors[d.name]};">${d.count.toLocaleString()}건</div>
+                        </div>
+                        <div style="background:#334155;padding:10px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">전체 비중</div>
+                            <div style="font-size:18px;font-weight:700;color:#f8fafc;">${percent}%</div>
+                        </div>
+                    </div>
+                `;
+
+                if (topDefects.length > 0) {
+                    html += `<div style="font-size:11px;color:#94a3b8;margin:10px 0 6px 0;">── 주요 부적합 항목 TOP 5 ──</div>`;
+                    topDefects.forEach(([name, cnt], i) => {
+                        const pct = (cnt / maxDefect * 100).toFixed(0);
+                        html += `
+                            <div style="margin:4px 0;">
+                                <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+                                    <span>${i+1}. ${name.length > 15 ? name.substring(0,15)+'..' : name}</span>
+                                    <span style="color:${seasonColors[d.name]};font-weight:600;">${cnt}건</span>
+                                </div>
+                                <div style="background:#475569;border-radius:4px;height:4px;overflow:hidden;">
+                                    <div style="width:${pct}%;height:100%;background:${seasonColors[d.name]};"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                tooltipEl.innerHTML = html;
+                tooltipEl.style.opacity = 1;
+                const pos = chart.canvas.getBoundingClientRect();
+                tooltipEl.style.left = Math.min(pos.left + tooltip.caretX + 15, window.innerWidth - 270) + 'px';
+                tooltipEl.style.top = pos.top + tooltip.caretY - 20 + 'px';
+            };
 
             const ctx = document.getElementById('defectSeasonChart').getContext('2d');
             if (charts.defectSeason) charts.defectSeason.destroy();
@@ -19859,10 +20011,11 @@ HTML_TEMPLATE = '''
                 data: {
                     labels: labels,
                     datasets: [{
-                        data: data,
+                        data: dataArr.map(d => d.count),
                         backgroundColor: colors,
-                        borderWidth: 2,
-                        borderColor: '#fff'
+                        borderWidth: 3,
+                        borderColor: '#fff',
+                        hoverBorderWidth: 4
                     }]
                 },
                 options: {
@@ -19870,15 +20023,7 @@ HTML_TEMPLATE = '''
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom' },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const value = context.raw;
-                                    const percent = (value / total * 100).toFixed(1);
-                                    return context.label + ': ' + value.toLocaleString() + '건 (' + percent + '%)';
-                                }
-                            }
-                        }
+                        tooltip: { enabled: false, external: externalTooltipHandler }
                     }
                 }
             });
@@ -19886,6 +20031,87 @@ HTML_TEMPLATE = '''
 
         function updateDefectItemChart(defects) {
             const top10 = defects.slice(0, 10);
+            const total = defects.reduce((s, d) => s + d[1].count, 0);
+            const byDefectMonth = currentData.by_defect_month || {};
+
+            // 오버레이 툴팁
+            const getOrCreateTooltip = () => {
+                let el = document.getElementById('defectItemTooltip');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'defectItemTooltip';
+                    el.style.cssText = 'position:fixed;pointer-events:none;background:linear-gradient(135deg,#1e293b 0%,#334155 100%);color:#f8fafc;padding:16px;border-radius:12px;font-size:12px;z-index:9999;min-width:260px;box-shadow:0 20px 40px rgba(0,0,0,0.4);transition:opacity 0.15s;';
+                    document.body.appendChild(el);
+                }
+                return el;
+            };
+
+            const externalTooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip();
+                if (tooltip.opacity === 0) { tooltipEl.style.opacity = 0; return; }
+
+                const idx = tooltip.dataPoints?.[0]?.dataIndex;
+                if (idx === undefined) return;
+
+                const [name, data] = top10[idx];
+                const count = data.count;
+                const percent = total > 0 ? (count / total * 100).toFixed(1) : 0;
+                const rank = idx + 1;
+
+                // 월별 데이터
+                const monthData = byDefectMonth[name] || [];
+                const monthCounts = [];
+                for (let i = 1; i <= 12; i++) {
+                    const found = monthData.find(m => m[0] === i);
+                    monthCounts.push(found ? found[1] : 0);
+                }
+                const maxMonth = Math.max(...monthCounts) || 1;
+                const peakMonthIdx = monthCounts.indexOf(Math.max(...monthCounts));
+
+                let html = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #475569;padding-bottom:10px;margin-bottom:10px;">
+                        <div style="font-size:16px;font-weight:700;max-width:180px;overflow:hidden;text-overflow:ellipsis;">🔬 ${name}</div>
+                        <div style="background:${rank <= 3 ? '#ef4444' : '#64748b'};padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;">${rank}위</div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                        <div style="background:#334155;padding:10px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">발생 건수</div>
+                            <div style="font-size:18px;font-weight:700;color:#f87171;">${count.toLocaleString()}건</div>
+                        </div>
+                        <div style="background:#334155;padding:10px;border-radius:8px;text-align:center;">
+                            <div style="font-size:10px;color:#94a3b8;">전체 비중</div>
+                            <div style="font-size:18px;font-weight:700;color:#fbbf24;">${percent}%</div>
+                        </div>
+                    </div>
+                    <div style="background:#334155;padding:8px 10px;border-radius:8px;margin-bottom:12px;">
+                        <span style="color:#94a3b8;">📅 최다 발생월:</span>
+                        <span style="color:#60a5fa;font-weight:700;margin-left:6px;">${peakMonthIdx + 1}월 (${monthCounts[peakMonthIdx]}건)</span>
+                    </div>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">── 월별 발생 추이 ──</div>
+                    <div style="display:flex;align-items:end;gap:2px;height:40px;">
+                `;
+
+                monthCounts.forEach((cnt, i) => {
+                    const h = maxMonth > 0 ? (cnt / maxMonth * 100) : 0;
+                    const color = cnt === Math.max(...monthCounts) && cnt > 0 ? '#ef4444' : '#64748b';
+                    html += `<div style="flex:1;background:${color};height:${Math.max(h, 5)}%;border-radius:2px 2px 0 0;" title="${i+1}월: ${cnt}건"></div>`;
+                });
+
+                html += `
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-top:2px;">
+                        <span>1월</span><span>6월</span><span>12월</span>
+                    </div>
+                `;
+
+                tooltipEl.innerHTML = html;
+                tooltipEl.style.opacity = 1;
+                const pos = chart.canvas.getBoundingClientRect();
+                tooltipEl.style.left = Math.min(pos.left + tooltip.caretX + 15, window.innerWidth - 290) + 'px';
+                tooltipEl.style.top = pos.top + tooltip.caretY - 20 + 'px';
+            };
+
             const ctx = document.getElementById('defectChart').getContext('2d');
             if (charts.defect) charts.defect.destroy();
             charts.defect = new Chart(ctx, {
@@ -19894,14 +20120,15 @@ HTML_TEMPLATE = '''
                     labels: top10.map(d => d[0].length > 8 ? d[0].substring(0, 8) + '..' : d[0]),
                     datasets: [{
                         data: top10.map(d => d[1].count),
-                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
-                        borderRadius: 6
+                        backgroundColor: top10.map((_, i) => i < 3 ? 'rgba(239, 68, 68, 0.9)' : 'rgba(239, 68, 68, 0.6)'),
+                        borderRadius: 6,
+                        hoverBackgroundColor: '#ef4444'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false, external: externalTooltipHandler } },
                     scales: {
                         y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
                         x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45 } }

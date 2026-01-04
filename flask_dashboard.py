@@ -17776,8 +17776,10 @@ HTML_TEMPLATE = '''
         // 지역별 탭 전역 변수
         let regionAnalysisData = null;
         let selectedRegion = null;
-        let svgMapLoaded = false;
+        let currentMapLevel = 'sido';  // 'sido' 또는 'sigungu'
+        let currentSido = null;
         let sidoSalesData = {};
+        let sigunguSalesData = {};
 
         // 시/도 이름 매핑 (SVG id → 짧은 이름)
         const SIDO_NAME_MAP = {
@@ -17794,28 +17796,51 @@ HTML_TEMPLATE = '''
             Object.entries(SIDO_NAME_MAP).map(([k, v]) => [v, k])
         );
 
-        // SVG 지도 초기화
-        async function initSvgMap() {
-            if (svgMapLoaded) return;
+        // 시/도별 SVG 파일명 매핑
+        const SIDO_SVG_FILE = {
+            '서울특별시': '서울특별시_시군구_경계.svg',
+            '부산광역시': '부산광역시_시군구_경계.svg',
+            '대구광역시': '대구광역시_시군구_경계.svg',
+            '인천광역시': '인천광역시_시군구_경계.svg',
+            '광주광역시': '광주광역시_시군구_경계.svg',
+            '대전광역시': '대전광역시_시군구_경계.svg',
+            '울산광역시': '울산광역시_시군구_경계.svg',
+            '세종특별자치시': '세종특별자치시_시군구_경계.svg',
+            '경기도': '경기도_시군구_경계.svg',
+            '강원도': '강원도_시군구_경계.svg',
+            '충청북도': '충청북도_시군구_경계.svg',
+            '충청남도': '충청남도_시군구_경계.svg',
+            '전라북도': '전라북도_시군구_경계.svg',
+            '전라남도': '전라남도_시군구_경계.svg',
+            '경상북도': '경상북도_시군구_경계.svg',
+            '경상남도': '경상남도_시군구_경계.svg',
+            '제주특별자치도': '제주특별자치도_시군구_경계.svg'
+        };
 
+        // 전국 시/도 지도 로드
+        async function loadSidoMap() {
             const svg = d3.select('#koreaMap');
             if (svg.empty()) return;
 
+            svg.selectAll('*').remove();
+            currentMapLevel = 'sido';
+            currentSido = null;
+
+            // UI 업데이트
+            document.getElementById('mapBackBtn').style.display = 'none';
+            document.getElementById('mapBreadcrumb').textContent = '전국';
+
             try {
-                // GitHub에서 SVG 파일 로드
                 const response = await fetch('https://raw.githubusercontent.com/statgarten/maps/main/svg/simple/전국_시도_경계.svg');
                 const svgText = await response.text();
 
-                // SVG 파싱
                 const parser = new DOMParser();
                 const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
                 const paths = svgDoc.querySelectorAll('path');
 
-                // viewBox 설정
                 svg.attr('viewBox', '0 0 800 759')
                    .attr('preserveAspectRatio', 'xMidYMid meet');
 
-                // 각 시/도 path 추가
                 paths.forEach(path => {
                     const id = path.getAttribute('id');
                     const d = path.getAttribute('d');
@@ -17823,155 +17848,344 @@ HTML_TEMPLATE = '''
 
                     if (id && d) {
                         const pathEl = svg.append('path')
-                            .attr('id', 'sido-' + id)
+                            .attr('id', 'region-' + id)
                             .attr('d', d)
                             .attr('fill', '#dbeafe')
                             .attr('stroke', '#94a3b8')
                             .attr('stroke-width', '1')
                             .attr('cursor', 'pointer')
-                            .attr('data-sido', id);
+                            .attr('data-name', id);
 
-                        if (fillRule) {
-                            pathEl.attr('fill-rule', fillRule);
-                        }
+                        if (fillRule) pathEl.attr('fill-rule', fillRule);
 
-                        // 마우스 이벤트
                         pathEl.on('mouseover', function(event) {
-                            const sidoId = d3.select(this).attr('data-sido');
-                            const shortName = SIDO_NAME_MAP[sidoId] || sidoId;
-                            const data = sidoSalesData[shortName];
-
-                            d3.select(this).attr('stroke', '#1e3a8a').attr('stroke-width', '2');
-
-                            if (data) {
-                                const tooltip = document.getElementById('mapTooltip');
-                                tooltip.innerHTML = `
-                                    <div style="font-weight: 600; margin-bottom: 8px;">${sidoId}</div>
-                                    <div>매출: ${formatCurrency(data.sales)}</div>
-                                    <div>건수: ${data.count.toLocaleString()}건</div>
-                                `;
-                                tooltip.style.display = 'block';
-                                tooltip.style.left = (event.offsetX + 10) + 'px';
-                                tooltip.style.top = (event.offsetY + 10) + 'px';
-                            }
+                            handleMapMouseOver(this, event, 'sido');
                         })
                         .on('mouseout', function() {
-                            d3.select(this).attr('stroke', '#94a3b8').attr('stroke-width', '1');
-                            document.getElementById('mapTooltip').style.display = 'none';
+                            handleMapMouseOut(this);
                         })
                         .on('mousemove', function(event) {
-                            const tooltip = document.getElementById('mapTooltip');
-                            tooltip.style.left = (event.offsetX + 10) + 'px';
-                            tooltip.style.top = (event.offsetY + 10) + 'px';
+                            handleMapMouseMove(event);
                         })
                         .on('click', function() {
-                            const sidoId = d3.select(this).attr('data-sido');
-                            const shortName = SIDO_NAME_MAP[sidoId] || sidoId;
-                            showSvgSidoDetail(shortName);
+                            const sidoName = d3.select(this).attr('data-name');
+                            loadSigunguMap(sidoName);
                         });
                     }
                 });
 
-                svgMapLoaded = true;
-                console.log('[SVG MAP] 초기화 완료');
+                updateSidoMapColors();
+                console.log('[SVG MAP] 전국 지도 로드 완료');
             } catch (e) {
-                console.error('[SVG MAP] 초기화 실패:', e);
+                console.error('[SVG MAP] 전국 지도 로드 실패:', e);
             }
         }
 
-        // SVG 지도 색상 업데이트
-        function updateSvgMapColors() {
+        // 시/군/구 지도 로드 (드릴다운)
+        async function loadSigunguMap(sidoName) {
+            const svg = d3.select('#koreaMap');
+            if (svg.empty()) return;
+
+            const svgFile = SIDO_SVG_FILE[sidoName];
+            if (!svgFile) {
+                console.error('[SVG MAP] 시군구 SVG 파일 없음:', sidoName);
+                return;
+            }
+
+            svg.selectAll('*').remove();
+            currentMapLevel = 'sigungu';
+            currentSido = sidoName;
+
+            // UI 업데이트
+            document.getElementById('mapBackBtn').style.display = 'inline-block';
+            document.getElementById('mapBreadcrumb').textContent = `전국 > ${sidoName}`;
+
+            // 해당 시/도의 시군구 데이터 준비
+            prepareSigunguData(sidoName);
+
+            try {
+                const response = await fetch(`https://raw.githubusercontent.com/statgarten/maps/main/svg/simple/${encodeURIComponent(svgFile)}`);
+                const svgText = await response.text();
+
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+                const paths = svgDoc.querySelectorAll('path');
+                const originalSvg = svgDoc.querySelector('svg');
+
+                // viewBox 가져오기
+                const viewBox = originalSvg?.getAttribute('viewBox') || '0 0 800 800';
+                svg.attr('viewBox', viewBox)
+                   .attr('preserveAspectRatio', 'xMidYMid meet');
+
+                paths.forEach(path => {
+                    const id = path.getAttribute('id');
+                    const d = path.getAttribute('d');
+                    const fillRule = path.getAttribute('fill-rule');
+
+                    if (id && d) {
+                        const pathEl = svg.append('path')
+                            .attr('id', 'region-' + id)
+                            .attr('d', d)
+                            .attr('fill', '#dbeafe')
+                            .attr('stroke', '#94a3b8')
+                            .attr('stroke-width', '1')
+                            .attr('cursor', 'pointer')
+                            .attr('data-name', id);
+
+                        if (fillRule) pathEl.attr('fill-rule', fillRule);
+
+                        pathEl.on('mouseover', function(event) {
+                            handleMapMouseOver(this, event, 'sigungu');
+                        })
+                        .on('mouseout', function() {
+                            handleMapMouseOut(this);
+                        })
+                        .on('mousemove', function(event) {
+                            handleMapMouseMove(event);
+                        })
+                        .on('click', function() {
+                            const sigunguName = d3.select(this).attr('data-name');
+                            showSigunguDetail(sigunguName);
+                        });
+                    }
+                });
+
+                updateSigunguMapColors();
+                showSidoSummary(sidoName);
+                console.log('[SVG MAP] 시군구 지도 로드 완료:', sidoName);
+            } catch (e) {
+                console.error('[SVG MAP] 시군구 지도 로드 실패:', e);
+            }
+        }
+
+        // 뒤로가기 (전국 지도로)
+        function mapDrillUp() {
+            loadSidoMap();
+        }
+
+        // 시군구 데이터 준비
+        function prepareSigunguData(sidoName) {
+            sigunguSalesData = {};
             if (!regionAnalysisData || !regionAnalysisData.regionData) return;
 
-            // 시/도별 매출 집계
+            const shortName = SIDO_NAME_MAP[sidoName] || sidoName;
+
+            regionAnalysisData.regionData.forEach(r => {
+                const sido = r.sido || r.name.split(' ')[0];
+                if (sido === shortName) {
+                    // 시군구 이름 추출 (예: "서울 강남구" → "강남구")
+                    const parts = r.name.split(' ');
+                    const sigungu = parts.length > 1 ? parts.slice(1).join(' ') : r.name;
+
+                    if (!sigunguSalesData[sigungu]) {
+                        sigunguSalesData[sigungu] = { sales: 0, count: 0, clients: [] };
+                    }
+                    sigunguSalesData[sigungu].sales += r.sales;
+                    sigunguSalesData[sigungu].count += r.count;
+                }
+            });
+        }
+
+        // 마우스 오버 핸들러
+        function handleMapMouseOver(element, event, level) {
+            const name = d3.select(element).attr('data-name');
+            d3.select(element).attr('stroke', '#1e3a8a').attr('stroke-width', '2');
+
+            let data;
+            if (level === 'sido') {
+                const shortName = SIDO_NAME_MAP[name] || name;
+                data = sidoSalesData[shortName];
+            } else {
+                data = sigunguSalesData[name];
+            }
+
+            if (data) {
+                const tooltip = document.getElementById('mapTooltip');
+                tooltip.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 8px;">${name}</div>
+                    <div>매출: ${formatCurrency(data.sales)}</div>
+                    <div>거래: ${data.count.toLocaleString()}건</div>
+                `;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (event.offsetX + 10) + 'px';
+                tooltip.style.top = (event.offsetY + 10) + 'px';
+            }
+        }
+
+        function handleMapMouseOut(element) {
+            d3.select(element).attr('stroke', '#94a3b8').attr('stroke-width', '1');
+            document.getElementById('mapTooltip').style.display = 'none';
+        }
+
+        function handleMapMouseMove(event) {
+            const tooltip = document.getElementById('mapTooltip');
+            tooltip.style.left = (event.offsetX + 10) + 'px';
+            tooltip.style.top = (event.offsetY + 10) + 'px';
+        }
+
+        // 시/도 지도 색상 업데이트
+        function updateSidoMapColors() {
+            if (!regionAnalysisData || !regionAnalysisData.regionData) return;
+
             sidoSalesData = {};
             regionAnalysisData.regionData.forEach(r => {
                 const sido = r.sido || r.name.split(' ')[0];
                 if (!sidoSalesData[sido]) {
-                    sidoSalesData[sido] = { sales: 0, count: 0, regions: [] };
+                    sidoSalesData[sido] = { sales: 0, count: 0 };
                 }
                 sidoSalesData[sido].sales += r.sales;
                 sidoSalesData[sido].count += r.count;
-                sidoSalesData[sido].regions.push(r);
             });
 
-            const maxSales = Math.max(...Object.values(sidoSalesData).map(d => d.sales), 1);
-
-            // 각 시/도 색상 업데이트
             Object.entries(SIDO_NAME_MAP).forEach(([fullName, shortName]) => {
-                const path = d3.select('#sido-' + fullName);
+                const path = d3.select('#region-' + fullName);
                 if (path.empty()) return;
 
                 const data = sidoSalesData[shortName];
-                let color = '#dbeafe'; // 기본 색상 (데이터 없음)
-
-                if (data && data.sales > 0) {
-                    if (data.sales >= 1000000000) color = '#1e3a8a';      // 10억+ 진한 파랑
-                    else if (data.sales >= 500000000) color = '#3b82f6';  // 5~10억 파랑
-                    else if (data.sales >= 100000000) color = '#93c5fd';  // 1~5억 연한 파랑
-                    else color = '#dbeafe';                                // 1억 미만 매우 연한 파랑
-                }
-
+                const color = getColorBySales(data?.sales || 0);
                 path.transition().duration(300).attr('fill', color);
             });
-
-            console.log('[SVG MAP] 색상 업데이트 완료');
         }
 
-        // SVG 지도 시/도 상세 정보 표시
-        function showSvgSidoDetail(sido) {
-            if (!regionAnalysisData) return;
+        // 시군구 지도 색상 업데이트
+        function updateSigunguMapColors() {
+            const maxSales = Math.max(...Object.values(sigunguSalesData).map(d => d.sales), 1);
 
-            const sidoData = regionAnalysisData.regionData.filter(r =>
-                (r.sido || r.name.split(' ')[0]) === sido
-            );
+            Object.entries(sigunguSalesData).forEach(([name, data]) => {
+                const path = d3.select('#region-' + name);
+                if (path.empty()) return;
 
-            if (sidoData.length === 0) return;
+                const color = getColorBySales(data.sales);
+                path.transition().duration(300).attr('fill', color);
+            });
+        }
 
-            const totalSales = sidoData.reduce((s, r) => s + r.sales, 0);
-            const totalCount = sidoData.reduce((s, r) => s + r.count, 0);
+        // 매출액에 따른 색상 반환
+        function getColorBySales(sales) {
+            if (sales >= 1000000000) return '#1e3a8a';      // 10억+ 진한 파랑
+            if (sales >= 500000000) return '#3b82f6';       // 5~10억 파랑
+            if (sales >= 100000000) return '#93c5fd';       // 1~5억 연한 파랑
+            if (sales > 0) return '#bfdbfe';                 // 1억 미만 매우 연한 파랑
+            return '#f1f5f9';                                // 데이터 없음
+        }
 
-            // 상세 패널 업데이트
+        // 시/도 요약 표시
+        function showSidoSummary(sidoName) {
+            const shortName = SIDO_NAME_MAP[sidoName] || sidoName;
+            const data = sidoSalesData[shortName];
+            if (!data) return;
+
             const detailTitle = document.getElementById('regionDetailTitle');
             const detailBadge = document.getElementById('regionDetailBadge');
             const detailBody = document.getElementById('regionDetailBody');
-            const fullName = SIDO_ID_MAP[sido] || sido;
 
-            if (detailTitle) detailTitle.textContent = `📍 ${fullName} 상세 정보`;
-            if (detailBadge) detailBadge.textContent = `${sidoData.length}개 지역`;
+            if (detailTitle) detailTitle.textContent = `📍 ${sidoName}`;
+            if (detailBadge) detailBadge.textContent = `${Object.keys(sigunguSalesData).length}개 시군구`;
 
-            const topRegions = [...sidoData].sort((a, b) => b.sales - a.sales).slice(0, 10);
+            const sortedSigungu = Object.entries(sigunguSalesData)
+                .sort((a, b) => b[1].sales - a[1].sales)
+                .slice(0, 10);
 
             if (detailBody) {
                 detailBody.innerHTML = `
-                    <div style="margin-bottom: 16px;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                            <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 16px; border-radius: 12px;">
-                                <div style="font-size: 12px; opacity: 0.9;">총 매출</div>
-                                <div style="font-size: 20px; font-weight: bold;">${formatCurrency(totalSales)}</div>
-                            </div>
-                            <div style="background: linear-gradient(135deg, #10b981, #34d399); color: white; padding: 16px; border-radius: 12px;">
-                                <div style="font-size: 12px; opacity: 0.9;">총 건수</div>
-                                <div style="font-size: 20px; font-weight: bold;">${totalCount.toLocaleString()}건</div>
-                            </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 16px; border-radius: 12px;">
+                            <div style="font-size: 12px; opacity: 0.9;">총 매출</div>
+                            <div style="font-size: 20px; font-weight: bold;">${formatCurrency(data.sales)}</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #10b981, #34d399); color: white; padding: 16px; border-radius: 12px;">
+                            <div style="font-size: 12px; opacity: 0.9;">총 거래</div>
+                            <div style="font-size: 20px; font-weight: bold;">${data.count.toLocaleString()}건</div>
                         </div>
                     </div>
                     <div style="font-weight: 600; margin-bottom: 8px; color: #374151;">📊 시/군/구별 매출 TOP 10</div>
+                    <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">지도에서 시군구를 클릭하면 상세 정보를 볼 수 있습니다</div>
                     <div class="scroll-table" style="max-height: 280px;">
                         <table class="data-table">
-                            <thead><tr><th>지역</th><th class="text-right">매출</th><th class="text-right">건수</th></tr></thead>
+                            <thead><tr><th>시/군/구</th><th class="text-right">매출</th><th class="text-right">거래</th></tr></thead>
                             <tbody>
-                                ${topRegions.map(r => `
-                                    <tr>
-                                        <td>${r.name}</td>
-                                        <td class="text-right">${formatCurrency(r.sales)}</td>
-                                        <td class="text-right">${r.count}</td>
+                                ${sortedSigungu.map(([name, d]) => `
+                                    <tr style="cursor: pointer;" onclick="showSigunguDetail('${name}')">
+                                        <td>${name}</td>
+                                        <td class="text-right">${formatCurrency(d.sales)}</td>
+                                        <td class="text-right">${d.count}건</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
                         </table>
                     </div>
                 `;
+            }
+        }
+
+        // 시군구 상세 정보 표시
+        function showSigunguDetail(sigunguName) {
+            const data = sigunguSalesData[sigunguName];
+            if (!data) return;
+
+            const detailTitle = document.getElementById('regionDetailTitle');
+            const detailBadge = document.getElementById('regionDetailBadge');
+            const detailBody = document.getElementById('regionDetailBody');
+
+            const fullRegionName = currentSido ? `${SIDO_NAME_MAP[currentSido] || currentSido} ${sigunguName}` : sigunguName;
+
+            if (detailTitle) detailTitle.textContent = `📍 ${sigunguName}`;
+            if (detailBadge) detailBadge.textContent = currentSido || '';
+
+            // 해당 시군구의 거래처 찾기
+            const clients = (currentData.by_client || []).filter(c => {
+                const addr = c[1].address || '';
+                return addr.includes(sigunguName);
+            }).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10);
+
+            if (detailBody) {
+                detailBody.innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 16px; border-radius: 12px;">
+                            <div style="font-size: 12px; opacity: 0.9;">매출</div>
+                            <div style="font-size: 20px; font-weight: bold;">${formatCurrency(data.sales)}</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #10b981, #34d399); color: white; padding: 16px; border-radius: 12px;">
+                            <div style="font-size: 12px; opacity: 0.9;">거래</div>
+                            <div style="font-size: 20px; font-weight: bold;">${data.count.toLocaleString()}건</div>
+                        </div>
+                    </div>
+                    ${clients.length > 0 ? `
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #374151;">🏢 주요 거래처 TOP 10</div>
+                        <div class="scroll-table" style="max-height: 280px;">
+                            <table class="data-table">
+                                <thead><tr><th>거래처</th><th class="text-right">매출</th></tr></thead>
+                                <tbody>
+                                    ${clients.map(c => `
+                                        <tr>
+                                            <td>${c[0]}</td>
+                                            <td class="text-right">${formatCurrency(c[1].sales)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; color: #94a3b8; padding: 40px;">
+                            <div style="font-size: 32px; margin-bottom: 8px;">📭</div>
+                            <div>거래처 정보가 없습니다</div>
+                        </div>
+                    `}
+                `;
+            }
+        }
+
+        // SVG 지도 초기화 (기존 함수 대체)
+        async function initSvgMap() {
+            await loadSidoMap();
+        }
+
+        // SVG 지도 색상 업데이트 (기존 함수 대체)
+        function updateSvgMapColors() {
+            if (currentMapLevel === 'sido') {
+                updateSidoMapColors();
+            } else {
+                updateSigunguMapColors();
             }
         }
 

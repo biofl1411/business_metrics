@@ -1783,7 +1783,6 @@ HTML_TEMPLATE = '''
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://d3js.org/topojson.v3.min.js"></script>
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=2bf5373da96dea4fc3849546d72807d0&autoload=false"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -4954,14 +4953,17 @@ HTML_TEMPLATE = '''
                     </div>
                     <div class="card-body" style="padding: 16px;">
                         <div id="mapSummary" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px;"></div>
-                        <!-- 카카오맵 컨테이너 -->
-                        <div id="kakaoMapContainer" style="width: 100%; height: 420px; border-radius: 8px; overflow: hidden;"></div>
+                        <!-- SVG 지도 컨테이너 -->
+                        <div id="svgMapContainer" style="width: 100%; height: 420px; position: relative;">
+                            <svg id="koreaMap" style="width: 100%; height: 100%;"></svg>
+                            <div id="mapTooltip" style="position: absolute; display: none; background: rgba(30,41,59,0.95); color: #e2e8f0; padding: 12px 16px; border-radius: 8px; font-size: 12px; pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 250px;"></div>
+                        </div>
                         <!-- 범례 -->
                         <div id="mapLegend" style="display: flex; gap: 16px; margin-top: 12px; font-size: 11px; flex-wrap: wrap; justify-content: center;">
-                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #ef4444; border-radius: 50%;"></div><span>10억+</span></div>
-                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #f97316; border-radius: 50%;"></div><span>5~10억</span></div>
-                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #eab308; border-radius: 50%;"></div><span>1~5억</span></div>
-                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #22c55e; border-radius: 50%;"></div><span>1억 미만</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #1e3a8a; border-radius: 3px;"></div><span>10억+</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px;"></div><span>5~10억</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #93c5fd; border-radius: 3px;"></div><span>1~5억</span></div>
+                            <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 14px; height: 14px; background: #dbeafe; border-radius: 3px;"></div><span>1억 미만</span></div>
                         </div>
                     </div>
                 </div>
@@ -17774,159 +17776,150 @@ HTML_TEMPLATE = '''
         // 지역별 탭 전역 변수
         let regionAnalysisData = null;
         let selectedRegion = null;
-        let kakaoMap = null;
-        let kakaoMarkers = [];
-        let kakaoInfoWindow = null;
+        let svgMapLoaded = false;
+        let sidoSalesData = {};
 
-        // 시/도 중심 좌표
-        const SIDO_COORDS = {
-            '서울': { lat: 37.5665, lng: 126.9780 },
-            '부산': { lat: 35.1796, lng: 129.0756 },
-            '대구': { lat: 35.8714, lng: 128.6014 },
-            '인천': { lat: 37.4563, lng: 126.7052 },
-            '광주': { lat: 35.1595, lng: 126.8526 },
-            '대전': { lat: 36.3504, lng: 127.3845 },
-            '울산': { lat: 35.5384, lng: 129.3114 },
-            '세종': { lat: 36.4800, lng: 127.2890 },
-            '경기': { lat: 37.4138, lng: 127.5183 },
-            '강원': { lat: 37.8228, lng: 128.1555 },
-            '충북': { lat: 36.6357, lng: 127.4914 },
-            '충남': { lat: 36.5184, lng: 126.8000 },
-            '전북': { lat: 35.7175, lng: 127.1530 },
-            '전남': { lat: 34.8679, lng: 126.9910 },
-            '경북': { lat: 36.4919, lng: 128.8889 },
-            '경남': { lat: 35.4606, lng: 128.2132 },
-            '제주': { lat: 33.4996, lng: 126.5312 }
+        // 시/도 이름 매핑 (SVG id → 짧은 이름)
+        const SIDO_NAME_MAP = {
+            '서울특별시': '서울', '부산광역시': '부산', '대구광역시': '대구',
+            '인천광역시': '인천', '광주광역시': '광주', '대전광역시': '대전',
+            '울산광역시': '울산', '세종특별자치시': '세종', '경기도': '경기',
+            '강원도': '강원', '충청북도': '충북', '충청남도': '충남',
+            '전라북도': '전북', '전라남도': '전남', '경상북도': '경북',
+            '경상남도': '경남', '제주특별자치도': '제주'
         };
 
-        // 카카오맵 초기화 (비동기)
-        let kakaoMapReady = false;
-        let kakaoInitRetryCount = 0;
+        // 역매핑 (짧은 이름 → SVG id)
+        const SIDO_ID_MAP = Object.fromEntries(
+            Object.entries(SIDO_NAME_MAP).map(([k, v]) => [v, k])
+        );
 
-        function initKakaoMap(callback) {
-            if (kakaoMap) {
-                if (callback) callback();
-                return;
-            }
+        // SVG 지도 초기화
+        async function initSvgMap() {
+            if (svgMapLoaded) return;
 
-            const container = document.getElementById('kakaoMapContainer');
-            if (!container) return;
+            const svg = d3.select('#koreaMap');
+            if (svg.empty()) return;
 
-            // SDK 로드 대기 (최대 10초, 500ms 간격)
-            if (typeof kakao === 'undefined') {
-                kakaoInitRetryCount++;
-                if (kakaoInitRetryCount <= 20) {
-                    console.log('[KAKAO MAP] SDK 로드 대기 중... (' + kakaoInitRetryCount + '/20)');
-                    setTimeout(function() { initKakaoMap(callback); }, 500);
-                } else {
-                    console.error('[KAKAO MAP] SDK 로드 실패 - 시간 초과');
-                }
-                return;
-            }
+            try {
+                // GitHub에서 SVG 파일 로드
+                const response = await fetch('https://raw.githubusercontent.com/statgarten/maps/main/svg/simple/전국_시도_경계.svg');
+                const svgText = await response.text();
 
-            kakao.maps.load(function() {
-                try {
-                    const options = {
-                        center: new kakao.maps.LatLng(36.5, 127.5),
-                        level: 13
-                    };
-                    kakaoMap = new kakao.maps.Map(container, options);
-                    kakaoInfoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
-                    kakaoMapReady = true;
-                    console.log('[KAKAO MAP] 초기화 완료');
-                    if (callback) callback();
-                } catch (e) {
-                    console.error('[KAKAO MAP] 초기화 실패:', e);
-                }
-            });
-        }
+                // SVG 파싱
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+                const paths = svgDoc.querySelectorAll('path');
 
-        // 카카오맵 마커 업데이트
-        function updateKakaoMapMarkers() {
-            if (!kakaoMap) {
-                initKakaoMap(function() {
-                    updateKakaoMapMarkersInternal();
+                // viewBox 설정
+                svg.attr('viewBox', '0 0 800 759')
+                   .attr('preserveAspectRatio', 'xMidYMid meet');
+
+                // 각 시/도 path 추가
+                paths.forEach(path => {
+                    const id = path.getAttribute('id');
+                    const d = path.getAttribute('d');
+                    const fillRule = path.getAttribute('fill-rule');
+
+                    if (id && d) {
+                        const pathEl = svg.append('path')
+                            .attr('id', 'sido-' + id)
+                            .attr('d', d)
+                            .attr('fill', '#dbeafe')
+                            .attr('stroke', '#94a3b8')
+                            .attr('stroke-width', '1')
+                            .attr('cursor', 'pointer')
+                            .attr('data-sido', id);
+
+                        if (fillRule) {
+                            pathEl.attr('fill-rule', fillRule);
+                        }
+
+                        // 마우스 이벤트
+                        pathEl.on('mouseover', function(event) {
+                            const sidoId = d3.select(this).attr('data-sido');
+                            const shortName = SIDO_NAME_MAP[sidoId] || sidoId;
+                            const data = sidoSalesData[shortName];
+
+                            d3.select(this).attr('stroke', '#1e3a8a').attr('stroke-width', '2');
+
+                            if (data) {
+                                const tooltip = document.getElementById('mapTooltip');
+                                tooltip.innerHTML = `
+                                    <div style="font-weight: 600; margin-bottom: 8px;">${sidoId}</div>
+                                    <div>매출: ${formatCurrency(data.sales)}</div>
+                                    <div>건수: ${data.count.toLocaleString()}건</div>
+                                `;
+                                tooltip.style.display = 'block';
+                                tooltip.style.left = (event.offsetX + 10) + 'px';
+                                tooltip.style.top = (event.offsetY + 10) + 'px';
+                            }
+                        })
+                        .on('mouseout', function() {
+                            d3.select(this).attr('stroke', '#94a3b8').attr('stroke-width', '1');
+                            document.getElementById('mapTooltip').style.display = 'none';
+                        })
+                        .on('mousemove', function(event) {
+                            const tooltip = document.getElementById('mapTooltip');
+                            tooltip.style.left = (event.offsetX + 10) + 'px';
+                            tooltip.style.top = (event.offsetY + 10) + 'px';
+                        })
+                        .on('click', function() {
+                            const sidoId = d3.select(this).attr('data-sido');
+                            const shortName = SIDO_NAME_MAP[sidoId] || sidoId;
+                            showSvgSidoDetail(shortName);
+                        });
+                    }
                 });
-                return;
+
+                svgMapLoaded = true;
+                console.log('[SVG MAP] 초기화 완료');
+            } catch (e) {
+                console.error('[SVG MAP] 초기화 실패:', e);
             }
-            updateKakaoMapMarkersInternal();
         }
 
-        function updateKakaoMapMarkersInternal() {
-            if (!kakaoMap) return;
-
-            // 기존 마커 제거
-            kakaoMarkers.forEach(marker => marker.setMap(null));
-            kakaoMarkers = [];
-
+        // SVG 지도 색상 업데이트
+        function updateSvgMapColors() {
             if (!regionAnalysisData || !regionAnalysisData.regionData) return;
 
             // 시/도별 매출 집계
-            const sidoSales = {};
+            sidoSalesData = {};
             regionAnalysisData.regionData.forEach(r => {
                 const sido = r.sido || r.name.split(' ')[0];
-                if (!sidoSales[sido]) {
-                    sidoSales[sido] = { sales: 0, count: 0, regions: [] };
+                if (!sidoSalesData[sido]) {
+                    sidoSalesData[sido] = { sales: 0, count: 0, regions: [] };
                 }
-                sidoSales[sido].sales += r.sales;
-                sidoSales[sido].count += r.count;
-                sidoSales[sido].regions.push(r);
+                sidoSalesData[sido].sales += r.sales;
+                sidoSalesData[sido].count += r.count;
+                sidoSalesData[sido].regions.push(r);
             });
 
-            const maxSales = Math.max(...Object.values(sidoSales).map(d => d.sales));
-            if (maxSales === 0) return;
+            const maxSales = Math.max(...Object.values(sidoSalesData).map(d => d.sales), 1);
 
-            // 시/도별 원형 마커 추가
-            Object.entries(sidoSales).forEach(([sido, data]) => {
-                const coords = SIDO_COORDS[sido];
-                if (!coords) return;
+            // 각 시/도 색상 업데이트
+            Object.entries(SIDO_NAME_MAP).forEach(([fullName, shortName]) => {
+                const path = d3.select('#sido-' + fullName);
+                if (path.empty()) return;
 
-                // 원 크기 (매출 비례, 최소 20, 최대 60)
-                const size = Math.max(20, Math.min(60, (data.sales / maxSales) * 60));
+                const data = sidoSalesData[shortName];
+                let color = '#dbeafe'; // 기본 색상 (데이터 없음)
 
-                // 색상 (매출 구간별)
-                let color;
-                if (data.sales >= 1000000000) color = '#ef4444';      // 10억+ 빨강
-                else if (data.sales >= 500000000) color = '#f97316';  // 5~10억 주황
-                else if (data.sales >= 100000000) color = '#eab308';  // 1~5억 노랑
-                else color = '#22c55e';                                // 1억 미만 초록
+                if (data && data.sales > 0) {
+                    if (data.sales >= 1000000000) color = '#1e3a8a';      // 10억+ 진한 파랑
+                    else if (data.sales >= 500000000) color = '#3b82f6';  // 5~10억 파랑
+                    else if (data.sales >= 100000000) color = '#93c5fd';  // 1~5억 연한 파랑
+                    else color = '#dbeafe';                                // 1억 미만 매우 연한 파랑
+                }
 
-                // 커스텀 오버레이로 원형 마커 생성
-                const content = `
-                    <div style="
-                        width: ${size}px;
-                        height: ${size}px;
-                        background: ${color};
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                        cursor: pointer;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: ${size > 30 ? '11px' : '9px'};
-                        font-weight: bold;
-                        color: white;
-                        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-                    " onclick="showKakaoSidoDetail('${sido}')">${sido.substring(0, 2)}</div>
-                `;
-
-                const position = new kakao.maps.LatLng(coords.lat, coords.lng);
-                const overlay = new kakao.maps.CustomOverlay({
-                    position: position,
-                    content: content,
-                    yAnchor: 0.5,
-                    xAnchor: 0.5
-                });
-                overlay.setMap(kakaoMap);
-                kakaoMarkers.push(overlay);
+                path.transition().duration(300).attr('fill', color);
             });
 
-            console.log('[KAKAO MAP] 마커 업데이트 완료:', kakaoMarkers.length, '개');
+            console.log('[SVG MAP] 색상 업데이트 완료');
         }
 
-        // 카카오맵 시/도 상세 정보 표시
-        function showKakaoSidoDetail(sido) {
+        // SVG 지도 시/도 상세 정보 표시
+        function showSvgSidoDetail(sido) {
             if (!regionAnalysisData) return;
 
             const sidoData = regionAnalysisData.regionData.filter(r =>
@@ -17942,8 +17935,9 @@ HTML_TEMPLATE = '''
             const detailTitle = document.getElementById('regionDetailTitle');
             const detailBadge = document.getElementById('regionDetailBadge');
             const detailBody = document.getElementById('regionDetailBody');
+            const fullName = SIDO_ID_MAP[sido] || sido;
 
-            if (detailTitle) detailTitle.textContent = `📍 ${sido} 상세 정보`;
+            if (detailTitle) detailTitle.textContent = `📍 ${fullName} 상세 정보`;
             if (detailBadge) detailBadge.textContent = `${sidoData.length}개 지역`;
 
             const topRegions = [...sidoData].sort((a, b) => b.sales - a.sales).slice(0, 10);
@@ -18029,9 +18023,10 @@ HTML_TEMPLATE = '''
             // KPI 업데이트
             updateRegionKPIs(mainRegions, growthRegions, newRegions, weakRegions);
 
-            // 카카오맵 업데이트
-            initKakaoMap();
-            updateKakaoMapMarkers();
+            // SVG 지도 업데이트
+            initSvgMap().then(() => {
+                updateSvgMapColors();
+            });
 
             // 차트 업데이트
             updateRegionSalesChart(regionData);

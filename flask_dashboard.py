@@ -748,7 +748,7 @@ HTML_TEMPLATE = '''
         <div class="charts">
             <div class="chart-container full">
                 <h3>🗺️ 지역별 매출 지도</h3>
-                <div id="regionMap" style="height: 450px; border-radius: 8px; z-index: 1;"></div>
+                <div id="regionMap" style="height: 450px; border-radius: 8px; z-index: 1; background: #e8e8e8;"></div>
                 <div style="margin-top: 10px; font-size: 12px; color: #666;">
                     <span>● 원 크기: 매출 규모 | 클릭하면 상세 정보 표시</span>
                 </div>
@@ -1140,9 +1140,16 @@ HTML_TEMPLATE = '''
             document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
             document.getElementById(tabId).classList.add('active');
 
-            // 지역 탭일 때 지도 크기 재조정
-            if (tabId === 'region' && regionMap) {
-                setTimeout(() => regionMap.invalidateSize(), 100);
+            // 지역 탭일 때 지도 초기화 및 크기 재조정
+            if (tabId === 'region') {
+                setTimeout(() => {
+                    if (!regionMap) {
+                        initRegionMap();
+                        if (currentData) updateRegionMap();
+                    } else {
+                        regionMap.invalidateSize();
+                    }
+                }, 150);
             }
         }
 
@@ -1626,32 +1633,65 @@ HTML_TEMPLATE = '''
 
         // 지도 함수들
         function initRegionMap() {
-            if (regionMap) return; // 이미 초기화됨
-
             const mapContainer = document.getElementById('regionMap');
-            if (!mapContainer) return;
+            if (!mapContainer) {
+                console.error('[MAP] regionMap 컨테이너를 찾을 수 없습니다.');
+                return;
+            }
 
-            // 한국 중심 좌표
-            regionMap = L.map('regionMap').setView([36.5, 127.5], 7);
+            // 이미 초기화된 경우 크기만 재조정
+            if (regionMap) {
+                regionMap.invalidateSize();
+                return;
+            }
 
-            // CartoDB Positron 타일 (밝은 테마)
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap, © CartoDB',
-                maxZoom: 18
-            }).addTo(regionMap);
+            try {
+                // 한국 중심 좌표
+                regionMap = L.map('regionMap', {
+                    center: [36.5, 127.5],
+                    zoom: 7,
+                    zoomControl: true
+                });
+
+                // CartoDB Positron 타일 (밝은 테마)
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap, © CartoDB',
+                    maxZoom: 18
+                }).addTo(regionMap);
+
+                console.log('[MAP] 지도 초기화 완료');
+
+                // 초기화 후 크기 재조정
+                setTimeout(() => {
+                    if (regionMap) regionMap.invalidateSize();
+                }, 200);
+            } catch (e) {
+                console.error('[MAP] 지도 초기화 오류:', e);
+            }
         }
 
         function updateRegionMap() {
+            console.log('[MAP] updateRegionMap 호출');
+
             if (!regionMap) {
+                console.log('[MAP] 지도가 없어서 초기화 시도');
                 initRegionMap();
-                if (!regionMap) return;
+                if (!regionMap) {
+                    console.error('[MAP] 지도 초기화 실패');
+                    return;
+                }
             }
 
             // 기존 마커 제거
             mapMarkers.forEach(marker => regionMap.removeLayer(marker));
             mapMarkers = [];
 
-            if (!currentData || !currentData.by_region) return;
+            if (!currentData || !currentData.by_region) {
+                console.log('[MAP] 지역 데이터 없음');
+                return;
+            }
+
+            console.log('[MAP] 지역 데이터:', currentData.by_region.length, '개');
 
             // 담당자 필터 확인
             const selectedManager = document.getElementById('regionManagerFilter').value;
@@ -1676,13 +1716,22 @@ HTML_TEMPLATE = '''
             });
 
             // 최대 매출 계산 (원 크기 정규화용)
+            const sidoEntries = Object.entries(sidoSales);
+            console.log('[MAP] 시/도별 집계:', sidoEntries.length, '개', sidoEntries.map(([k,v]) => k + ':' + formatCurrency(v.sales)).join(', '));
+
             const maxSales = Math.max(...Object.values(sidoSales).map(d => d.sales));
-            if (maxSales === 0) return;
+            if (maxSales === 0) {
+                console.log('[MAP] 최대 매출이 0');
+                return;
+            }
 
             // 시/도별 원 마커 추가
             Object.entries(sidoSales).forEach(([sido, data]) => {
                 const coords = SIDO_COORDS[sido];
-                if (!coords) return;
+                if (!coords) {
+                    console.log('[MAP] 좌표 없음:', sido);
+                    return;
+                }
 
                 // 원 크기 계산 (최소 15, 최대 50)
                 const radius = Math.max(15, Math.min(50, (data.sales / maxSales) * 50));
@@ -1736,6 +1785,8 @@ HTML_TEMPLATE = '''
 
                 mapMarkers.push(circle);
             });
+
+            console.log('[MAP] 마커 추가 완료:', mapMarkers.length, '개');
 
             // 지도 크기 재조정 (탭 전환 시 필요)
             setTimeout(() => {

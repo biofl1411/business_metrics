@@ -21749,6 +21749,85 @@ def verify_food_item_data():
         'purpose_summary_from_sql': purpose_summary[:20]
     })
 
+@app.route('/api/food_item/debug')
+def debug_food_item_data():
+    """특정 검사목적/항목 데이터 상세 디버깅"""
+    import sqlite3
+    year = request.args.get('year', '2025')
+    purpose = request.args.get('purpose', '')
+    item = request.args.get('item', '')
+
+    conn = sqlite3.connect(str(SQLITE_DB))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    results = {}
+
+    # 1. 해당 검사목적의 모든 항목 건수 (SQL)
+    if purpose:
+        cursor.execute('''
+            SELECT 항목명, COUNT(*) as cnt, SUM(CAST(항목수수료 AS REAL)) as fee
+            FROM food_item_data
+            WHERE year = ? AND 검사목적 = ?
+            GROUP BY 항목명
+            ORDER BY cnt DESC
+        ''', (year, purpose))
+        results['sql_items_for_purpose'] = [dict(row) for row in cursor.fetchall()]
+        results['sql_total_for_purpose'] = sum(r['cnt'] for r in results['sql_items_for_purpose'])
+
+    # 2. 특정 항목의 모든 검사목적 건수 (SQL)
+    if item:
+        cursor.execute('''
+            SELECT 검사목적, COUNT(*) as cnt
+            FROM food_item_data
+            WHERE year = ? AND 항목명 = ?
+            GROUP BY 검사목적
+            ORDER BY cnt DESC
+        ''', (year, item))
+        results['sql_purposes_for_item'] = [dict(row) for row in cursor.fetchall()]
+        results['sql_total_for_item'] = sum(r['cnt'] for r in results['sql_purposes_for_item'])
+
+    # 3. 특정 검사목적+항목 조합 건수 (SQL)
+    if purpose and item:
+        cursor.execute('''
+            SELECT COUNT(*) as cnt, SUM(CAST(항목수수료 AS REAL)) as fee
+            FROM food_item_data
+            WHERE year = ? AND 검사목적 = ? AND 항목명 = ?
+        ''', (year, purpose, item))
+        row = cursor.fetchone()
+        results['sql_exact_match'] = {'count': row['cnt'], 'fee': row['fee']}
+
+        # 샘플 데이터 조회
+        cursor.execute('''
+            SELECT 접수번호, 접수일자, 검사목적, 항목명, 항목수수료, 결과입력자
+            FROM food_item_data
+            WHERE year = ? AND 검사목적 = ? AND 항목명 = ?
+            LIMIT 10
+        ''', (year, purpose, item))
+        results['sql_sample_rows'] = [dict(row) for row in cursor.fetchall()]
+
+    # 4. process_food_item_data 결과 확인
+    data = load_food_item_data(year)
+    processed = process_food_item_data(data)
+
+    if purpose:
+        purpose_items = processed.get('by_purpose_item', {}).get(purpose, [])
+        results['processed_items_for_purpose'] = purpose_items[:30]
+        results['processed_total_for_purpose'] = sum(d[1]['count'] for d in purpose_items)
+
+        if item:
+            found = [d for d in purpose_items if d[0] == item]
+            results['processed_exact_match'] = found[0] if found else None
+
+    conn.close()
+
+    return jsonify({
+        'year': year,
+        'purpose': purpose,
+        'item': item,
+        'results': results
+    })
+
 @app.route('/api/columns')
 def get_columns():
     """Excel 파일의 컬럼명 조회"""

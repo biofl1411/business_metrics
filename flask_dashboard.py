@@ -5358,24 +5358,6 @@ HTML_TEMPLATE = '''
                 <div class="purpose-kpi-grid" id="sampleTypeGrid"></div>
             </section>
 
-            <div class="content-grid">
-                <div class="card">
-                    <div class="card-header"><div class="card-title">🥧 유형별 매출 비중</div></div>
-                    <div class="card-body"><div class="chart-container"><canvas id="sampleTypeChart"></canvas></div></div>
-                </div>
-                <div class="card">
-                    <div class="card-header"><div class="card-title">📋 유형별 상세</div></div>
-                    <div class="card-body">
-                        <div class="scroll-table">
-                            <table class="data-table" id="sampleTypeTable">
-                                <thead><tr><th>검체유형</th><th class="text-right">매출액</th><th class="text-right">건수</th><th class="text-right">건당매출</th><th>비중</th></tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- 담당자별 유형 보유 수 & 지속적인 거래 유형 -->
             <div class="grid grid-cols-2" style="margin-top: 20px;">
                 <div class="card">
@@ -19167,17 +19149,6 @@ HTML_TEMPLATE = '''
                     <div class="purpose-kpi-sub" style="margin-top: 4px;"><span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">비중 ${percent}%</span></div>
                 </div>
             `}).join('');
-
-            const ctx = document.getElementById('sampleTypeChart').getContext('2d');
-            if (charts.sampleType) charts.sampleType.destroy();
-            charts.sampleType = new Chart(ctx, { type: 'pie', data: { labels: types.map(t => t[0]), datasets: [{ data: types.map(t => t[1].sales), backgroundColor: ['#6366f1', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f59e0b'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } });
-
-            const tbody = document.querySelector('#sampleTypeTable tbody');
-            tbody.innerHTML = types.map(t => {
-                const percent = (t[1].sales / total * 100).toFixed(1);
-                const avgSales = t[1].count > 0 ? Math.round(t[1].sales / t[1].count) : 0;
-                return `<tr><td><strong>${t[0]}</strong></td><td class="text-right">${formatCurrency(t[1].sales)}</td><td class="text-right">${t[1].count.toLocaleString()}</td><td class="text-right">${formatCurrency(avgSales)}</td><td><div class="progress-cell"><div class="progress-bar"><div class="progress-fill" style="width: ${percent}%;"></div></div><span class="progress-value">${percent}%</span></div></td></tr>`;
-            }).join('');
 
             // 담당자별 유형 보유 수 차트 & 지속적인 거래 테이블 업데이트
             updateSTManagerTypeChart();

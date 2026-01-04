@@ -21657,7 +21657,7 @@ def verify_food_item_data():
     import sqlite3
     year = request.args.get('year', '2025')
 
-    conn = sqlite3.connect(SQLITE_PATH)
+    conn = sqlite3.connect(str(SQLITE_DB))
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 

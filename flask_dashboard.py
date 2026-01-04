@@ -21651,6 +21651,103 @@ def get_food_item_data():
     print(f"[API] food_item 처리 완료: total_count={processed['total_count']}")
     return jsonify(processed)
 
+@app.route('/api/food_item/verify')
+def verify_food_item_data():
+    """검사항목 데이터 검증 API - 원시 SQL 데이터와 비교"""
+    year = request.args.get('year', '2025')
+
+    conn = sqlite3.connect(SQLITE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    verification_results = {}
+
+    # 1. 검사목적별-항목별 건수 직접 조회 (SQL)
+    cursor.execute('''
+        SELECT 검사목적, 항목명, COUNT(*) as cnt, SUM(CAST(항목수수료 AS REAL)) as fee
+        FROM food_item_data
+        WHERE year = ? AND 검사목적 IS NOT NULL AND 검사목적 != ''
+              AND 항목명 IS NOT NULL AND 항목명 != ''
+        GROUP BY 검사목적, 항목명
+        ORDER BY 검사목적, cnt DESC
+    ''', (year,))
+
+    sql_by_purpose_item = {}
+    for row in cursor.fetchall():
+        purpose = row['검사목적']
+        item = row['항목명']
+        cnt = row['cnt']
+        fee = row['fee'] or 0
+
+        if purpose not in sql_by_purpose_item:
+            sql_by_purpose_item[purpose] = {}
+        sql_by_purpose_item[purpose][item] = {'count': cnt, 'fee': fee}
+
+    # 2. process_food_item_data 결과 가져오기
+    data = load_food_item_data(year)
+    processed = process_food_item_data(data)
+    processed_by_purpose_item = processed.get('by_purpose_item', {})
+
+    # 3. 비교
+    discrepancies = []
+
+    for purpose in set(list(sql_by_purpose_item.keys()) + [p for p in processed_by_purpose_item.keys()]):
+        sql_items = sql_by_purpose_item.get(purpose, {})
+        proc_items = {item[0]: item[1] for item in processed_by_purpose_item.get(purpose, [])}
+
+        sql_total = sum(d['count'] for d in sql_items.values())
+        proc_total = sum(d['count'] for d in proc_items.values())
+
+        if sql_total != proc_total:
+            discrepancies.append({
+                'purpose': purpose,
+                'sql_total': sql_total,
+                'processed_total': proc_total,
+                'diff': sql_total - proc_total,
+                'sql_items_count': len(sql_items),
+                'processed_items_count': len(proc_items)
+            })
+
+        # 개별 항목 차이 체크
+        for item_name in set(list(sql_items.keys()) + list(proc_items.keys())):
+            sql_cnt = sql_items.get(item_name, {}).get('count', 0)
+            proc_cnt = proc_items.get(item_name, {}).get('count', 0)
+
+            if sql_cnt != proc_cnt:
+                discrepancies.append({
+                    'purpose': purpose,
+                    'item': item_name,
+                    'sql_count': sql_cnt,
+                    'processed_count': proc_cnt,
+                    'diff': sql_cnt - proc_cnt
+                })
+
+    # 4. 전체 통계
+    cursor.execute('''
+        SELECT COUNT(*) as total FROM food_item_data WHERE year = ?
+    ''', (year,))
+    total_rows = cursor.fetchone()['total']
+
+    cursor.execute('''
+        SELECT 검사목적, COUNT(*) as cnt FROM food_item_data
+        WHERE year = ? AND 검사목적 IS NOT NULL AND 검사목적 != ''
+        GROUP BY 검사목적 ORDER BY cnt DESC
+    ''', (year,))
+    purpose_summary = [dict(row) for row in cursor.fetchall()]
+
+    conn.close()
+
+    return jsonify({
+        'year': year,
+        'total_rows_in_db': total_rows,
+        'processed_total_count': processed.get('total_count', 0),
+        'purposes_in_db': len(sql_by_purpose_item),
+        'purposes_in_processed': len(processed_by_purpose_item),
+        'discrepancies': discrepancies[:50],  # 최대 50개
+        'discrepancy_count': len(discrepancies),
+        'purpose_summary_from_sql': purpose_summary[:20]
+    })
+
 @app.route('/api/columns')
 def get_columns():
     """Excel 파일의 컬럼명 조회"""

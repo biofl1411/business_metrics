@@ -1783,7 +1783,7 @@ HTML_TEMPLATE = '''
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://d3js.org/topojson.v3.min.js"></script>
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=2bf5373da96dea4fc3849546d72807d0"></script>
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=2bf5373da96dea4fc3849546d72807d0&autoload=false"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -17799,32 +17799,59 @@ HTML_TEMPLATE = '''
             '제주': { lat: 33.4996, lng: 126.5312 }
         };
 
-        // 카카오맵 초기화
-        function initKakaoMap() {
-            if (kakaoMap) return;
+        // 카카오맵 초기화 (비동기)
+        let kakaoMapReady = false;
+        let kakaoMapPendingUpdate = false;
+
+        function initKakaoMap(callback) {
+            if (kakaoMap) {
+                if (callback) callback();
+                return;
+            }
 
             const container = document.getElementById('kakaoMapContainer');
             if (!container) return;
 
-            try {
-                const options = {
-                    center: new kakao.maps.LatLng(36.5, 127.5),
-                    level: 13
-                };
-                kakaoMap = new kakao.maps.Map(container, options);
-                kakaoInfoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
-                console.log('[KAKAO MAP] 초기화 완료');
-            } catch (e) {
-                console.error('[KAKAO MAP] 초기화 실패:', e);
+            if (typeof kakao === 'undefined') {
+                console.log('[KAKAO MAP] SDK 로드 대기 중...');
+                kakaoMapPendingUpdate = true;
+                return;
             }
+
+            kakao.maps.load(function() {
+                try {
+                    const options = {
+                        center: new kakao.maps.LatLng(36.5, 127.5),
+                        level: 13
+                    };
+                    kakaoMap = new kakao.maps.Map(container, options);
+                    kakaoInfoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+                    kakaoMapReady = true;
+                    console.log('[KAKAO MAP] 초기화 완료');
+                    if (callback) callback();
+                    if (kakaoMapPendingUpdate) {
+                        kakaoMapPendingUpdate = false;
+                        updateKakaoMapMarkers();
+                    }
+                } catch (e) {
+                    console.error('[KAKAO MAP] 초기화 실패:', e);
+                }
+            });
         }
 
         // 카카오맵 마커 업데이트
         function updateKakaoMapMarkers() {
             if (!kakaoMap) {
-                initKakaoMap();
-                if (!kakaoMap) return;
+                initKakaoMap(function() {
+                    updateKakaoMapMarkersInternal();
+                });
+                return;
             }
+            updateKakaoMapMarkersInternal();
+        }
+
+        function updateKakaoMapMarkersInternal() {
+            if (!kakaoMap) return;
 
             // 기존 마커 제거
             kakaoMarkers.forEach(marker => marker.setMap(null));

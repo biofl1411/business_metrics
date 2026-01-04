@@ -17950,6 +17950,50 @@ HTML_TEMPLATE = '''
                     }
                 });
 
+                // 라벨 추가 (지역명 + 거래처 수)
+                setTimeout(() => {
+                    paths.forEach(path => {
+                        const id = path.getAttribute('id');
+                        if (!id) return;
+
+                        const pathEl = svg.select('#region-' + id);
+                        if (pathEl.empty()) return;
+
+                        // path의 바운딩 박스로 중심점 계산
+                        try {
+                            const bbox = pathEl.node().getBBox();
+                            const cx = bbox.x + bbox.width / 2;
+                            const cy = bbox.y + bbox.height / 2;
+
+                            const data = sigunguSalesData[id] || { count: 0 };
+
+                            // 지역명 라벨
+                            svg.append('text')
+                                .attr('x', cx)
+                                .attr('y', cy - 6)
+                                .attr('text-anchor', 'middle')
+                                .attr('font-size', '10px')
+                                .attr('font-weight', '600')
+                                .attr('fill', '#334155')
+                                .attr('pointer-events', 'none')
+                                .text(id.length > 4 ? id.substring(0, 3) + '..' : id);
+
+                            // 거래처 수 라벨
+                            if (data.count > 0) {
+                                svg.append('text')
+                                    .attr('x', cx)
+                                    .attr('y', cy + 8)
+                                    .attr('text-anchor', 'middle')
+                                    .attr('font-size', '9px')
+                                    .attr('font-weight', '500')
+                                    .attr('fill', '#6366f1')
+                                    .attr('pointer-events', 'none')
+                                    .text(data.count + '건');
+                            }
+                        } catch (e) {}
+                    });
+                }, 100);
+
                 updateSigunguMapColors();
                 showSidoSummary(sidoName);
                 console.log('[SVG MAP] 시군구 지도 로드 완료:', sidoName);

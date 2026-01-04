@@ -5363,7 +5363,12 @@ HTML_TEMPLATE = '''
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">👤 담당자별 유형 보유 수</div>
-                        <div class="card-badge" id="stManagerTypeBadge">-</div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <select id="stManagerPurposeFilter" onchange="updateSTManagerTypeChart()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                                <option value="전체">전체 검사목적</option>
+                            </select>
+                            <div class="card-badge" id="stManagerTypeBadge">-</div>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="stManagerTypeSummary" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px;"></div>
@@ -19279,25 +19284,46 @@ HTML_TEMPLATE = '''
         }
 
         // 담당자별 검체유형 보유 수 차트
+        let stManagerChartData = [];
+
         function updateSTManagerTypeChart() {
             const ctx = document.getElementById('stManagerTypeChart');
             if (!ctx) return;
             if (charts.stManagerType) charts.stManagerType.destroy();
 
+            // 검사목적 드롭다운 채우기
+            const purposeSelect = document.getElementById('stManagerPurposeFilter');
+            const purposes = currentData.purposes || [];
+            const currentPurposeFilter = purposeSelect?.value || '전체';
+            if (purposeSelect && purposeSelect.options.length <= 1) {
+                purposeSelect.innerHTML = '<option value="전체">전체 검사목적</option>' +
+                    purposes.map(p => `<option value="${p}">${p}</option>`).join('');
+            }
+
             // 담당자별 검체유형 수 계산
             const managerSampleTypes = {};
             const stManagers = currentData.sample_type_managers || {};
 
-            // sample_type_managers: { sample_type: [{ name, sales, count }, ...] }
+            // sample_type_managers: { sample_type: [{ name, sales, count, by_purpose }, ...] }
             Object.entries(stManagers).forEach(([sampleType, managers]) => {
                 managers.forEach(m => {
                     if (!m.name || m.name === '미지정') return;
+
+                    // 검사목적 필터 적용
+                    let sales = m.sales, count = m.count;
+                    if (currentPurposeFilter !== '전체') {
+                        const purposeData = m.by_purpose?.[currentPurposeFilter];
+                        if (!purposeData) return;
+                        sales = purposeData.sales || 0;
+                        count = purposeData.count || 0;
+                    }
+
                     if (!managerSampleTypes[m.name]) {
                         managerSampleTypes[m.name] = { count: 0, sales: 0, types: [] };
                     }
                     managerSampleTypes[m.name].count += 1;
-                    managerSampleTypes[m.name].sales += m.sales;
-                    managerSampleTypes[m.name].types.push({ name: sampleType, sales: m.sales });
+                    managerSampleTypes[m.name].sales += sales;
+                    managerSampleTypes[m.name].types.push({ name: sampleType, sales: sales, count: count });
                 });
             });
 
@@ -19306,6 +19332,8 @@ HTML_TEMPLATE = '''
                 .map(([name, data]) => [name, { ...data, types: data.types.sort((a, b) => b.sales - a.sales) }])
                 .sort((a, b) => b[1].count - a[1].count)
                 .slice(0, 15);
+
+            stManagerChartData = sorted;
 
             // 요약 정보
             const summaryEl = document.getElementById('stManagerTypeSummary');
@@ -19321,40 +19349,131 @@ HTML_TEMPLATE = '''
 
             document.getElementById('stManagerTypeBadge').textContent = `TOP ${sorted.length}`;
 
-            const colors = sorted.map((_, i) => `hsl(${(i * 25) % 360}, 70%, 50%)`);
+            // 부드러운 색상
+            const softColors = [
+                'rgba(99, 102, 241, 0.7)',   // indigo
+                'rgba(59, 130, 246, 0.7)',   // blue
+                'rgba(14, 165, 233, 0.7)',   // sky
+                'rgba(20, 184, 166, 0.7)',   // teal
+                'rgba(34, 197, 94, 0.7)',    // green
+                'rgba(132, 204, 22, 0.7)',   // lime
+                'rgba(234, 179, 8, 0.7)',    // yellow
+                'rgba(249, 115, 22, 0.7)',   // orange
+                'rgba(239, 68, 68, 0.7)',    // red
+                'rgba(236, 72, 153, 0.7)',   // pink
+                'rgba(168, 85, 247, 0.7)',   // purple
+                'rgba(139, 92, 246, 0.7)',   // violet
+                'rgba(107, 114, 128, 0.7)',  // gray
+                'rgba(75, 85, 99, 0.7)',     // dark gray
+                'rgba(156, 163, 175, 0.7)'   // light gray
+            ];
+
+            // 외부 툴팁 생성
+            const getOrCreateTooltip = () => {
+                let tooltipEl = document.getElementById('stManagerTypeTooltip');
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement('div');
+                    tooltipEl.id = 'stManagerTypeTooltip';
+                    tooltipEl.style.cssText = `
+                        position: fixed;
+                        background: rgba(30, 41, 59, 0.98);
+                        border-radius: 12px;
+                        padding: 16px;
+                        pointer-events: none;
+                        z-index: 99999;
+                        font-size: 13px;
+                        color: #e2e8f0;
+                        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                        min-width: 280px;
+                        max-width: 350px;
+                        transition: opacity 0.15s ease;
+                        line-height: 1.6;
+                    `;
+                    document.body.appendChild(tooltipEl);
+                }
+                return tooltipEl;
+            };
+
+            // 외부 툴팁 핸들러
+            const externalTooltipHandler = (context) => {
+                const { chart, tooltip } = context;
+                const tooltipEl = getOrCreateTooltip();
+
+                if (tooltip.opacity === 0) {
+                    tooltipEl.style.opacity = '0';
+                    return;
+                }
+
+                const idx = tooltip.dataPoints[0].dataIndex;
+                const [name, data] = stManagerChartData[idx];
+                const top5Types = data.types.slice(0, 5);
+
+                let html = `
+                    <div style="border-bottom: 1px solid #475569; padding-bottom: 10px; margin-bottom: 10px;">
+                        <div style="font-size: 16px; font-weight: 700; color: #f8fafc;">👤 ${name}</div>
+                        <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">보유 유형: <span style="color: #60a5fa; font-weight: 600;">${data.count}개</span> · 매출: <span style="color: #34d399;">${formatCurrency(data.sales)}</span></div>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">📦 주요 유형 TOP 5</div>
+                `;
+
+                top5Types.forEach((t, i) => {
+                    const barWidth = data.types[0]?.sales > 0 ? (t.sales / data.types[0].sales * 100) : 0;
+                    html += `
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="width: 20px; color: #64748b; font-size: 11px;">${i + 1}</span>
+                            <span style="flex: 1; font-size: 12px; color: #e2e8f0;">${t.name.length > 15 ? t.name.substring(0, 15) + '..' : t.name}</span>
+                            <span style="font-size: 12px; color: #60a5fa; font-weight: 600;">${formatCurrency(t.sales)}</span>
+                        </div>
+                        <div style="height: 4px; background: #334155; border-radius: 2px; margin-bottom: 8px; margin-left: 20px;">
+                            <div style="height: 100%; width: ${barWidth}%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 2px;"></div>
+                        </div>
+                    `;
+                });
+
+                tooltipEl.innerHTML = html;
+                tooltipEl.style.opacity = '1';
+
+                const position = chart.canvas.getBoundingClientRect();
+                let left = position.left + tooltip.caretX + 15;
+                let top = position.top + tooltip.caretY - 10;
+
+                if (left + 350 > window.innerWidth) {
+                    left = position.left + tooltip.caretX - 365;
+                }
+                if (top + tooltipEl.offsetHeight > window.innerHeight - 20) {
+                    top = window.innerHeight - tooltipEl.offsetHeight - 20;
+                }
+
+                tooltipEl.style.left = left + 'px';
+                tooltipEl.style.top = Math.max(10, top) + 'px';
+            };
 
             charts.stManagerType = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: sorted.map(([name]) => name.length > 6 ? name.substring(0, 6) + '..' : name),
+                    labels: sorted.map(([name]) => name.length > 4 ? name.substring(0, 4) + '..' : name),
                     datasets: [{
                         label: '유형 수',
                         data: sorted.map(([_, d]) => d.count),
-                        backgroundColor: colors.map(c => c.replace('50%)', '50%, 0.7)')),
-                        borderColor: colors,
+                        backgroundColor: softColors.slice(0, sorted.length),
+                        borderColor: softColors.slice(0, sorted.length).map(c => c.replace('0.7)', '1)')),
                         borderWidth: 1,
-                        borderRadius: 4
+                        borderRadius: 6
                     }]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            callbacks: {
-                                afterBody: function(context) {
-                                    const idx = context[0].dataIndex;
-                                    const [name, data] = sorted[idx];
-                                    const top3 = data.types.slice(0, 3);
-                                    return ['', '주요 유형:'].concat(top3.map(t => `  • ${t.name}: ${formatCurrency(t.sales)}`));
-                                }
-                            }
+                            enabled: false,
+                            external: externalTooltipHandler
                         }
                     },
                     scales: {
-                        x: { beginAtZero: true, ticks: { stepSize: 1, callback: v => v + '개' } }
+                        y: { beginAtZero: true, ticks: { stepSize: 1, callback: v => v + '개' } },
+                        x: { ticks: { font: { size: 11 } } }
                     }
                 }
             });

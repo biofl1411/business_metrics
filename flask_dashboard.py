@@ -2027,6 +2027,53 @@ HTML_TEMPLATE = '''
         .token-badge .current { font-weight: 600; }
         .token-badge .prev { opacity: 0.7; font-size: 11px; }
 
+        /* 헤더 메뉴 버튼 */
+        .header-menu-buttons {
+            display: flex;
+            gap: 8px;
+            margin-left: 16px;
+        }
+        .header-menu-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+        }
+        .header-menu-btn.ai-btn {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        }
+        .header-menu-btn.ai-btn:hover {
+            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        .header-menu-btn.info-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        .header-menu-btn.info-btn:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        .header-menu-btn.terminal-btn {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .header-menu-btn.terminal-btn:hover {
+            background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(30, 41, 59, 0.4);
+        }
+        .header-menu-btn span:first-child {
+            font-size: 14px;
+        }
+
         /* 메인 컨테이너 */
         .main-container {
             max-width: 1800px;
@@ -3741,6 +3788,20 @@ HTML_TEMPLATE = '''
                 <div class="current">이번달: <span id="thisMonthTokens">0</span> 토큰 | ₩<span id="thisMonthKRW">0</span></div>
                 <div class="prev">저번달: <span id="lastMonthTokens">0</span> 토큰 | ₩<span id="lastMonthKRW">0</span></div>
             </div>
+            <div class="header-menu-buttons">
+                <button class="header-menu-btn ai-btn" onclick="showTab('aiAnalysis')" title="AI 분석">
+                    <span>🤖</span>
+                    <span>AI 분석</span>
+                </button>
+                <button class="header-menu-btn info-btn" onclick="showTab('companyInfo')" title="기업 정보">
+                    <span>🏛️</span>
+                    <span>기업 정보</span>
+                </button>
+                <button class="header-menu-btn terminal-btn" onclick="showTab('webTerminal')" title="터미널">
+                    <span>💻</span>
+                    <span>터미널</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -3842,18 +3903,6 @@ HTML_TEMPLATE = '''
             <div class="tab-card" onclick="showTab('foodItem')">
                 <div class="tab-icon">🔬</div>
                 <div class="tab-label">검사항목</div>
-            </div>
-            <div class="tab-card ai-tab" onclick="showTab('aiAnalysis')">
-                <div class="tab-icon">🤖</div>
-                <div class="tab-label">AI 분석</div>
-            </div>
-            <div class="tab-card info-tab" onclick="showTab('companyInfo')">
-                <div class="tab-icon">🏛️</div>
-                <div class="tab-label">기업 정보</div>
-            </div>
-            <div class="tab-card terminal-tab" onclick="showTab('webTerminal')">
-                <div class="tab-icon">💻</div>
-                <div class="tab-label">터미널</div>
             </div>
         </section>
 

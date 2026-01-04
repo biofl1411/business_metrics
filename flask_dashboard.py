@@ -1179,6 +1179,7 @@ def process_data(data, purpose_filter=None):
     by_urgent_month = {}  # 월별 긴급 데이터
     by_branch_month_clients = {}  # 지사별 월별 거래처 (중복 분석용)
     purpose_month_clients = {}  # 목적별 월별 거래처 (필터링용)
+    client_purpose_months = {}  # 거래처+유형별 월별 거래 추적 (지속적인 거래 분석용)
     by_department = {}  # 부서별 데이터 (본사, 마케팅, 영업부, 지사)
     purposes = set()
     sample_types = set()  # 검체유형 목록
@@ -1371,6 +1372,15 @@ def process_data(data, purpose_filter=None):
                 by_client[client]['purposes'][purpose] = {'sales': 0, 'count': 0}
             by_client[client]['purposes'][purpose]['sales'] += sales
             by_client[client]['purposes'][purpose]['count'] += 1
+
+            # 거래처+유형별 월별 거래 추적
+            if month > 0:
+                cp_key = f"{client}|{purpose}"
+                if cp_key not in client_purpose_months:
+                    client_purpose_months[cp_key] = {'client': client, 'purpose': purpose, 'months': set(), 'sales': 0, 'count': 0}
+                client_purpose_months[cp_key]['months'].add(month)
+                client_purpose_months[cp_key]['sales'] += sales
+                client_purpose_months[cp_key]['count'] += 1
 
         # 검사목적별
         if purpose:
@@ -1798,7 +1808,12 @@ def process_data(data, purpose_filter=None):
         'purpose_client_retention': purpose_client_retention,
         'by_department': by_department,
         'total_sales': total_sales,
-        'total_count': total_count
+        'total_count': total_count,
+        'client_purpose_months': [
+            {'client': d['client'], 'purpose': d['purpose'], 'monthCount': len(d['months']), 'months': sorted(list(d['months'])), 'sales': d['sales'], 'count': d['count']}
+            for d in sorted(client_purpose_months.values(), key=lambda x: (len(x['months']), x['sales']), reverse=True)
+            if len(d['months']) >= 2  # 2개월 이상 지속된 거래만 포함
+        ][:100]  # 상위 100개만
     }
 
 HTML_TEMPLATE = '''
@@ -5166,6 +5181,7 @@ HTML_TEMPLATE = '''
                         <button class="filter-btn active" data-sort="sales" onclick="sortPurposeCards('sales')">매출순</button>
                         <button class="filter-btn" data-sort="count" onclick="sortPurposeCards('count')">건수순</button>
                         <button class="filter-btn" data-sort="growth" onclick="sortPurposeCards('growth')">성장순</button>
+                        <button class="filter-btn" data-sort="avgSales" onclick="sortPurposeCards('avgSales')">건당매출순</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -5219,6 +5235,42 @@ HTML_TEMPLATE = '''
                             </tr></thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 담당자별 유형 보유 수 차트 & 지속적인 거래 유형 테이블 -->
+            <div class="grid grid-cols-2">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">👤 담당자별 유형 보유 수</div>
+                        <div class="card-badge" id="managerPurposeTypeBadge">-</div>
+                    </div>
+                    <div class="card-body">
+                        <div id="managerPurposeTypeSummary" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px;"></div>
+                        <div class="chart-container" style="height: 320px;"><canvas id="managerPurposeTypeChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">🔄 지속적인 거래 유형</div>
+                        <div class="card-badge" id="continuousTradeBadge">-</div>
+                    </div>
+                    <div class="card-body">
+                        <div id="continuousTradeSummary" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px;"></div>
+                        <div class="scroll-table" style="max-height: 340px;">
+                            <table class="data-table" id="continuousTradeTable">
+                                <thead><tr>
+                                    <th>업체명</th>
+                                    <th>검사목적</th>
+                                    <th class="text-right">지속개월</th>
+                                    <th class="text-right">매출액</th>
+                                    <th class="text-right">건수</th>
+                                    <th>거래월</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -19181,6 +19233,10 @@ HTML_TEMPLATE = '''
 
             // 테이블 업데이트
             updatePurposeDetailTable();
+
+            // 담당자별 유형 보유 수 차트 & 지속적인 거래 유형 테이블
+            updateManagerPurposeTypeChart();
+            updateContinuousTradeTable();
         }
 
         // 정렬 기능
@@ -19205,6 +19261,12 @@ HTML_TEMPLATE = '''
                 sorted.sort((a, b) => b.count - a.count);
             } else if (purposeSortType === 'growth') {
                 sorted.sort((a, b) => (b.growth ?? -9999) - (a.growth ?? -9999));
+            } else if (purposeSortType === 'avgSales') {
+                sorted.sort((a, b) => {
+                    const avgA = a.count > 0 ? a.sales / a.count : 0;
+                    const avgB = b.count > 0 ? b.sales / b.count : 0;
+                    return avgB - avgA;
+                });
             }
 
             const grid = document.getElementById('purposeCardGrid');
@@ -19235,7 +19297,7 @@ HTML_TEMPLATE = '''
                             ${growthBadge}
                         </div>
                         <div class="purpose-card-sales">${formatCurrency(p.sales)}</div>
-                        <div class="purpose-card-count">📋 ${p.count.toLocaleString()}건</div>
+                        <div class="purpose-card-count">📋 ${p.count.toLocaleString()}건 · 💰 ${formatCurrency(p.count > 0 ? Math.round(p.sales / p.count) : 0)}/건</div>
                         <div class="purpose-card-bar">
                             <div class="purpose-card-bar-fill" style="width: ${p.percent}%;"></div>
                         </div>
@@ -19485,6 +19547,129 @@ HTML_TEMPLATE = '''
                     <td class="text-right">${formatCurrency(p.avgPrice)}</td>
                     <td class="text-right"><span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;">${p.percent.toFixed(1)}%</span></td>
                     <td>${managerCell}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // 담당자별 유형 보유 수 차트
+        function updateManagerPurposeTypeChart() {
+            const ctx = document.getElementById('managerPurposeTypeChart');
+            if (!ctx) return;
+            if (charts.managerPurposeType) charts.managerPurposeType.destroy();
+
+            // 담당자별 보유 유형 수 계산
+            const managerPurposeTypes = {};
+            const managers = currentData.by_manager || [];
+
+            managers.forEach(([name, data]) => {
+                if (!name || name === '미지정') return;
+                const purposeCount = Object.keys(data.by_purpose || {}).length;
+                if (purposeCount > 0) {
+                    managerPurposeTypes[name] = {
+                        count: purposeCount,
+                        sales: data.sales,
+                        purposes: Object.entries(data.by_purpose || {}).map(([p, d]) => ({
+                            name: p, sales: d.sales, count: d.count
+                        })).sort((a, b) => b.sales - a.sales)
+                    };
+                }
+            });
+
+            // 유형 수 기준으로 정렬
+            const sorted = Object.entries(managerPurposeTypes)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 15);
+
+            // 요약 정보
+            const summaryEl = document.getElementById('managerPurposeTypeSummary');
+            if (summaryEl && sorted.length > 0) {
+                const avgTypes = sorted.reduce((s, [_, d]) => s + d.count, 0) / sorted.length;
+                const maxTypes = sorted[0][1].count;
+                const maxManager = sorted[0][0];
+                let html = `<span style="white-space:nowrap;background:#dbeafe;padding:4px 10px;border-radius:4px;color:#1e40af;">TOP: <strong>${maxManager}</strong> (${maxTypes}개)</span>`;
+                html += `<span style="white-space:nowrap;background:#e0e7ff;padding:4px 10px;border-radius:4px;color:#3730a3;">평균: <strong>${avgTypes.toFixed(1)}개</strong></span>`;
+                html += `<span style="white-space:nowrap;background:#fce7f3;padding:4px 10px;border-radius:4px;color:#9d174d;">담당자: <strong>${sorted.length}명</strong></span>`;
+                summaryEl.innerHTML = html;
+            }
+
+            document.getElementById('managerPurposeTypeBadge').textContent = `TOP ${sorted.length}`;
+
+            const colors = sorted.map((_, i) => {
+                const hue = (i * 25) % 360;
+                return `hsl(${hue}, 70%, 50%)`;
+            });
+
+            charts.managerPurposeType = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(([name]) => name.length > 6 ? name.substring(0, 6) + '..' : name),
+                    datasets: [{
+                        label: '유형 수',
+                        data: sorted.map(([_, d]) => d.count),
+                        backgroundColor: colors.map(c => c.replace('50%)', '50%, 0.7)')),
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: function(context) {
+                                    const idx = context[0].dataIndex;
+                                    const [name, data] = sorted[idx];
+                                    const top3 = data.purposes.slice(0, 3);
+                                    return ['', '주요 유형:'].concat(top3.map(p => `  • ${p.name}: ${formatCurrency(p.sales)}`));
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, callback: v => v + '개' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 지속적인 거래 유형 테이블
+        function updateContinuousTradeTable() {
+            const tbody = document.querySelector('#continuousTradeTable tbody');
+            if (!tbody) return;
+
+            const data = currentData.client_purpose_months || [];
+            const summaryEl = document.getElementById('continuousTradeSummary');
+            document.getElementById('continuousTradeBadge').textContent = `${data.length}건`;
+
+            // 요약 정보
+            if (summaryEl && data.length > 0) {
+                const avg = data.reduce((s, d) => s + d.monthCount, 0) / data.length;
+                const over6 = data.filter(d => d.monthCount >= 6).length;
+                const over12 = data.filter(d => d.monthCount >= 12).length;
+                let html = `<span style="white-space:nowrap;background:#d1fae5;padding:4px 10px;border-radius:4px;color:#059669;">12개월+: <strong>${over12}건</strong></span>`;
+                html += `<span style="white-space:nowrap;background:#dbeafe;padding:4px 10px;border-radius:4px;color:#1e40af;">6개월+: <strong>${over6}건</strong></span>`;
+                html += `<span style="white-space:nowrap;background:#fef08a;padding:4px 10px;border-radius:4px;color:#854d0e;">평균: <strong>${avg.toFixed(1)}개월</strong></span>`;
+                summaryEl.innerHTML = html;
+            }
+
+            tbody.innerHTML = data.slice(0, 50).map((d, idx) => {
+                const monthCountColor = d.monthCount >= 12 ? '#059669' : d.monthCount >= 6 ? '#3b82f6' : '#f59e0b';
+                const monthsStr = d.months.map(m => m + '월').join(', ');
+
+                return `<tr>
+                    <td style="font-weight:600;">${d.client.length > 15 ? d.client.substring(0, 15) + '..' : d.client}</td>
+                    <td><span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:11px;">${d.purpose.length > 12 ? d.purpose.substring(0, 12) + '..' : d.purpose}</span></td>
+                    <td class="text-right"><span style="color:${monthCountColor};font-weight:700;">${d.monthCount}개월</span></td>
+                    <td class="text-right">${formatCurrency(d.sales)}</td>
+                    <td class="text-right">${d.count.toLocaleString()}건</td>
+                    <td style="font-size:11px;color:#64748b;">${monthsStr}</td>
                 </tr>`;
             }).join('');
         }

@@ -19499,16 +19499,27 @@ HTML_TEMPLATE = '''
                 summaryEl.innerHTML = html;
             }
 
-            tbody.innerHTML = data.slice(0, 50).map(d => {
+            // 월별 표시를 작은 점으로 변환
+            const renderMonthDots = (months) => {
+                let dots = '';
+                for (let i = 1; i <= 12; i++) {
+                    const hasMonth = months.includes(i);
+                    const color = hasMonth ? '#3b82f6' : '#e2e8f0';
+                    dots += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin:0 1px;" title="${i}월"></span>`;
+                }
+                return dots;
+            };
+
+            tbody.innerHTML = data.slice(0, 50).map((d, idx) => {
                 const monthCountColor = d.monthCount >= 12 ? '#059669' : d.monthCount >= 6 ? '#3b82f6' : '#f59e0b';
-                const monthsStr = d.months.map(m => m + '월').join(', ');
-                return `<tr>
-                    <td style="font-weight:600;">${d.client.length > 15 ? d.client.substring(0, 15) + '..' : d.client}</td>
-                    <td><span style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:11px;">${d.sample_type.length > 12 ? d.sample_type.substring(0, 12) + '..' : d.sample_type}</span></td>
-                    <td class="text-right"><span style="color:${monthCountColor};font-weight:700;">${d.monthCount}개월</span></td>
-                    <td class="text-right">${formatCurrency(d.sales)}</td>
-                    <td class="text-right">${d.count.toLocaleString()}건</td>
-                    <td style="font-size:11px;color:#64748b;">${monthsStr}</td>
+                const bgColor = idx % 2 === 0 ? '#fff' : '#f8fafc';
+                return `<tr style="background:${bgColor};">
+                    <td style="font-weight:600;padding:8px 10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.client}">${d.client}</td>
+                    <td style="padding:8px 6px;"><span style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:10px;white-space:nowrap;">${d.sample_type.length > 10 ? d.sample_type.substring(0, 10) + '..' : d.sample_type}</span></td>
+                    <td class="text-right" style="padding:8px 6px;"><span style="color:${monthCountColor};font-weight:700;font-size:12px;">${d.monthCount}개월</span></td>
+                    <td class="text-right" style="padding:8px 6px;font-size:12px;">${formatCurrency(d.sales)}</td>
+                    <td class="text-right" style="padding:8px 6px;font-size:11px;color:#64748b;">${d.count.toLocaleString()}건</td>
+                    <td style="padding:8px 6px;white-space:nowrap;">${renderMonthDots(d.months)}</td>
                 </tr>`;
             }).join('');
         }

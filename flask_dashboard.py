@@ -18424,11 +18424,18 @@ HTML_TEMPLATE = '''
             const tbodyEl = document.getElementById('foodStatsTableBody');
             const emptyEl = document.getElementById('foodStatsEmpty');
 
+            // 제외할 거래처
+            const EXCLUDED_CLIENTS = ['IBK', 'IGC'];
+
             // 우리 거래처 데이터 집계 (시도별)
             const ourClientsBySido = {};
             const clients = currentData.by_client || [];
 
             clients.forEach(c => {
+                const clientName = c[0] || '';
+                // 제외 대상 체크
+                if (EXCLUDED_CLIENTS.includes(clientName)) return;
+
                 const addr = c[1]?.address || '';
                 if (!addr) return;
 

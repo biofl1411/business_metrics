@@ -19865,10 +19865,28 @@ def get_food_manufacturing_stats():
 
         # 총 건수 확인
         url = f'http://openapi.foodsafetykorea.go.kr/api/{FOOD_MANUFACTURING_API_KEY}/I1220/json/1/1'
+        print(f'[FoodAPI] API 요청: {url}')
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 
         with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
-            result = json.loads(response.read().decode('utf-8'))
+            response_text = response.read().decode('utf-8')
+            print(f'[FoodAPI] API 응답: {response_text[:500]}')
+
+            # Host not allowed 에러 체크
+            if 'Host not allowed' in response_text or 'ERROR' in response_text.upper():
+                return jsonify({
+                    'success': False,
+                    'error': 'API 접근 권한 오류: 서버 IP가 등록되지 않았습니다. 식품안전나라에서 서버 IP를 허용 목록에 추가해주세요.'
+                })
+
+            result = json.loads(response_text)
+
+        # API 에러 응답 체크
+        if 'RESULT' in result.get('I1220', {}):
+            error_msg = result['I1220']['RESULT'].get('MSG', 'Unknown error')
+            error_code = result['I1220']['RESULT'].get('CODE', '')
+            print(f'[FoodAPI] API 에러: {error_code} - {error_msg}')
+            return jsonify({'success': False, 'error': f'API 에러: {error_msg}'})
 
         total_count = int(result.get('I1220', {}).get('total_count', 0))
         print(f'[FoodAPI] 총 식품제조가공업소 수: {total_count}')

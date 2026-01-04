@@ -19891,7 +19891,7 @@ HTML_TEMPLATE = '''
             charts.defect = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: top10.map(d => d[0].length > 10 ? d[0].substring(0, 10) + '..' : d[0]),
+                    labels: top10.map(d => d[0].length > 8 ? d[0].substring(0, 8) + '..' : d[0]),
                     datasets: [{
                         data: top10.map(d => d[1].count),
                         backgroundColor: 'rgba(239, 68, 68, 0.8)',
@@ -19901,11 +19901,10 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y',
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-                        y: { grid: { display: false } }
+                        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                        x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45 } }
                     }
                 }
             });
@@ -20051,7 +20050,7 @@ HTML_TEMPLATE = '''
             charts.defectPurposeDetail = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: top10.map(d => d[0].length > 12 ? d[0].substring(0, 12) + '..' : d[0]),
+                    labels: top10.map(d => d[0].length > 8 ? d[0].substring(0, 8) + '..' : d[0]),
                     datasets: [{
                         data: top10.map(d => d[1].count),
                         backgroundColor: 'rgba(139, 92, 246, 0.8)',
@@ -20061,11 +20060,10 @@ HTML_TEMPLATE = '''
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y',
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { beginAtZero: true },
-                        y: { grid: { display: false } }
+                        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                        x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45 } }
                     }
                 }
             });

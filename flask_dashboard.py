@@ -19155,14 +19155,18 @@ HTML_TEMPLATE = '''
                 purposes.map(p => `<option value="${p}">${p}</option>`).join('');
 
             const grid = document.getElementById('sampleTypeGrid');
-            grid.innerHTML = types.map((t, i) => `
+            grid.innerHTML = types.map((t, i) => {
+                const avgSales = t[1].count > 0 ? Math.round(t[1].sales / t[1].count) : 0;
+                const percent = (t[1].sales / total * 100).toFixed(1);
+                return `
                 <div class="purpose-kpi-card" data-color="${colors[i % colors.length]}">
                     <div class="purpose-kpi-header"><div class="purpose-kpi-icon">${icons[i % icons.length]}</div></div>
                     <div class="purpose-kpi-name">${t[0]}</div>
                     <div class="purpose-kpi-value">${formatCurrency(t[1].sales)}</div>
-                    <div class="purpose-kpi-sub">건수: <span>${t[1].count.toLocaleString()}건</span></div>
+                    <div class="purpose-kpi-sub">건수: ${t[1].count.toLocaleString()}건 · 💰 ${formatCurrency(avgSales)}/건</div>
+                    <div class="purpose-kpi-sub" style="margin-top: 4px;"><span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">비중 ${percent}%</span></div>
                 </div>
-            `).join('');
+            `}).join('');
 
             const ctx = document.getElementById('sampleTypeChart').getContext('2d');
             if (charts.sampleType) charts.sampleType.destroy();
@@ -19213,14 +19217,19 @@ HTML_TEMPLATE = '''
             const colors = ['blue', 'green', 'orange', 'purple', 'pink', 'info', 'teal', 'amber'];
             const icons = ['📦', '🌿', '🥩', '🐟', '💊', '🥤', '🧀', '📁'];
             const grid = document.getElementById('sampleTypeGrid');
+            const total = types.reduce((s, t) => s + t[1].sales, 0) || 1;
+            document.getElementById('sampleTypeCount').textContent = types.length + '개 유형';
+
             grid.innerHTML = types.map((t, i) => {
                 const avgSales = t[1].count > 0 ? Math.round(t[1].sales / t[1].count) : 0;
+                const percent = (t[1].sales / total * 100).toFixed(1);
                 return `
                 <div class="purpose-kpi-card" data-color="${colors[i % colors.length]}">
                     <div class="purpose-kpi-header"><div class="purpose-kpi-icon">${icons[i % icons.length]}</div></div>
                     <div class="purpose-kpi-name">${t[0]}</div>
                     <div class="purpose-kpi-value">${formatCurrency(t[1].sales)}</div>
                     <div class="purpose-kpi-sub">건수: ${t[1].count.toLocaleString()}건 · 💰 ${formatCurrency(avgSales)}/건</div>
+                    <div class="purpose-kpi-sub" style="margin-top: 4px;"><span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">비중 ${percent}%</span></div>
                 </div>
             `}).join('');
         }
@@ -19264,16 +19273,19 @@ HTML_TEMPLATE = '''
             const colors = ['blue', 'green', 'orange', 'purple', 'pink', 'info', 'teal', 'amber'];
             const icons = ['📦', '🌿', '🥩', '🐟', '💊', '🥤', '🧀', '📁'];
             const grid = document.getElementById('sampleTypeGrid');
+            const total = filteredTypes.reduce((s, t) => s + t[1].sales, 0) || 1;
             document.getElementById('sampleTypeCount').textContent = filteredTypes.length + '개 유형';
 
             grid.innerHTML = filteredTypes.map((t, i) => {
                 const avgSales = t[1].count > 0 ? Math.round(t[1].sales / t[1].count) : 0;
+                const percent = (t[1].sales / total * 100).toFixed(1);
                 return `
                 <div class="purpose-kpi-card" data-color="${colors[i % colors.length]}">
                     <div class="purpose-kpi-header"><div class="purpose-kpi-icon">${icons[i % icons.length]}</div></div>
                     <div class="purpose-kpi-name">${t[0]}</div>
                     <div class="purpose-kpi-value">${formatCurrency(t[1].sales)}</div>
                     <div class="purpose-kpi-sub">건수: ${t[1].count.toLocaleString()}건 · 💰 ${formatCurrency(avgSales)}/건</div>
+                    <div class="purpose-kpi-sub" style="margin-top: 4px;"><span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">비중 ${percent}%</span></div>
                 </div>
             `}).join('');
         }

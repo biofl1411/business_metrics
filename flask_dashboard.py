@@ -19881,10 +19881,11 @@ def get_food_manufacturing_stats():
 
             result = json.loads(response_text)
 
-        # API 에러 응답 체크
-        if 'RESULT' in result.get('I1220', {}):
-            error_msg = result['I1220']['RESULT'].get('MSG', 'Unknown error')
-            error_code = result['I1220']['RESULT'].get('CODE', '')
+        # API 에러 응답 체크 (INFO-000이 아니면 에러)
+        api_result = result.get('I1220', {}).get('RESULT', {})
+        if api_result.get('CODE') != 'INFO-000':
+            error_msg = api_result.get('MSG', 'Unknown error')
+            error_code = api_result.get('CODE', '')
             print(f'[FoodAPI] API 에러: {error_code} - {error_msg}')
             return jsonify({'success': False, 'error': f'API 에러: {error_msg}'})
 
@@ -19909,8 +19910,8 @@ def get_food_manufacturing_stats():
 
                 rows = data.get('I1220', {}).get('row', [])
                 for row in rows:
-                    # 주소에서 시도/시군구 추출
-                    addr = row.get('SITE_ADDR', '') or row.get('ADDR', '') or ''
+                    # 주소에서 시도/시군구 추출 (LOCP_ADDR 필드 사용)
+                    addr = row.get('LOCP_ADDR', '') or row.get('SITE_ADDR', '') or ''
                     if not addr:
                         continue
 
@@ -19927,7 +19928,7 @@ def get_food_manufacturing_stats():
                                 region_stats[sido]['sigungu'][sigungu] = 0
                             region_stats[sido]['sigungu'][sigungu] += 1
 
-                print(f'[FoodAPI] {start}-{end} 처리 완료')
+                print(f'[FoodAPI] {start}-{end} 처리 완료 ({len(rows)}건)')
             except Exception as e:
                 print(f'[FoodAPI] {start}-{end} 처리 실패: {e}')
                 continue

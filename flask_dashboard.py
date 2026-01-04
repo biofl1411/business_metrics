@@ -1783,7 +1783,7 @@ HTML_TEMPLATE = '''
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://d3js.org/topojson.v3.min.js"></script>
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=2bf5373da96dea4fc3849546d72807d0&autoload=false"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=2bf5373da96dea4fc3849546d72807d0&autoload=false"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 

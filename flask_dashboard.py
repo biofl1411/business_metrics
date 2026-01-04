@@ -1141,11 +1141,11 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
     item_analyzer_diversity = []
     for item_name, analyzers_data in by_item_analyzer.items():
         analyzer_count = len(analyzers_data)
-        total_count = sum(a['count'] for a in analyzers_data.values())
+        item_total = sum(a['count'] for a in analyzers_data.values())  # 변수명 변경 (total_count 충돌 방지)
         top_analyzers = sorted(analyzers_data.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
         item_analyzer_diversity.append({
             'item': item_name,
-            'total_count': total_count,
+            'total_count': item_total,
             'analyzer_count': analyzer_count,
             'top_analyzers': [(name, data['count']) for name, data in top_analyzers]
         })
@@ -1177,8 +1177,8 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
         'total_count': total_count,
         'by_purpose_sample_type': {k: sorted(v) for k, v in by_purpose_sample_type.items()},
         'by_purpose_sample_type_item': {k: sorted(v) for k, v in by_purpose_sample_type_item.items()},
-        # 새로운 데이터
-        'by_purpose_item': {k: sorted(v.items(), key=lambda x: x[1]['count'], reverse=True)[:30]
+        # 새로운 데이터 (전체 항목 포함 - UI에서 필요시 제한)
+        'by_purpose_item': {k: sorted(v.items(), key=lambda x: x[1]['count'], reverse=True)
                            for k, v in by_purpose_item.items()},
         'by_analyzer': by_analyzer_sorted[:30],
         'by_analyzer_item': {k: sorted(v.items(), key=lambda x: x[1], reverse=True)[:20]

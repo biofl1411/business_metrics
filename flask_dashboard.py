@@ -21654,6 +21654,7 @@ def get_food_item_data():
 @app.route('/api/food_item/verify')
 def verify_food_item_data():
     """검사항목 데이터 검증 API - 원시 SQL 데이터와 비교"""
+    import sqlite3
     year = request.args.get('year', '2025')
 
     conn = sqlite3.connect(SQLITE_PATH)

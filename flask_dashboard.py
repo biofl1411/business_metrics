@@ -4535,8 +4535,9 @@ HTML_TEMPLATE = '''
         /* 토스트 */
         .toast {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             padding: 14px 24px;
             background: var(--success);
             color: white;

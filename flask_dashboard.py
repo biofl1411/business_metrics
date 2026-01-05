@@ -9000,7 +9000,7 @@ HTML_TEMPLATE = '''
                         if (!info) return;
 
                         const isComparison = ds.isComparison;
-                        const managerName = ds.label.replace(/ \(\d{4}\)$/, '');
+                        const managerName = ds.label.replace(/ [(]\d{4}[)]$/, '');
                         const isIncrease = !isComparison && ds.ownAvg && info.sales >= ds.ownAvg;
                         const borderColor = isIncrease ? 'rgba(99, 102, 241, 0.8)' : 'rgba(239, 68, 68, 0.8)';
                         tooltipEl.style.border = `2px solid ${borderColor}`;
@@ -9403,7 +9403,7 @@ HTML_TEMPLATE = '''
                             if (!info) return;
 
                             const isComparison = ds.isComparison;
-                            const managerName = ds.label.replace(/ \(\d{4}\)$/, '');
+                            const managerName = ds.label.replace(/ [(]\d{4}[)]$/, '');
                             const isIncrease = !isComparison && ds.ownAvg && info.sales >= ds.ownAvg;
                             const borderColor = isIncrease ? 'rgba(99, 102, 241, 0.8)' : 'rgba(239, 68, 68, 0.8)';
                             tooltipEl.style.border = `2px solid ${borderColor}`;
@@ -23233,8 +23233,8 @@ HTML_TEMPLATE = '''
         }
 
         function formatInlineMarkdown(text) {
-            // 굵은 텍스트 변환
-            return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            // 굵은 텍스트 변환: **text** -> <strong>text</strong>
+            return text.replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>');
         }
 
         // ============ 수금 탭 ============

@@ -22833,7 +22833,7 @@ def get_collection_data():
         unpaid_list = []
 
         for row in data:
-            sales = row.get('총금액', 0) or 0
+            sales = row.get('공급가액', 0) or 0
             if isinstance(sales, str):
                 sales = float(sales.replace(',', '').replace('원', '')) if sales else 0
 

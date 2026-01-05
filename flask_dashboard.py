@@ -1164,6 +1164,11 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
     total_fee = 0
     total_count = 0
 
+    # 잔류농약/항생물질(참고용) 중복 제거를 위한 고유 샘플 추적
+    unique_pesticide_samples = set()  # (접수일자, 업체명, 검체유형) 조합으로 고유 식별
+    pesticide_unique_count = 0  # 잔류농약(참고용) 고유 건수
+    antibiotic_unique_count = 0  # 항생물질(참고용) 고유 건수
+
     for row in data:
         purpose = str(row.get('검사목적', '') or '').strip()
         sample_type = str(row.get('검체유형', '') or '').strip()
@@ -1172,6 +1177,7 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
         analyzer = str(row.get('결과입력자', '') or '').strip() or '미지정'
         fee = row.get('항목수수료', 0) or 0
         date = row.get('접수일자')
+        company = str(row.get('업체명', '') or '').strip()
 
         if isinstance(fee, str):
             fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
@@ -1226,7 +1232,24 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
                     month = 0
 
         total_fee += fee
-        total_count += 1
+
+        # 잔류농약(참고용), 항생물질(참고용)은 접수일자+업체명+검체유형으로 고유 카운트
+        is_pesticide_ref = purpose == '잔류농약(참고용)'
+        is_antibiotic_ref = purpose == '항생물질(참고용)'
+
+        if is_pesticide_ref or is_antibiotic_ref:
+            # 고유 식별 키: 접수일자 + 업체명 + 검체유형
+            unique_key = (str(date), company, sample_type)
+            if unique_key not in unique_pesticide_samples:
+                unique_pesticide_samples.add(unique_key)
+                total_count += 1
+                if is_pesticide_ref:
+                    pesticide_unique_count += 1
+                else:
+                    antibiotic_unique_count += 1
+        else:
+            # 일반 항목은 건별로 카운트
+            total_count += 1
 
         # 항목별 집계
         if item_name:
@@ -1351,6 +1374,8 @@ def process_food_item_data(data, purpose_filter=None, sample_type_filter=None,
         'analyzers': sorted(analyzers),
         'total_fee': total_fee,
         'total_count': total_count,
+        'pesticide_unique_count': pesticide_unique_count,  # 잔류농약(참고용) 고유 건수
+        'antibiotic_unique_count': antibiotic_unique_count,  # 항생물질(참고용) 고유 건수
         'by_purpose_sample_type': {k: sorted(v) for k, v in by_purpose_sample_type.items()},
         'by_purpose_sample_type_item': {k: sorted(v) for k, v in by_purpose_sample_type_item.items()},
         # 새로운 데이터 (전체 항목 포함 - UI에서 필요시 제한)

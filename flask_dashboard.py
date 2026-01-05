@@ -6015,6 +6015,44 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
 
+            <!-- 축산물 가공업허가정보 시장 점유율 -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <div class="card-title">🥩 지역별 시장 점유율 (축산물가공업)</div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button id="loadLivestockStatsBtn" class="btn btn-primary" onclick="loadLivestockStats()" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; background: #dc2626; color: white; border: none; cursor: pointer;">
+                            📊 데이터 불러오기
+                        </button>
+                        <div class="card-badge" id="livestockStatsBadge">미로드</div>
+                    </div>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div id="livestockStatsLoading" style="display: none; text-align: center; padding: 40px; color: #64748b;">
+                        <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
+                        <div>축산물가공업소 데이터를 불러오는 중...</div>
+                        <div style="font-size: 11px; margin-top: 4px;">(최초 로드 시 1~2분 소요)</div>
+                    </div>
+                    <div id="livestockStatsEmpty" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <div style="font-size: 32px; margin-bottom: 8px;">🥩</div>
+                        <div style="font-size: 13px;">위 버튼을 클릭하여 전국 축산물가공업소 데이터를 불러오세요.</div>
+                        <div style="font-size: 11px; margin-top: 4px; color: #cbd5e1;">출처: 식품안전나라 Open API</div>
+                    </div>
+                    <table id="livestockStatsTable" class="data-table" style="display: none; width: 100%;">
+                        <thead>
+                            <tr style="background: #fef2f2;">
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #fecaca;">지역</th>
+                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #fecaca;">전체 업소</th>
+                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #fecaca;">우리 거래처</th>
+                                <th style="padding: 12px; text-align: center; border-bottom: 2px solid #fecaca;">점유율</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #fecaca; width: 200px;">비율</th>
+                            </tr>
+                        </thead>
+                        <tbody id="livestockStatsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- 매출 차트 + 성장률 차트 -->
             <div class="content-grid" style="margin-bottom: 24px;">
                 <div class="card">
@@ -19847,6 +19885,175 @@ HTML_TEMPLATE = '''
             tableEl.style.display = 'table';
         }
 
+        // 축산물 가공업 통계 데이터
+        let livestockManufacturingData = null;
+
+        async function loadLivestockStats() {
+            const loadingEl = document.getElementById('livestockStatsLoading');
+            const emptyEl = document.getElementById('livestockStatsEmpty');
+            const tableEl = document.getElementById('livestockStatsTable');
+            const badgeEl = document.getElementById('livestockStatsBadge');
+            const btnEl = document.getElementById('loadLivestockStatsBtn');
+
+            // 로딩 상태
+            loadingEl.style.display = 'block';
+            emptyEl.style.display = 'none';
+            tableEl.style.display = 'none';
+            btnEl.disabled = true;
+            btnEl.textContent = '⏳ 로딩 중...';
+
+            try {
+                const response = await fetch('/api/livestock-manufacturing/stats');
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || '데이터 로드 실패');
+                }
+
+                livestockManufacturingData = result.data;
+                renderLivestockStatsTable();
+
+                badgeEl.textContent = result.cached ? '캐시 데이터' : '최신 데이터';
+                badgeEl.style.background = result.cached ? '#fef3c7' : '#dcfce7';
+                badgeEl.style.color = result.cached ? '#92400e' : '#166534';
+
+            } catch (error) {
+                console.error('[LivestockStats] 로드 실패:', error);
+                emptyEl.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">❌</div>
+                    <div style="font-size: 13px; color: #dc2626;">데이터 로드 실패: ${error.message}</div>
+                    <div style="font-size: 11px; margin-top: 4px;">잠시 후 다시 시도해주세요.</div>
+                `;
+                emptyEl.style.display = 'block';
+                badgeEl.textContent = '로드 실패';
+                badgeEl.style.background = '#fee2e2';
+                badgeEl.style.color = '#991b1b';
+            } finally {
+                loadingEl.style.display = 'none';
+                btnEl.disabled = false;
+                btnEl.textContent = '🔄 새로고침';
+            }
+        }
+
+        function renderLivestockStatsTable() {
+            if (!livestockManufacturingData || !currentData) return;
+
+            const tableEl = document.getElementById('livestockStatsTable');
+            const tbodyEl = document.getElementById('livestockStatsTableBody');
+            const emptyEl = document.getElementById('livestockStatsEmpty');
+
+            // 제외할 거래처
+            const EXCLUDED_CLIENTS = ['IBK', 'IGC'];
+
+            // 우리 거래처 데이터 집계 (시도별)
+            const ourClientsBySido = {};
+            const clients = currentData.by_client || [];
+
+            clients.forEach(c => {
+                const clientName = c[0] || '';
+                if (EXCLUDED_CLIENTS.includes(clientName)) return;
+
+                const addr = c[1]?.address || '';
+                if (!addr) return;
+
+                const sidoPatterns = {
+                    '서울특별시': '서울', '서울시': '서울', '서울': '서울',
+                    '부산광역시': '부산', '부산시': '부산', '부산': '부산',
+                    '대구광역시': '대구', '대구시': '대구', '대구': '대구',
+                    '인천광역시': '인천', '인천시': '인천', '인천': '인천',
+                    '광주광역시': '광주', '광주시': '광주', '광주': '광주',
+                    '대전광역시': '대전', '대전시': '대전', '대전': '대전',
+                    '울산광역시': '울산', '울산시': '울산', '울산': '울산',
+                    '세종특별자치시': '세종', '세종시': '세종', '세종': '세종',
+                    '경기도': '경기', '경기': '경기',
+                    '강원도': '강원', '강원특별자치도': '강원', '강원': '강원',
+                    '충청북도': '충북', '충북': '충북',
+                    '충청남도': '충남', '충남': '충남',
+                    '전라북도': '전북', '전북특별자치도': '전북', '전북': '전북',
+                    '전라남도': '전남', '전남': '전남',
+                    '경상북도': '경북', '경북': '경북',
+                    '경상남도': '경남', '경남': '경남',
+                    '제주특별자치도': '제주', '제주도': '제주', '제주': '제주'
+                };
+
+                let sido = null;
+                for (const [pattern, short] of Object.entries(sidoPatterns).sort((a, b) => b[0].length - a[0].length)) {
+                    if (addr.includes(pattern)) {
+                        sido = short;
+                        break;
+                    }
+                }
+
+                if (sido) {
+                    ourClientsBySido[sido] = (ourClientsBySido[sido] || 0) + 1;
+                }
+            });
+
+            // 테이블 데이터 구성
+            const tableData = [];
+            const sidoOrder = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종',
+                              '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
+
+            sidoOrder.forEach(sido => {
+                const livestockData = livestockManufacturingData[sido];
+                const totalBusinesses = livestockData?.total || 0;
+                const ourClients = ourClientsBySido[sido] || 0;
+                const shareRate = totalBusinesses > 0 ? (ourClients / totalBusinesses * 100) : 0;
+
+                if (totalBusinesses > 0 || ourClients > 0) {
+                    tableData.push({
+                        sido,
+                        totalBusinesses,
+                        ourClients,
+                        shareRate
+                    });
+                }
+            });
+
+            // 점유율 순으로 정렬
+            tableData.sort((a, b) => b.shareRate - a.shareRate);
+
+            // 테이블 렌더링
+            tbodyEl.innerHTML = tableData.map((row, idx) => {
+                const barColor = row.shareRate >= 5 ? '#dc2626' : row.shareRate >= 2 ? '#f97316' : row.shareRate >= 1 ? '#eab308' : '#94a3b8';
+                const barWidth = Math.min(row.shareRate * 10, 100);
+
+                return `
+                    <tr style="border-bottom: 1px solid #fef2f2;">
+                        <td style="padding: 10px 12px; font-weight: 600;">${row.sido}</td>
+                        <td style="padding: 10px 12px; text-align: right; color: #64748b;">${row.totalBusinesses.toLocaleString()}개</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 600; color: #dc2626;">${row.ourClients.toLocaleString()}개</td>
+                        <td style="padding: 10px 12px; text-align: center;">
+                            <span style="font-weight: 700; color: ${barColor};">${row.shareRate.toFixed(2)}%</span>
+                        </td>
+                        <td style="padding: 10px 12px;">
+                            <div style="background: #fef2f2; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div style="background: ${barColor}; height: 100%; width: ${barWidth}%; transition: width 0.3s;"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // 합계 행 추가
+            const totalBiz = tableData.reduce((s, r) => s + r.totalBusinesses, 0);
+            const totalOur = tableData.reduce((s, r) => s + r.ourClients, 0);
+            const totalRate = totalBiz > 0 ? (totalOur / totalBiz * 100) : 0;
+
+            tbodyEl.innerHTML += `
+                <tr style="background: #fef2f2; font-weight: 700;">
+                    <td style="padding: 12px;">전체</td>
+                    <td style="padding: 12px; text-align: right;">${totalBiz.toLocaleString()}개</td>
+                    <td style="padding: 12px; text-align: right; color: #dc2626;">${totalOur.toLocaleString()}개</td>
+                    <td style="padding: 12px; text-align: center; color: #991b1b;">${totalRate.toFixed(2)}%</td>
+                    <td style="padding: 12px;"></td>
+                </tr>
+            `;
+
+            emptyEl.style.display = 'none';
+            tableEl.style.display = 'table';
+        }
+
         function updateRegionTab() {
             const regions = currentData.by_region || [];
             const compareRegions = compareData?.by_region || [];
@@ -23350,6 +23557,117 @@ def get_food_manufacturing_stats():
     except Exception as e:
         import traceback
         print(f'[FoodAPI] 오류: {e}')
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+# 축산물 가공업허가정보 Open API
+LIVESTOCK_API_KEY = 'db180118ffa742c0b5be'
+LIVESTOCK_CACHE_FILE = os.path.join(DATA_DIR, 'livestock_manufacturing_cache.json')
+
+@app.route('/api/livestock-manufacturing/stats')
+def get_livestock_manufacturing_stats():
+    """지역별 축산물가공업소 통계 조회"""
+    import urllib.request
+    import ssl
+
+    try:
+        # 캐시 확인 (24시간 유효)
+        if os.path.exists(LIVESTOCK_CACHE_FILE):
+            with open(LIVESTOCK_CACHE_FILE, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+            cache_time = cache.get('timestamp', 0)
+            if time.time() - cache_time < 86400:  # 24시간
+                print('[LivestockAPI] 캐시 데이터 사용')
+                return jsonify({'success': True, 'data': cache.get('data', {}), 'cached': True})
+
+        # API 호출 (전체 건수 먼저 확인)
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        # 총 건수 확인
+        url = f'http://openapi.foodsafetykorea.go.kr/api/{LIVESTOCK_API_KEY}/I1300/json/1/1'
+        print(f'[LivestockAPI] API 요청: {url}')
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+
+        with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
+            response_text = response.read().decode('utf-8')
+            print(f'[LivestockAPI] API 응답: {response_text[:500]}')
+
+            if 'Host not allowed' in response_text or 'ERROR' in response_text.upper():
+                return jsonify({
+                    'success': False,
+                    'error': 'API 접근 권한 오류: 서버 IP가 등록되지 않았습니다.'
+                })
+
+            result = json.loads(response_text)
+
+        # API 에러 응답 체크
+        api_result = result.get('I1300', {}).get('RESULT', {})
+        if api_result.get('CODE') != 'INFO-000':
+            error_msg = api_result.get('MSG', 'Unknown error')
+            print(f'[LivestockAPI] API 에러: {error_msg}')
+            return jsonify({'success': False, 'error': f'API 에러: {error_msg}'})
+
+        total_count = int(result.get('I1300', {}).get('total_count', 0))
+        print(f'[LivestockAPI] 총 축산물가공업소 수: {total_count}')
+
+        if total_count == 0:
+            return jsonify({'success': False, 'error': 'API 데이터 없음'})
+
+        # 지역별 통계 수집 (페이지네이션)
+        region_stats = {}
+        page_size = 1000
+
+        for start in range(1, min(total_count + 1, 50001), page_size):
+            end = min(start + page_size - 1, total_count)
+            url = f'http://openapi.foodsafetykorea.go.kr/api/{LIVESTOCK_API_KEY}/I1300/json/{start}/{end}'
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+
+            try:
+                with urllib.request.urlopen(req, timeout=60, context=ssl_context) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+
+                rows = data.get('I1300', {}).get('row', [])
+                for row in rows:
+                    # 주소에서 시도 추출 (ADDR 또는 SITE_ADDR 필드)
+                    addr = row.get('ADDR', '') or row.get('SITE_ADDR', '') or row.get('LOCP_ADDR', '') or ''
+                    if not addr:
+                        continue
+
+                    sido = extract_sido(addr)
+                    if sido:
+                        if sido not in region_stats:
+                            region_stats[sido] = {'total': 0, 'sigungu': {}}
+                        region_stats[sido]['total'] += 1
+
+                        # 시군구 추출
+                        _, sigungu = extract_region(addr)
+                        if sigungu:
+                            if sigungu not in region_stats[sido]['sigungu']:
+                                region_stats[sido]['sigungu'][sigungu] = 0
+                            region_stats[sido]['sigungu'][sigungu] += 1
+
+                print(f'[LivestockAPI] {start}-{end} 처리 완료 ({len(rows)}건)')
+            except Exception as e:
+                print(f'[LivestockAPI] {start}-{end} 처리 실패: {e}')
+                continue
+
+        # 캐시 저장
+        cache_data = {
+            'timestamp': time.time(),
+            'total_count': total_count,
+            'data': region_stats
+        }
+        with open(LIVESTOCK_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+
+        print(f'[LivestockAPI] 지역별 통계 완료: {len(region_stats)}개 시도')
+        return jsonify({'success': True, 'data': region_stats, 'total': total_count})
+
+    except Exception as e:
+        import traceback
+        print(f'[LivestockAPI] 오류: {e}')
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 

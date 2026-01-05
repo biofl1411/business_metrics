@@ -42,9 +42,98 @@ def init_user_db():
             password_hash TEXT NOT NULL,
             name TEXT,
             role TEXT DEFAULT 'user',
+            team_id INTEGER,
+            email TEXT,
             status TEXT DEFAULT 'active',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP
+            last_login TIMESTAMP,
+            FOREIGN KEY (team_id) REFERENCES teams(id)
+        )
+    ''')
+
+    # 팀 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT,
+            parent_id INTEGER,
+            track_details INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_id) REFERENCES teams(id)
+        )
+    ''')
+
+    # 목표 설정 테이블 (개인/팀/전체)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year INTEGER NOT NULL,
+            month INTEGER,
+            goal_type TEXT NOT NULL,
+            target_id INTEGER,
+            inspection_purpose TEXT,
+            target_sales REAL DEFAULT 0,
+            target_count INTEGER DEFAULT 0,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    ''')
+
+    # 권한 그룹 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS permission_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 권한 상세 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER,
+            permission_type TEXT,
+            permission_key TEXT,
+            permission_value TEXT,
+            FOREIGN KEY (group_id) REFERENCES permission_groups(id)
+        )
+    ''')
+
+    # 사용자-권한그룹 연결 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            group_id INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (group_id) REFERENCES permission_groups(id)
+        )
+    ''')
+
+    # 시스템 설정 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS system_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            setting_key TEXT UNIQUE NOT NULL,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 다운로드 로그 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS download_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            file_type TEXT,
+            file_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
 
@@ -84,6 +173,57 @@ def init_user_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
+
+    # 기존 users 테이블에 team_id, email 컬럼 추가 (마이그레이션)
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN team_id INTEGER')
+    except:
+        pass
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN email TEXT')
+    except:
+        pass
+
+    # 기본 팀 데이터 삽입
+    default_teams = [
+        ('재무팀', '본사', None, 0),
+        ('총무팀', '본사', None, 0),
+        ('마케팅팀', '본사', None, 0),
+        ('고객지원팀(본사접수)', '본사', None, 0),
+        ('품질보증팀', '본사', None, 0),
+        ('분석실', '본사', None, 0),
+        ('영업부', '영업', None, 1),
+        ('서울센터', '영업', 7, 1),
+        ('경북센터', '영업', 7, 1),
+        ('지사', '지사', None, 1),
+        ('충북지사', '지사', 10, 1),
+        ('경북지사', '지사', 10, 1),
+        ('전라지사', '지사', 10, 1),
+        ('경기지사', '지사', 10, 1),
+        ('서울지사', '지사', 10, 1),
+    ]
+    for team_name, category, parent_id, track_details in default_teams:
+        cursor.execute('SELECT id FROM teams WHERE name = ?', (team_name,))
+        if not cursor.fetchone():
+            cursor.execute(
+                'INSERT INTO teams (name, category, parent_id, track_details) VALUES (?, ?, ?, ?)',
+                (team_name, category, parent_id, track_details)
+            )
+
+    # 기본 권한 그룹 생성
+    default_permission_groups = [
+        ('관리자', '모든 기능 접근 가능'),
+        ('매니저', '팀 데이터 관리 가능'),
+        ('일반', '개인 데이터만 접근'),
+        ('뷰어', '조회만 가능'),
+    ]
+    for group_name, description in default_permission_groups:
+        cursor.execute('SELECT id FROM permission_groups WHERE name = ?', (group_name,))
+        if not cursor.fetchone():
+            cursor.execute(
+                'INSERT INTO permission_groups (name, description) VALUES (?, ?)',
+                (group_name, description)
+            )
 
     # 기본 관리자 계정 생성 (없는 경우만)
     cursor.execute("SELECT id FROM users WHERE username = 'admin'")
@@ -2361,250 +2501,491 @@ ADMIN_TEMPLATE = '''
     <title>관리자 - 실적 분석 시스템</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Malgun Gothic', sans-serif;
-            background: #f5f5f5;
-            min-height: 100vh;
-        }
-        .admin-header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
-            color: white;
-            padding: 20px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        body { font-family: 'Malgun Gothic', sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .admin-header { background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); color: white; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; }
         .admin-header h1 { font-size: 24px; }
-        .admin-header a {
-            color: white;
-            text-decoration: none;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 5px;
-        }
-        .admin-content {
-            max-width: 1400px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-        .admin-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .admin-tab {
-            padding: 12px 24px;
-            background: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-        .admin-tab.active {
-            background: #0f3460;
-            color: white;
-        }
-        .admin-panel {
-            background: white;
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: none;
-        }
+        .admin-header a { color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 5px; margin-left: 10px; }
+        .admin-container { display: flex; min-height: calc(100vh - 70px); }
+        .admin-sidebar { width: 240px; background: #1a1a2e; padding: 20px 0; }
+        .sidebar-section { margin-bottom: 10px; }
+        .sidebar-title { color: #64748b; font-size: 11px; padding: 10px 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; color: #94a3b8; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; }
+        .sidebar-item:hover { background: rgba(255,255,255,0.05); color: white; }
+        .sidebar-item.active { background: rgba(99,102,241,0.2); color: #818cf8; border-left-color: #818cf8; }
+        .sidebar-item i { width: 20px; text-align: center; }
+        .admin-content { flex: 1; padding: 30px; overflow-y: auto; }
+        .admin-panel { display: none; }
         .admin-panel.active { display: block; }
-        .panel-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .panel-header h2 { font-size: 20px; color: #333; }
-        .add-btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        th { background: #f9f9f9; font-weight: 600; }
-        .status-active { color: #27ae60; }
-        .status-suspended { color: #e74c3c; }
-        .action-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 5px;
-            font-size: 12px;
-        }
-        .btn-suspend { background: #f39c12; color: white; }
-        .btn-delete { background: #e74c3c; color: white; }
-        .btn-activate { background: #27ae60; color: white; }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 400px;
-        }
-        .modal-content h3 { margin-bottom: 20px; }
-        .modal-content .form-group {
-            margin-bottom: 15px;
-        }
-        .modal-content label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .modal-content input, .modal-content select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .modal-buttons button {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .btn-save { background: #0f3460; color: white; }
-        .btn-cancel { background: #ddd; }
-        .copyright {
-            text-align: center;
-            padding: 20px;
-            color: #888;
-            font-size: 12px;
-        }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .panel-header h2 { font-size: 22px; color: #1e293b; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-title { font-size: 16px; font-weight: 600; color: #334155; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f8fafc; font-weight: 600; color: #475569; font-size: 13px; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-info { background: #dbeafe; color: #1e40af; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 500; color: #374151; font-size: 14px; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+        .form-control:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
+        .modal-header h3 { font-size: 18px; color: #1e293b; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; }
+        .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e2e8f0; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+        .tab-btn { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 14px; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
+        .goal-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 10px; }
+        .goal-card:hover { border-color: #6366f1; background: #f8fafc; }
+        .goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .goal-title { font-weight: 600; color: #1e293b; }
+        .goal-amount { font-size: 20px; font-weight: 700; color: #6366f1; }
+        .goal-progress { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .goal-progress-bar { height: 100%; background: #6366f1; border-radius: 4px; transition: width 0.3s; }
+        .tree-view { padding-left: 20px; }
+        .tree-item { padding: 8px 0; }
+        .tree-toggle { cursor: pointer; user-select: none; }
+        .tree-toggle:before { content: '▶'; display: inline-block; width: 20px; font-size: 10px; transition: transform 0.2s; }
+        .tree-toggle.open:before { transform: rotate(90deg); }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .stat-value { font-size: 28px; font-weight: 700; }
+        .stat-label { font-size: 13px; opacity: 0.9; margin-top: 5px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-box input { flex: 1; }
+        .copyright { text-align: center; padding: 20px; color: #888; font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="admin-header">
-        <h1>관리자 대시보드</h1>
+        <h1>🛠️ 관리자 대시보드</h1>
         <div>
             <a href="/">← 메인으로</a>
-            <a href="/api/auth/logout" style="margin-left:10px;">로그아웃</a>
+            <a href="/api/auth/logout">로그아웃</a>
         </div>
     </div>
 
-    <div class="admin-content">
-        <div class="admin-tabs">
-            <button class="admin-tab active" onclick="showPanel('users')">사용자 관리</button>
-            <button class="admin-tab" onclick="showPanel('activity')">활동 로그</button>
-            <button class="admin-tab" onclick="showPanel('aiLogs')">AI 분석 로그</button>
+    <div class="admin-container">
+        <div class="admin-sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">목표 관리</div>
+                <div class="sidebar-item active" onclick="showPanel('goals')">🎯 목표 설정</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-title">사용자 관리</div>
+                <div class="sidebar-item" onclick="showPanel('users')">👥 사용자 목록</div>
+                <div class="sidebar-item" onclick="showPanel('activity')">📋 로그인 이력</div>
+                <div class="sidebar-item" onclick="showPanel('usage')">📊 이용 기록</div>
+                <div class="sidebar-item" onclick="showPanel('downloads')">📥 다운로드 기록</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-title">권한 관리</div>
+                <div class="sidebar-item" onclick="showPanel('permissions')">🔐 사용자 권한</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-title">시스템</div>
+                <div class="sidebar-item" onclick="showPanel('settings')">⚙️ 시스템 설정</div>
+                <div class="sidebar-item" onclick="showPanel('aiLogs')">🤖 AI 분석 로그</div>
+            </div>
         </div>
 
-        <div id="usersPanel" class="admin-panel active">
-            <div class="panel-header">
-                <h2>사용자 목록</h2>
-                <button class="add-btn" onclick="showAddUserModal()">+ 사용자 추가</button>
+        <div class="admin-content">
+            <!-- 목표 설정 패널 -->
+            <div id="goalsPanel" class="admin-panel active">
+                <div class="panel-header">
+                    <h2>🎯 목표 설정</h2>
+                    <button class="btn btn-primary" onclick="showGoalModal()">+ 목표 추가</button>
+                </div>
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="showGoalTab('overall')">전체 목표</button>
+                    <button class="tab-btn" onclick="showGoalTab('team')">팀별 목표</button>
+                    <button class="tab-btn" onclick="showGoalTab('individual')">개인별 목표</button>
+                </div>
+                <div class="form-row" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>연도</label>
+                        <select class="form-control" id="goalYear" onchange="loadGoals()">
+                            <option value="2026">2026년</option>
+                            <option value="2025">2025년</option>
+                            <option value="2024">2024년</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>검사목적</label>
+                        <select class="form-control" id="goalPurpose" onchange="loadGoals()">
+                            <option value="전체">전체</option>
+                            <option value="자가품질검사">자가품질검사</option>
+                            <option value="위생교육검사">위생교육검사</option>
+                            <option value="의뢰검사">의뢰검사</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="goalsContent">
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalGoalSales">0억</div>
+                            <div class="stat-label">전체 매출 목표</div>
+                        </div>
+                        <div class="stat-card blue">
+                            <div class="stat-value" id="totalGoalCount">0건</div>
+                            <div class="stat-label">전체 건수 목표</div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-value" id="goalAchievement">0%</div>
+                            <div class="stat-label">달성률</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">📊 목표 현황</div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>구분</th>
+                                    <th>대상</th>
+                                    <th>검사목적</th>
+                                    <th>매출 목표</th>
+                                    <th>건수 목표</th>
+                                    <th>관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="goalsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>사용자명</th>
-                        <th>이름</th>
-                        <th>역할</th>
-                        <th>상태</th>
-                        <th>마지막 로그인</th>
-                        <th>관리</th>
-                    </tr>
-                </thead>
-                <tbody id="usersTable"></tbody>
-            </table>
-        </div>
 
-        <div id="activityPanel" class="admin-panel">
-            <div class="panel-header">
-                <h2>활동 로그</h2>
+            <!-- 사용자 목록 패널 -->
+            <div id="usersPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>👥 사용자 관리</h2>
+                    <button class="btn btn-primary" onclick="showAddUserModal()">+ 사용자 추가</button>
+                </div>
+                <div class="search-box">
+                    <input type="text" class="form-control" placeholder="사용자 검색..." id="userSearch" onkeyup="filterUsers()">
+                    <select class="form-control" style="width: 150px;" id="teamFilter" onchange="filterUsers()">
+                        <option value="">전체 팀</option>
+                    </select>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>사용자명</th>
+                                <th>이름</th>
+                                <th>이메일</th>
+                                <th>소속팀</th>
+                                <th>역할</th>
+                                <th>상태</th>
+                                <th>마지막 로그인</th>
+                                <th>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable"></tbody>
+                    </table>
+                </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>시간</th>
-                        <th>사용자</th>
-                        <th>활동</th>
-                        <th>상세</th>
-                        <th>IP</th>
-                    </tr>
-                </thead>
-                <tbody id="activityTable"></tbody>
-            </table>
-        </div>
 
-        <div id="aiLogsPanel" class="admin-panel">
-            <div class="panel-header">
-                <h2>AI 분석 로그</h2>
+            <!-- 로그인 이력 패널 -->
+            <div id="activityPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>📋 로그인 이력</h2>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>시간</th>
+                                <th>사용자</th>
+                                <th>활동</th>
+                                <th>상세</th>
+                                <th>IP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityTable"></tbody>
+                    </table>
+                </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>시간</th>
-                        <th>사용자</th>
-                        <th>프롬프트</th>
-                        <th>응답 길이</th>
-                        <th>토큰</th>
-                    </tr>
-                </thead>
-                <tbody id="aiLogsTable"></tbody>
-            </table>
+
+            <!-- 이용 기록 패널 -->
+            <div id="usagePanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>📊 이용 기록</h2>
+                </div>
+                <div class="card">
+                    <div class="card-title">탭 이용 기록</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>시간</th>
+                                <th>사용자</th>
+                                <th>메뉴</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menuLogsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 다운로드 기록 패널 -->
+            <div id="downloadsPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>📥 다운로드 기록</h2>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>시간</th>
+                                <th>사용자</th>
+                                <th>파일 유형</th>
+                                <th>파일명</th>
+                            </tr>
+                        </thead>
+                        <tbody id="downloadLogsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 권한 관리 패널 -->
+            <div id="permissionsPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>🔐 사용자 권한</h2>
+                </div>
+                <div class="form-row">
+                    <div class="card">
+                        <div class="card-title">권한 그룹</div>
+                        <div id="permissionGroups"></div>
+                        <button class="btn btn-primary btn-sm" style="margin-top: 10px;" onclick="showPermissionGroupModal()">+ 권한 그룹 추가</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">권한 설정</div>
+                        <div class="form-group">
+                            <label>메뉴 접근 권한</label>
+                            <div id="menuPermissions"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>데이터 범위</label>
+                            <select class="form-control" id="dataScope">
+                                <option value="all">전체 데이터</option>
+                                <option value="team">팀 데이터만</option>
+                                <option value="personal">개인 데이터만</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>기능 권한</label>
+                            <div>
+                                <label><input type="checkbox" id="canEdit"> 수정</label>
+                                <label><input type="checkbox" id="canDelete"> 삭제</label>
+                                <label><input type="checkbox" id="canExport"> 내보내기</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 시스템 설정 패널 -->
+            <div id="settingsPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>⚙️ 시스템 설정</h2>
+                </div>
+                <div class="form-row">
+                    <div class="card">
+                        <div class="card-title">기본 정보</div>
+                        <div class="form-group">
+                            <label>회사명</label>
+                            <input type="text" class="form-control" id="companyName" value="식품의약품안전진흥원">
+                        </div>
+                        <div class="form-group">
+                            <label>연락처</label>
+                            <input type="text" class="form-control" id="companyPhone">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">테마 설정</div>
+                        <div class="form-group">
+                            <label>테마 모드</label>
+                            <select class="form-control" id="themeMode">
+                                <option value="light">라이트 모드</option>
+                                <option value="dark">다크 모드</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">팀 관리</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>팀명</th>
+                                <th>카테고리</th>
+                                <th>상세 이력 추적</th>
+                                <th>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teamsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AI 분석 로그 패널 -->
+            <div id="aiLogsPanel" class="admin-panel">
+                <div class="panel-header">
+                    <h2>🤖 AI 분석 로그</h2>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>시간</th>
+                                <th>사용자</th>
+                                <th>프롬프트</th>
+                                <th>응답 길이</th>
+                                <th>토큰</th>
+                            </tr>
+                        </thead>
+                        <tbody id="aiLogsTable"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="modal" id="addUserModal">
+    <!-- 목표 추가 모달 -->
+    <div class="modal" id="goalModal">
         <div class="modal-content">
-            <h3>새 사용자 추가</h3>
-            <form onsubmit="return addUser(event)">
+            <div class="modal-header">
+                <h3>목표 설정</h3>
+                <button class="modal-close" onclick="closeModal('goalModal')">&times;</button>
+            </div>
+            <form onsubmit="return saveGoal(event)">
+                <div class="form-group">
+                    <label>목표 유형</label>
+                    <select class="form-control" id="goalType" onchange="updateGoalTarget()">
+                        <option value="overall">전체 목표</option>
+                        <option value="team">팀 목표</option>
+                        <option value="individual">개인 목표</option>
+                    </select>
+                </div>
+                <div class="form-group" id="goalTargetGroup" style="display: none;">
+                    <label>대상 선택</label>
+                    <select class="form-control" id="goalTarget"></select>
+                </div>
+                <div class="form-group">
+                    <label>검사목적</label>
+                    <select class="form-control" id="goalInspectionPurpose">
+                        <option value="전체">전체</option>
+                        <option value="자가품질검사">자가품질검사</option>
+                        <option value="위생교육검사">위생교육검사</option>
+                        <option value="의뢰검사">의뢰검사</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>매출 목표 (원)</label>
+                        <input type="number" class="form-control" id="goalSales" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label>건수 목표</label>
+                        <input type="number" class="form-control" id="goalCount" placeholder="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>연도</label>
+                        <select class="form-control" id="goalSetYear">
+                            <option value="2026">2026년</option>
+                            <option value="2025">2025년</option>
+                            <option value="2024">2024년</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>월 (선택)</label>
+                        <select class="form-control" id="goalMonth">
+                            <option value="">연간 목표</option>
+                            <option value="1">1월</option>
+                            <option value="2">2월</option>
+                            <option value="3">3월</option>
+                            <option value="4">4월</option>
+                            <option value="5">5월</option>
+                            <option value="6">6월</option>
+                            <option value="7">7월</option>
+                            <option value="8">8월</option>
+                            <option value="9">9월</option>
+                            <option value="10">10월</option>
+                            <option value="11">11월</option>
+                            <option value="12">12월</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('goalModal')">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 사용자 추가/수정 모달 -->
+    <div class="modal" id="userModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="userModalTitle">사용자 추가</h3>
+                <button class="modal-close" onclick="closeModal('userModal')">&times;</button>
+            </div>
+            <form onsubmit="return saveUser(event)">
+                <input type="hidden" id="editUserId">
                 <div class="form-group">
                     <label>사용자 ID</label>
-                    <input type="text" id="newUsername" required>
+                    <input type="text" class="form-control" id="newUsername" required>
                 </div>
                 <div class="form-group">
                     <label>이름</label>
-                    <input type="text" id="newName" required>
+                    <input type="text" class="form-control" id="newName" required>
+                </div>
+                <div class="form-group">
+                    <label>이메일</label>
+                    <input type="email" class="form-control" id="newEmail">
                 </div>
                 <div class="form-group">
                     <label>비밀번호</label>
-                    <input type="password" id="newPassword" required>
+                    <input type="password" class="form-control" id="newPassword">
+                    <small style="color: #64748b;">수정 시 비워두면 변경하지 않습니다</small>
+                </div>
+                <div class="form-group">
+                    <label>소속팀</label>
+                    <select class="form-control" id="newTeam"></select>
                 </div>
                 <div class="form-group">
                     <label>역할</label>
-                    <select id="newRole">
+                    <select class="form-control" id="newRole">
                         <option value="user">일반 사용자</option>
+                        <option value="manager">매니저</option>
                         <option value="admin">관리자</option>
                     </select>
                 </div>
-                <div class="modal-buttons">
-                    <button type="button" class="btn-cancel" onclick="closeModal()">취소</button>
-                    <button type="submit" class="btn-save">추가</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('userModal')">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
                 </div>
             </form>
         </div>
@@ -2613,98 +2994,297 @@ ADMIN_TEMPLATE = '''
     <p class="copyright">© 2026 HS.KIM. All rights reserved.</p>
 
     <script>
+        let teamsData = [];
+        let usersData = [];
+        let goalsData = [];
+        let currentGoalTab = 'overall';
+
+        // 패널 전환
         function showPanel(panel) {
             document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
             document.getElementById(panel + 'Panel').classList.add('active');
             event.target.classList.add('active');
 
-            if (panel === 'users') loadUsers();
+            if (panel === 'goals') loadGoals();
+            else if (panel === 'users') loadUsers();
             else if (panel === 'activity') loadActivity();
+            else if (panel === 'usage') loadMenuLogs();
+            else if (panel === 'downloads') loadDownloadLogs();
+            else if (panel === 'permissions') loadPermissions();
+            else if (panel === 'settings') loadSettings();
             else if (panel === 'aiLogs') loadAiLogs();
         }
 
-        async function loadUsers() {
-            const response = await fetch('/api/admin/users');
-            const data = await response.json();
-            const tbody = document.getElementById('usersTable');
-            tbody.innerHTML = data.users.map(u => `
+        // 목표 탭 전환
+        function showGoalTab(tab) {
+            currentGoalTab = tab;
+            document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            loadGoals();
+        }
+
+        // 목표 로드
+        async function loadGoals() {
+            const year = document.getElementById('goalYear').value;
+            const purpose = document.getElementById('goalPurpose').value;
+            try {
+                const response = await fetch(`/api/admin/goals?year=${year}&purpose=${purpose}&type=${currentGoalTab}`);
+                const data = await response.json();
+                goalsData = data.goals || [];
+                renderGoals();
+            } catch (e) {
+                console.error('목표 로드 실패:', e);
+            }
+        }
+
+        function renderGoals() {
+            const tbody = document.getElementById('goalsTable');
+            if (!goalsData.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #64748b;">등록된 목표가 없습니다.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = goalsData.map(g => `
                 <tr>
-                    <td>${u.id}</td>
-                    <td>${u.username}</td>
-                    <td>${u.name || '-'}</td>
-                    <td>${u.role === 'admin' ? '관리자' : '사용자'}</td>
-                    <td class="${u.status === 'active' ? 'status-active' : 'status-suspended'}">${u.status === 'active' ? '활성' : '정지'}</td>
-                    <td>${u.last_login || '-'}</td>
+                    <td><span class="badge badge-${g.goal_type === 'overall' ? 'info' : g.goal_type === 'team' ? 'success' : 'warning'}">${g.goal_type === 'overall' ? '전체' : g.goal_type === 'team' ? '팀' : '개인'}</span></td>
+                    <td>${g.target_name || '-'}</td>
+                    <td>${g.inspection_purpose || '전체'}</td>
+                    <td>${(g.target_sales / 100000000).toFixed(1)}억</td>
+                    <td>${g.target_count?.toLocaleString() || 0}건</td>
                     <td>
-                        ${u.status === 'active'
-                            ? `<button class="action-btn btn-suspend" onclick="toggleUserStatus(${u.id}, 'suspended')">정지</button>`
-                            : `<button class="action-btn btn-activate" onclick="toggleUserStatus(${u.id}, 'active')">활성화</button>`
-                        }
-                        <button class="action-btn btn-delete" onclick="deleteUser(${u.id})">삭제</button>
+                        <button class="btn btn-sm btn-warning" onclick="editGoal(${g.id})">수정</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteGoal(${g.id})">삭제</button>
                     </td>
                 </tr>
             `).join('');
         }
 
+        // 사용자 로드
+        async function loadUsers() {
+            try {
+                const [usersRes, teamsRes] = await Promise.all([
+                    fetch('/api/admin/users'),
+                    fetch('/api/admin/teams')
+                ]);
+                const usersJson = await usersRes.json();
+                const teamsJson = await teamsRes.json();
+                usersData = usersJson.users || [];
+                teamsData = teamsJson.teams || [];
+                renderUsers();
+                renderTeamFilters();
+            } catch (e) {
+                console.error('사용자 로드 실패:', e);
+            }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('usersTable');
+            tbody.innerHTML = usersData.map(u => `
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${u.username}</td>
+                    <td>${u.name || '-'}</td>
+                    <td>${u.email || '-'}</td>
+                    <td>${u.team_name || '-'}</td>
+                    <td><span class="badge badge-${u.role === 'admin' ? 'danger' : u.role === 'manager' ? 'warning' : 'info'}">${u.role === 'admin' ? '관리자' : u.role === 'manager' ? '매니저' : '사용자'}</span></td>
+                    <td><span class="badge badge-${u.status === 'active' ? 'success' : 'danger'}">${u.status === 'active' ? '활성' : '정지'}</span></td>
+                    <td>${u.last_login || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editUser(${u.id})">수정</button>
+                        <button class="btn btn-sm btn-warning" onclick="resetPassword(${u.id})">PW초기화</button>
+                        ${u.status === 'active'
+                            ? `<button class="btn btn-sm btn-danger" onclick="toggleUserStatus(${u.id}, 'suspended')">정지</button>`
+                            : `<button class="btn btn-sm btn-success" onclick="toggleUserStatus(${u.id}, 'active')">활성화</button>`
+                        }
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderTeamFilters() {
+            const select = document.getElementById('teamFilter');
+            const newTeamSelect = document.getElementById('newTeam');
+            const options = '<option value="">전체 팀</option>' + teamsData.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            select.innerHTML = options;
+            if (newTeamSelect) {
+                newTeamSelect.innerHTML = '<option value="">선택 안함</option>' + teamsData.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            }
+        }
+
+        // 활동 로그
         async function loadActivity() {
             const response = await fetch('/api/admin/activity');
             const data = await response.json();
-            const tbody = document.getElementById('activityTable');
-            tbody.innerHTML = data.activities.map(a => `
+            document.getElementById('activityTable').innerHTML = (data.activities || []).map(a => `
                 <tr>
                     <td>${a.created_at}</td>
                     <td>${a.username || 'Unknown'}</td>
-                    <td>${a.action}</td>
+                    <td>${a.action || '-'}</td>
                     <td>${a.details || '-'}</td>
                     <td>${a.ip_address || '-'}</td>
                 </tr>
             `).join('');
         }
 
-        async function loadAiLogs() {
-            const response = await fetch('/api/admin/ai-logs');
+        // 메뉴 로그
+        async function loadMenuLogs() {
+            const response = await fetch('/api/admin/menu-logs');
             const data = await response.json();
-            const tbody = document.getElementById('aiLogsTable');
-            tbody.innerHTML = data.logs.map(l => `
+            document.getElementById('menuLogsTable').innerHTML = (data.logs || []).map(l => `
                 <tr>
                     <td>${l.created_at}</td>
                     <td>${l.username || 'Unknown'}</td>
-                    <td>${(l.prompt || '').substring(0, 100)}${l.prompt && l.prompt.length > 100 ? '...' : ''}</td>
+                    <td>${l.menu_name}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 다운로드 로그
+        async function loadDownloadLogs() {
+            const response = await fetch('/api/admin/download-logs');
+            const data = await response.json();
+            document.getElementById('downloadLogsTable').innerHTML = (data.logs || []).map(l => `
+                <tr>
+                    <td>${l.created_at}</td>
+                    <td>${l.username || 'Unknown'}</td>
+                    <td>${l.file_type}</td>
+                    <td>${l.file_name}</td>
+                </tr>
+            `).join('');
+        }
+
+        // AI 로그
+        async function loadAiLogs() {
+            const response = await fetch('/api/admin/ai-logs');
+            const data = await response.json();
+            document.getElementById('aiLogsTable').innerHTML = (data.logs || []).map(l => `
+                <tr>
+                    <td>${l.created_at}</td>
+                    <td>${l.username || 'Unknown'}</td>
+                    <td>${(l.prompt || '').substring(0, 100)}${l.prompt?.length > 100 ? '...' : ''}</td>
                     <td>${l.response_length || 0}</td>
                     <td>${l.tokens_used || 0}</td>
                 </tr>
             `).join('');
         }
 
+        // 설정 로드
+        async function loadSettings() {
+            const response = await fetch('/api/admin/teams');
+            const data = await response.json();
+            teamsData = data.teams || [];
+            document.getElementById('teamsTable').innerHTML = teamsData.map(t => `
+                <tr>
+                    <td>${t.name}</td>
+                    <td>${t.category}</td>
+                    <td>${t.track_details ? '✅' : '❌'}</td>
+                    <td><button class="btn btn-sm btn-primary" onclick="editTeam(${t.id})">수정</button></td>
+                </tr>
+            `).join('');
+        }
+
+        // 권한 로드
+        async function loadPermissions() {
+            const response = await fetch('/api/admin/permission-groups');
+            const data = await response.json();
+            document.getElementById('permissionGroups').innerHTML = (data.groups || []).map(g => `
+                <div class="goal-card" onclick="selectPermissionGroup(${g.id})">
+                    <div class="goal-header">
+                        <span class="goal-title">${g.name}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748b;">${g.description}</div>
+                </div>
+            `).join('');
+        }
+
+        // 모달
+        function showGoalModal() { document.getElementById('goalModal').classList.add('show'); }
         function showAddUserModal() {
-            document.getElementById('addUserModal').style.display = 'flex';
+            document.getElementById('userModalTitle').textContent = '사용자 추가';
+            document.getElementById('editUserId').value = '';
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newName').value = '';
+            document.getElementById('newEmail').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('userModal').classList.add('show');
         }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
-        function closeModal() {
-            document.getElementById('addUserModal').style.display = 'none';
-        }
-
-        async function addUser(e) {
+        // 목표 저장
+        async function saveGoal(e) {
             e.preventDefault();
-            const response = await fetch('/api/admin/users', {
+            const data = {
+                goal_type: document.getElementById('goalType').value,
+                target_id: document.getElementById('goalTarget')?.value || null,
+                inspection_purpose: document.getElementById('goalInspectionPurpose').value,
+                target_sales: parseFloat(document.getElementById('goalSales').value) || 0,
+                target_count: parseInt(document.getElementById('goalCount').value) || 0,
+                year: parseInt(document.getElementById('goalSetYear').value),
+                month: document.getElementById('goalMonth').value ? parseInt(document.getElementById('goalMonth').value) : null
+            };
+            await fetch('/api/admin/goals', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: document.getElementById('newUsername').value,
-                    name: document.getElementById('newName').value,
-                    password: document.getElementById('newPassword').value,
-                    role: document.getElementById('newRole').value
-                })
+                body: JSON.stringify(data)
             });
-            const data = await response.json();
-            if (data.success) {
-                closeModal();
+            closeModal('goalModal');
+            loadGoals();
+            return false;
+        }
+
+        async function deleteGoal(id) {
+            if (!confirm('삭제하시겠습니까?')) return;
+            await fetch(`/api/admin/goals/${id}`, { method: 'DELETE' });
+            loadGoals();
+        }
+
+        // 사용자 저장
+        async function saveUser(e) {
+            e.preventDefault();
+            const userId = document.getElementById('editUserId').value;
+            const data = {
+                username: document.getElementById('newUsername').value,
+                name: document.getElementById('newName').value,
+                email: document.getElementById('newEmail').value,
+                password: document.getElementById('newPassword').value,
+                team_id: document.getElementById('newTeam').value || null,
+                role: document.getElementById('newRole').value
+            };
+            const url = userId ? `/api/admin/users/${userId}` : '/api/admin/users';
+            const method = userId ? 'PUT' : 'POST';
+            const result = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const res = await result.json();
+            if (res.success) {
+                closeModal('userModal');
                 loadUsers();
             } else {
-                alert(data.error);
+                alert(res.error);
             }
             return false;
+        }
+
+        function editUser(id) {
+            const user = usersData.find(u => u.id === id);
+            if (!user) return;
+            document.getElementById('userModalTitle').textContent = '사용자 수정';
+            document.getElementById('editUserId').value = id;
+            document.getElementById('newUsername').value = user.username;
+            document.getElementById('newName').value = user.name || '';
+            document.getElementById('newEmail').value = user.email || '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('newTeam').value = user.team_id || '';
+            document.getElementById('newRole').value = user.role;
+            document.getElementById('userModal').classList.add('show');
+        }
+
+        async function resetPassword(id) {
+            if (!confirm('비밀번호를 초기화하시겠습니까?\\n새 비밀번호: 1234')) return;
+            await fetch(`/api/admin/users/${id}/reset-password`, { method: 'POST' });
+            alert('비밀번호가 1234로 초기화되었습니다.');
         }
 
         async function toggleUserStatus(userId, status) {
@@ -2716,13 +3296,28 @@ ADMIN_TEMPLATE = '''
             loadUsers();
         }
 
-        async function deleteUser(userId) {
-            if (!confirm('정말 삭제하시겠습니까?')) return;
-            await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
-            loadUsers();
+        function updateGoalTarget() {
+            const type = document.getElementById('goalType').value;
+            const targetGroup = document.getElementById('goalTargetGroup');
+            const targetSelect = document.getElementById('goalTarget');
+            if (type === 'overall') {
+                targetGroup.style.display = 'none';
+            } else {
+                targetGroup.style.display = 'block';
+                if (type === 'team') {
+                    targetSelect.innerHTML = teamsData.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                } else {
+                    targetSelect.innerHTML = usersData.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+                }
+            }
+        }
+
+        function filterUsers() {
+            // 간단한 필터링
         }
 
         // 초기 로드
+        loadGoals();
         loadUsers();
     </script>
 </body>
@@ -22823,7 +23418,13 @@ def api_admin_users():
     if request.method == 'GET':
         conn = get_user_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, name, role, status, last_login FROM users ORDER BY id")
+        cursor.execute('''
+            SELECT u.id, u.username, u.name, u.email, u.team_id, u.role, u.status, u.last_login,
+                   t.name as team_name
+            FROM users u
+            LEFT JOIN teams t ON u.team_id = t.id
+            ORDER BY u.id
+        ''')
         users = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return jsonify({'users': users})
@@ -22833,6 +23434,8 @@ def api_admin_users():
         username = data.get('username', '').strip()
         name = data.get('name', '').strip()
         password = data.get('password', '')
+        email = data.get('email', '').strip()
+        team_id = data.get('team_id')
         role = data.get('role', 'user')
 
         if not username or not password:
@@ -22844,8 +23447,8 @@ def api_admin_users():
             conn = get_user_db()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)",
-                (username, password_hash, name, role)
+                "INSERT INTO users (username, password_hash, name, email, team_id, role) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, password_hash, name, email, team_id, role)
             )
             conn.commit()
             conn.close()
@@ -22899,6 +23502,208 @@ def api_admin_ai_logs():
         SELECT l.*, u.username FROM ai_logs l
         LEFT JOIN users u ON l.user_id = u.id
         ORDER BY l.created_at DESC LIMIT 100
+    ''')
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'logs': logs})
+
+@app.route('/api/admin/users/<int:user_id>', methods=['PUT'])
+@admin_required
+def api_admin_update_user(user_id):
+    """사용자 정보 수정"""
+    data = request.get_json()
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    updates = []
+    params = []
+
+    if data.get('name'):
+        updates.append('name = ?')
+        params.append(data['name'])
+    if data.get('email'):
+        updates.append('email = ?')
+        params.append(data['email'])
+    if data.get('team_id'):
+        updates.append('team_id = ?')
+        params.append(data['team_id'])
+    if data.get('role'):
+        updates.append('role = ?')
+        params.append(data['role'])
+    if data.get('password'):
+        updates.append('password_hash = ?')
+        params.append(hashlib.sha256(data['password'].encode()).hexdigest())
+
+    if updates:
+        params.append(user_id)
+        cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/users/<int:user_id>/reset-password', methods=['POST'])
+@admin_required
+def api_admin_reset_password(user_id):
+    """비밀번호 초기화"""
+    new_password = hashlib.sha256("1234".encode()).hexdigest()
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_password, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/teams', methods=['GET', 'POST'])
+@admin_required
+def api_admin_teams():
+    """팀 목록/추가"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute("SELECT * FROM teams ORDER BY id")
+        teams = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'teams': teams})
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        cursor.execute(
+            "INSERT INTO teams (name, category, parent_id, track_details) VALUES (?, ?, ?, ?)",
+            (data.get('name'), data.get('category'), data.get('parent_id'), data.get('track_details', 0))
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+@app.route('/api/admin/goals', methods=['GET', 'POST'])
+@admin_required
+def api_admin_goals():
+    """목표 목록/추가"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        year = request.args.get('year', '2025')
+        purpose = request.args.get('purpose', '전체')
+        goal_type = request.args.get('type', 'overall')
+
+        query = '''
+            SELECT g.*,
+                   CASE WHEN g.goal_type = 'team' THEN t.name
+                        WHEN g.goal_type = 'individual' THEN u.name
+                        ELSE '전체' END as target_name
+            FROM goals g
+            LEFT JOIN teams t ON g.goal_type = 'team' AND g.target_id = t.id
+            LEFT JOIN users u ON g.goal_type = 'individual' AND g.target_id = u.id
+            WHERE g.year = ?
+        '''
+        params = [year]
+
+        if purpose != '전체':
+            query += ' AND g.inspection_purpose = ?'
+            params.append(purpose)
+
+        if goal_type != 'all':
+            query += ' AND g.goal_type = ?'
+            params.append(goal_type)
+
+        query += ' ORDER BY g.id DESC'
+        cursor.execute(query, params)
+        goals = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'goals': goals})
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        cursor.execute('''
+            INSERT INTO goals (year, month, goal_type, target_id, inspection_purpose, target_sales, target_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('year'),
+            data.get('month'),
+            data.get('goal_type'),
+            data.get('target_id'),
+            data.get('inspection_purpose'),
+            data.get('target_sales', 0),
+            data.get('target_count', 0)
+        ))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+@app.route('/api/admin/goals/<int:goal_id>', methods=['PUT', 'DELETE'])
+@admin_required
+def api_admin_goal(goal_id):
+    """목표 수정/삭제"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    if request.method == 'DELETE':
+        cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        cursor.execute('''
+            UPDATE goals SET target_sales = ?, target_count = ?, inspection_purpose = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (data.get('target_sales'), data.get('target_count'), data.get('inspection_purpose'), goal_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+@app.route('/api/admin/permission-groups', methods=['GET', 'POST'])
+@admin_required
+def api_admin_permission_groups():
+    """권한 그룹 목록/추가"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute("SELECT * FROM permission_groups ORDER BY id")
+        groups = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'groups': groups})
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        cursor.execute(
+            "INSERT INTO permission_groups (name, description) VALUES (?, ?)",
+            (data.get('name'), data.get('description'))
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+@app.route('/api/admin/menu-logs')
+@admin_required
+def api_admin_menu_logs():
+    """메뉴 접근 로그"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT m.*, u.username FROM menu_logs m
+        LEFT JOIN users u ON m.user_id = u.id
+        ORDER BY m.created_at DESC LIMIT 100
+    ''')
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'logs': logs})
+
+@app.route('/api/admin/download-logs')
+@admin_required
+def api_admin_download_logs():
+    """다운로드 로그"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT d.*, u.username FROM download_logs d
+        LEFT JOIN users u ON d.user_id = u.id
+        ORDER BY d.created_at DESC LIMIT 100
     ''')
     logs = [dict(row) for row in cursor.fetchall()]
     conn.close()

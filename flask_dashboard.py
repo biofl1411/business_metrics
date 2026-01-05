@@ -548,68 +548,76 @@ def convert_excel_to_sqlite():
         # 기본 데이터 변환
         data_path = DATA_DIR / str(year)
         if data_path.exists():
+            # 먼저 변환이 필요한 파일 목록 확인
+            files_to_convert = []
             for f in sorted(data_path.glob("*.xlsx")):
                 file_path = str(f)
                 current_mtime = f.stat().st_mtime
 
-                # 이미 변환된 파일인지 확인
                 cursor.execute('SELECT mtime FROM file_metadata WHERE file_path = ?', (file_path,))
                 row = cursor.fetchone()
                 if row and row[0] >= current_mtime:
                     print(f"[SQLITE] {f.name} 스킵 (이미 최신)")
                     continue
+                files_to_convert.append((f, file_path, current_mtime))
 
-                # 기존 데이터 삭제 후 재삽입
-                cursor.execute('DELETE FROM excel_data WHERE year = ? AND raw_data LIKE ?',
-                              (year, f'%{f.name}%'))
+            # 변환할 파일이 있으면 해당 연도 데이터 전체 삭제 후 재로드
+            if files_to_convert:
+                cursor.execute('DELETE FROM excel_data WHERE year = ?', (year,))
+                print(f"[SQLITE] {year}년 데이터 삭제 후 전체 재변환")
 
-                try:
-                    wb = load_workbook(f, read_only=True, data_only=True)
-                    ws = wb.active
-                    headers = [cell.value for cell in ws[1]]
+                # 모든 파일 처리 (변환 필요 여부와 관계없이 전체 로드)
+                for f in sorted(data_path.glob("*.xlsx")):
+                    file_path = str(f)
+                    current_mtime = f.stat().st_mtime
 
-                    batch = []
-                    for row_data in ws.iter_rows(min_row=2, values_only=True):
-                        row_dict = dict(zip(headers, row_data))
-                        batch.append((
-                            year,
-                            str(row_dict.get('접수번호', '')),
-                            str(row_dict.get('접수일자', '')),
-                            str(row_dict.get('발행일', '')),
-                            str(row_dict.get('검체유형', '')),
-                            str(row_dict.get('업체명', '')),
-                            str(row_dict.get('의뢰인명', '')),
-                            str(row_dict.get('업체주소', '')),
-                            str(row_dict.get('영업담당', '')),
-                            str(row_dict.get('검사목적', '')),
-                            float(row_dict.get('총금액', 0) or 0),
-                            str(row_dict.get('시험분야', '')),
-                            str(row_dict.get('입금일', '')),
-                            str(row_dict.get('입금여부', '')),
-                            str(row_dict.get('검사구분', '')),
-                            str(row_dict.get('입금구분', '')),
-                            str(row_dict.get('업체분류', '')),
-                            json.dumps(row_dict, ensure_ascii=False, default=str)
-                        ))
+                    try:
+                        wb = load_workbook(f, read_only=True, data_only=True)
+                        ws = wb.active
+                        headers = [cell.value for cell in ws[1]]
 
-                    cursor.executemany('''
-                        INSERT INTO excel_data
-                        (year, 접수번호, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 영업담당, 검사목적, 총금액, 시험분야, 입금일, 입금여부, 검사구분, 입금구분, 업체분류, raw_data)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', batch)
+                        batch = []
+                        for row_data in ws.iter_rows(min_row=2, values_only=True):
+                            row_dict = dict(zip(headers, row_data))
+                            batch.append((
+                                year,
+                                str(row_dict.get('접수번호', '')),
+                                str(row_dict.get('접수일자', '')),
+                                str(row_dict.get('발행일', '')),
+                                str(row_dict.get('검체유형', '')),
+                                str(row_dict.get('업체명', '')),
+                                str(row_dict.get('의뢰인명', '')),
+                                str(row_dict.get('업체주소', '')),
+                                str(row_dict.get('영업담당', '')),
+                                str(row_dict.get('검사목적', '')),
+                                float(row_dict.get('총금액', 0) or 0),
+                                str(row_dict.get('시험분야', '')),
+                                str(row_dict.get('입금일', '')),
+                                str(row_dict.get('입금여부', '')),
+                                str(row_dict.get('검사구분', '')),
+                                str(row_dict.get('입금구분', '')),
+                                str(row_dict.get('업체분류', '')),
+                                json.dumps(row_dict, ensure_ascii=False, default=str)
+                            ))
 
-                    # 메타데이터 업데이트
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
-                        VALUES (?, ?, ?)
-                    ''', (file_path, current_mtime, len(batch)))
+                        cursor.executemany('''
+                            INSERT INTO excel_data
+                            (year, 접수번호, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 영업담당, 검사목적, 총금액, 시험분야, 입금일, 입금여부, 검사구분, 입금구분, 업체분류, raw_data)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', batch)
 
-                    wb.close()
-                    total_records += len(batch)
-                    print(f"[SQLITE] {f.name}: {len(batch)}건 변환")
+                        # 메타데이터 업데이트
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
+                            VALUES (?, ?, ?)
+                        ''', (file_path, current_mtime, len(batch)))
 
-                except Exception as e:
-                    print(f"[SQLITE ERROR] {f.name}: {e}")
+                        wb.close()
+                        total_records += len(batch)
+                        print(f"[SQLITE] {f.name}: {len(batch)}건 변환")
+
+                    except Exception as e:
+                        print(f"[SQLITE ERROR] {f.name}: {e}")
 
         # food_item 데이터 변환
         food_path = DATA_DIR / "food_item" / str(year)

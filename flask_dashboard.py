@@ -447,6 +447,8 @@ def convert_excel_to_sqlite():
         # food_item 데이터 변환
         food_path = DATA_DIR / "food_item" / str(year)
         if food_path.exists():
+            # 변환이 필요한 파일 목록 수집
+            files_to_convert = []
             for f in sorted(food_path.glob("*.xlsx")):
                 file_path = str(f)
                 current_mtime = f.stat().st_mtime
@@ -456,76 +458,83 @@ def convert_excel_to_sqlite():
                 if row and row[0] >= current_mtime:
                     print(f"[SQLITE] food_item {f.name} 스킵 (이미 최신)")
                     continue
+                files_to_convert.append((f, file_path, current_mtime))
 
-                # 파일명 기반으로 삭제 (월별 데이터)
-                month = f.stem.split('_')[-1] if '_' in f.stem else f.stem
+            # 변환할 파일이 있으면 해당 연도 데이터 삭제 후 전체 재로드
+            if files_to_convert:
                 cursor.execute('DELETE FROM food_item_data WHERE year = ?', (year,))
+                print(f"[SQLITE] food_item {year}년 데이터 삭제 후 재변환")
 
-                try:
-                    wb = load_workbook(f, read_only=True, data_only=True)
-                    ws = wb.active
-                    headers = [cell.value for cell in ws[1]]
+                # 모든 파일 처리 (변환 필요 여부와 관계없이 전체 로드)
+                for f in sorted(food_path.glob("*.xlsx")):
+                    file_path = str(f)
+                    current_mtime = f.stat().st_mtime
 
-                    required_columns = ['접수일자', '발행일', '검체유형', '업체명', '의뢰인명', '업체주소',
-                                       '항목명', '규격', '항목담당', '결과입력자', '입력일', '분석일',
-                                       '항목단위', '시험결과', '시험치', '성적서결과', '판정', '검사목적',
-                                       '긴급여부', '항목수수료', '영업담당']
+                    try:
+                        wb = load_workbook(f, read_only=True, data_only=True)
+                        ws = wb.active
+                        headers = [cell.value for cell in ws[1]]
 
-                    col_indices = {}
-                    for i, h in enumerate(headers):
-                        if h in required_columns:
-                            col_indices[h] = i
+                        required_columns = ['접수일자', '발행일', '검체유형', '업체명', '의뢰인명', '업체주소',
+                                           '항목명', '규격', '항목담당', '결과입력자', '입력일', '분석일',
+                                           '항목단위', '시험결과', '시험치', '성적서결과', '판정', '검사목적',
+                                           '긴급여부', '항목수수료', '영업담당']
 
-                    batch = []
-                    for row_data in ws.iter_rows(min_row=2, values_only=True):
-                        row_dict = {}
-                        for col_name, idx in col_indices.items():
-                            row_dict[col_name] = row_data[idx] if idx < len(row_data) else None
+                        col_indices = {}
+                        for i, h in enumerate(headers):
+                            if h in required_columns:
+                                col_indices[h] = i
 
-                        batch.append((
-                            year,
-                            str(row_dict.get('접수일자', '') or ''),
-                            str(row_dict.get('발행일', '') or ''),
-                            str(row_dict.get('검체유형', '') or ''),
-                            str(row_dict.get('업체명', '') or ''),
-                            str(row_dict.get('의뢰인명', '') or ''),
-                            str(row_dict.get('업체주소', '') or ''),
-                            str(row_dict.get('항목명', '') or ''),
-                            str(row_dict.get('규격', '') or ''),
-                            str(row_dict.get('항목담당', '') or ''),
-                            str(row_dict.get('결과입력자', '') or ''),
-                            str(row_dict.get('입력일', '') or ''),
-                            str(row_dict.get('분석일', '') or ''),
-                            str(row_dict.get('항목단위', '') or ''),
-                            str(row_dict.get('시험결과', '') or ''),
-                            str(row_dict.get('시험치', '') or ''),
-                            str(row_dict.get('성적서결과', '') or ''),
-                            str(row_dict.get('판정', '') or ''),
-                            str(row_dict.get('검사목적', '') or ''),
-                            str(row_dict.get('긴급여부', '') or ''),
-                            float(row_dict.get('항목수수료', 0) or 0),
-                            str(row_dict.get('영업담당', '') or '')
-                        ))
+                        batch = []
+                        for row_data in ws.iter_rows(min_row=2, values_only=True):
+                            row_dict = {}
+                            for col_name, idx in col_indices.items():
+                                row_dict[col_name] = row_data[idx] if idx < len(row_data) else None
 
-                    cursor.executemany('''
-                        INSERT INTO food_item_data
-                        (year, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 항목명, 규격,
-                         항목담당, 결과입력자, 입력일, 분석일, 항목단위, 시험결과, 시험치, 성적서결과,
-                         판정, 검사목적, 긴급여부, 항목수수료, 영업담당)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', batch)
+                            batch.append((
+                                year,
+                                str(row_dict.get('접수일자', '') or ''),
+                                str(row_dict.get('발행일', '') or ''),
+                                str(row_dict.get('검체유형', '') or ''),
+                                str(row_dict.get('업체명', '') or ''),
+                                str(row_dict.get('의뢰인명', '') or ''),
+                                str(row_dict.get('업체주소', '') or ''),
+                                str(row_dict.get('항목명', '') or ''),
+                                str(row_dict.get('규격', '') or ''),
+                                str(row_dict.get('항목담당', '') or ''),
+                                str(row_dict.get('결과입력자', '') or ''),
+                                str(row_dict.get('입력일', '') or ''),
+                                str(row_dict.get('분석일', '') or ''),
+                                str(row_dict.get('항목단위', '') or ''),
+                                str(row_dict.get('시험결과', '') or ''),
+                                str(row_dict.get('시험치', '') or ''),
+                                str(row_dict.get('성적서결과', '') or ''),
+                                str(row_dict.get('판정', '') or ''),
+                                str(row_dict.get('검사목적', '') or ''),
+                                str(row_dict.get('긴급여부', '') or ''),
+                                float(row_dict.get('항목수수료', 0) or 0),
+                                str(row_dict.get('영업담당', '') or '')
+                            ))
 
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
-                        VALUES (?, ?, ?)
-                    ''', (file_path, current_mtime, len(batch)))
+                        cursor.executemany('''
+                            INSERT INTO food_item_data
+                            (year, 접수일자, 발행일, 검체유형, 업체명, 의뢰인명, 업체주소, 항목명, 규격,
+                             항목담당, 결과입력자, 입력일, 분석일, 항목단위, 시험결과, 시험치, 성적서결과,
+                             판정, 검사목적, 긴급여부, 항목수수료, 영업담당)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', batch)
 
-                    wb.close()
-                    total_records += len(batch)
-                    print(f"[SQLITE] food_item {f.name}: {len(batch)}건 변환")
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO file_metadata (file_path, mtime, row_count)
+                            VALUES (?, ?, ?)
+                        ''', (file_path, current_mtime, len(batch)))
 
-                except Exception as e:
-                    print(f"[SQLITE ERROR] food_item {f.name}: {e}")
+                        wb.close()
+                        total_records += len(batch)
+                        print(f"[SQLITE] food_item {f.name}: {len(batch)}건 변환")
+
+                    except Exception as e:
+                        print(f"[SQLITE ERROR] food_item {f.name}: {e}")
 
     conn.commit()
     conn.close()

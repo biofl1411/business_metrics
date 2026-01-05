@@ -3199,7 +3199,19 @@ ADMIN_TEMPLATE = '''
         }
 
         // 모달
-        function showGoalModal() { document.getElementById('goalModal').classList.add('show'); }
+        async function showGoalModal() {
+            // 검사목적 옵션 동적 로드
+            try {
+                const res = await fetch('/api/purposes');
+                const data = await res.json();
+                const select = document.getElementById('goalInspectionPurpose');
+                select.innerHTML = '<option value="전체">전체</option>' +
+                    (data.purposes || []).map(p => `<option value="${p}">${p}</option>`).join('');
+            } catch (e) {
+                console.error('검사목적 로드 실패:', e);
+            }
+            document.getElementById('goalModal').classList.add('show');
+        }
         function showAddUserModal() {
             document.getElementById('userModalTitle').textContent = '사용자 추가';
             document.getElementById('editUserId').value = '';
@@ -3315,6 +3327,48 @@ ADMIN_TEMPLATE = '''
 
         function filterUsers() {
             // 간단한 필터링
+        }
+
+        // 팀 수정
+        function editTeam(teamId) {
+            const team = teamsData.find(t => t.id === teamId);
+            if (!team) return;
+            const newName = prompt('팀명:', team.name);
+            if (newName && newName !== team.name) {
+                fetch(`/api/admin/teams/${teamId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                }).then(() => loadSettings());
+            }
+        }
+
+        // 권한 그룹 선택
+        let selectedPermissionGroup = null;
+        function selectPermissionGroup(groupId) {
+            selectedPermissionGroup = groupId;
+            document.querySelectorAll('#permissionGroups .goal-card').forEach(card => {
+                card.style.border = '1px solid #e2e8f0';
+            });
+            event.currentTarget.style.border = '2px solid #6366f1';
+            loadPermissionSettings(groupId);
+        }
+
+        async function loadPermissionSettings(groupId) {
+            try {
+                const response = await fetch(`/api/admin/permission-groups/${groupId}`);
+                const data = await response.json();
+                if (data.group) {
+                    // 권한 설정 UI 업데이트
+                    const g = data.group;
+                    document.getElementById('permDataScope').value = g.data_scope || 'team';
+                    document.getElementById('permCanEdit').checked = g.can_edit || false;
+                    document.getElementById('permCanDelete').checked = g.can_delete || false;
+                    document.getElementById('permCanExport').checked = g.can_export || false;
+                }
+            } catch (e) {
+                console.error('권한 설정 로드 실패:', e);
+            }
         }
 
         // 초기 로드
@@ -23669,6 +23723,19 @@ def api_admin_reset_password(user_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+@app.route('/api/purposes')
+@login_required
+def api_purposes():
+    """검사목적 목록 반환"""
+    try:
+        summary = get_ai_summary_data()
+        purposes = summary.get('filter_values', {}).get('purposes', [])
+        # 접수취소 제외
+        purposes = [p for p in purposes if p != '접수취소']
+        return jsonify({'purposes': purposes})
+    except Exception as e:
+        return jsonify({'purposes': [], 'error': str(e)})
 
 @app.route('/api/admin/teams', methods=['GET', 'POST'])
 @admin_required

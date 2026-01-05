@@ -24400,13 +24400,13 @@ def preload_data():
         else:
             print("[PRELOAD] SQLite DB 최신 상태 유지")
 
-        # SQLite에서 빠르게 로드
+        # SQLite에서 빠르게 로드 (기본 데이터만, food_item은 필요시 로드)
         for year in ['2024', '2025']:
             load_excel_data(year)
-            load_food_item_data(year)
+            # load_food_item_data(year)  # 메모리 절약: 필요시 로드
 
-        # AI 요약 캐시 생성
-        get_ai_data_summary(force_refresh=True)
+        # AI 요약 캐시 생성 (스킵 - 메모리 절약)
+        # get_ai_data_summary(force_refresh=True)
 
         elapsed = time.time() - start_time
         print(f"[PRELOAD] SQLite 로드 완료! ({elapsed:.1f}초)")

@@ -1449,8 +1449,14 @@ def extract_region(address):
 
     return sido, sigungu
 
-def process_data(data, purpose_filter=None):
-    """데이터 처리"""
+def process_data(data, purpose_filter=None, prev_year_clients=None):
+    """데이터 처리
+
+    Args:
+        data: 처리할 데이터 목록
+        purpose_filter: 검사목적 필터 (옵션)
+        prev_year_clients: 전년도 거래처 목록 (신규/기존 판단용)
+    """
     by_manager = {}
     by_branch = {}
     by_month = {}
@@ -2042,51 +2048,48 @@ def process_data(data, purpose_filter=None):
             for p, d in sorted_stp[:20]
         ]
 
-    # 지사별 월별 거래처 중복률 계산
+    # 지사별 월별 거래처 중복률 계산 (전년도 기준)
     branch_client_retention = {}
     for branch, month_clients in by_branch_month_clients.items():
         months = sorted(month_clients.keys())
         retention_data = []
-        all_clients = set()
+        # 전년도 거래처로 초기화
+        all_clients = set(prev_year_clients) if prev_year_clients else set()
         for month in months:
             clients = month_clients[month]
-            # 이전 달과의 중복률 계산
-            if all_clients:
-                overlap = len(clients & all_clients)
-                retention_rate = (overlap / len(all_clients) * 100) if all_clients else 0
-            else:
-                overlap = 0
-                retention_rate = 0
+            # 기존 거래처: 전년도 또는 이전 월에 거래한 적 있는 거래처
+            overlap = len(clients & all_clients)
+            new_clients = len(clients - all_clients)
+            retention_rate = (overlap / len(all_clients) * 100) if all_clients else 0
             retention_data.append({
                 'month': month,
                 'total': len(clients),
                 'overlap': overlap,
                 'retention': round(retention_rate, 1),
-                'new': len(clients - all_clients) if all_clients else len(clients)
+                'new': new_clients
             })
             all_clients.update(clients)
         branch_client_retention[branch] = retention_data
 
-    # 목적별 월별 거래처 중복률 계산
+    # 목적별 월별 거래처 중복률 계산 (전년도 기준)
     purpose_client_retention = {}
     for purpose, month_clients in purpose_month_clients.items():
         months = sorted(month_clients.keys())
         retention_data = []
-        all_clients = set()
+        # 전년도 거래처로 초기화
+        all_clients = set(prev_year_clients) if prev_year_clients else set()
         for month in months:
             clients = month_clients[month]
-            if all_clients:
-                overlap = len(clients & all_clients)
-                retention_rate = (overlap / len(all_clients) * 100) if all_clients else 0
-            else:
-                overlap = 0
-                retention_rate = 0
+            # 기존 거래처: 전년도 또는 이전 월에 거래한 적 있는 거래처
+            overlap = len(clients & all_clients)
+            new_clients = len(clients - all_clients)
+            retention_rate = (overlap / len(all_clients) * 100) if all_clients else 0
             retention_data.append({
                 'month': month,
                 'total': len(clients),
                 'overlap': overlap,
                 'retention': round(retention_rate, 1),
-                'new': len(clients - all_clients) if all_clients else len(clients)
+                'new': new_clients
             })
             all_clients.update(clients)
         purpose_client_retention[purpose] = retention_data
@@ -2100,22 +2103,26 @@ def process_data(data, purpose_filter=None):
             all_month_clients[month].update(clients)
 
     total_retention = []
-    cumulative_clients = set()
+    # 전년도 거래처가 있으면 기존 거래처 기준으로 사용
+    cumulative_clients = set(prev_year_clients) if prev_year_clients else set()
+    prev_year_base = set(prev_year_clients) if prev_year_clients else set()
+
     for month in sorted(all_month_clients.keys()):
         clients = all_month_clients[month]
-        if cumulative_clients:
-            overlap = len(clients & cumulative_clients)
-            retention_rate = (overlap / len(cumulative_clients) * 100) if cumulative_clients else 0
-        else:
-            overlap = 0
-            retention_rate = 0
+        # 기존 거래처: 전년도 또는 이전 월에 거래한 적 있는 거래처
+        overlap = len(clients & cumulative_clients)
+        # 신규 거래처: 전년도에도 없고 올해 이전 월에도 없는 거래처
+        new_clients = len(clients - cumulative_clients)
+        retention_rate = (overlap / len(cumulative_clients) * 100) if cumulative_clients else 0
+
         total_retention.append({
             'month': month,
             'total': len(clients),
             'overlap': overlap,
             'retention': round(retention_rate, 1),
-            'new': len(clients - cumulative_clients) if cumulative_clients else len(clients),
-            'cumulative': len(cumulative_clients | clients)
+            'new': new_clients,
+            'cumulative': len(cumulative_clients | clients),
+            'prev_year_overlap': len(clients & prev_year_base) if prev_year_base else 0  # 전년도 대비 유지 거래처
         })
         cumulative_clients.update(clients)
 
@@ -2177,6 +2184,7 @@ def process_data(data, purpose_filter=None):
         'branch_client_retention': branch_client_retention,
         'total_client_retention': total_retention,
         'purpose_client_retention': purpose_client_retention,
+        'prev_year_client_count': len(prev_year_clients) if prev_year_clients else 0,
         'by_department': by_department,
         'total_sales': total_sales,
         'total_count': total_count,
@@ -23009,11 +23017,25 @@ def get_data():
 
     print(f"[API] 로드된 원본 데이터: {len(all_data)}건")
 
+    # 전년도 거래처 목록 추출 (신규/기존 판단용)
+    prev_year_clients = set()
+    try:
+        prev_year = str(int(year) - 1)
+        prev_year_data = load_excel_data(prev_year)
+        if prev_year_data:
+            for row in prev_year_data:
+                client = str(row.get('거래처', '') or '').strip()
+                if client:
+                    prev_year_clients.add(client)
+            print(f"[API] 전년도({prev_year}) 거래처: {len(prev_year_clients)}개")
+    except Exception as e:
+        print(f"[API] 전년도 데이터 로드 실패: {e}")
+
     # 날짜 필터링 적용
     filtered_data = filter_data_by_date(all_data, year, month, day, end_year, end_month, end_day)
     print(f"[API] 날짜 필터링 후 데이터: {len(filtered_data)}건")
 
-    processed = process_data(filtered_data, purpose)
+    processed = process_data(filtered_data, purpose, prev_year_clients if prev_year_clients else None)
     print(f"[API] 처리 완료: total_count={processed['total_count']}")
     return jsonify(processed)
 

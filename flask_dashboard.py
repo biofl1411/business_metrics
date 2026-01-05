@@ -5,17 +5,184 @@
 - 연도 비교, 검사목적 필터, 업체별 분석, 부적합항목 분석
 - AI 분석 (Google Gemini API)
 """
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, redirect, make_response
 import os
 import time
+import sqlite3
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import subprocess
 import secrets
 import hashlib
+from functools import wraps
 
 app = Flask(__name__)
+
+# ============ 로그인/인증 시스템 ============
+USER_SESSIONS = {}  # session_id -> {user_id, username, role, login_time, last_activity}
+
+def get_user_db():
+    """사용자 데이터베이스 연결"""
+    db_path = Path(__file__).resolve().parent / "data" / "users.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_user_db():
+    """사용자 데이터베이스 초기화"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    # 사용자 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name TEXT,
+            role TEXT DEFAULT 'user',
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP
+        )
+    ''')
+
+    # 활동 로그 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT,
+            details TEXT,
+            ip_address TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # 메뉴 접근 로그 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS menu_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            menu_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # AI 분석 로그 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            prompt TEXT,
+            response_length INTEGER,
+            tokens_used INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # 기본 관리자 계정 생성 (없는 경우만)
+    cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+    if not cursor.fetchone():
+        admin_password = hashlib.sha256("admin123".encode()).hexdigest()
+        cursor.execute(
+            "INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)",
+            ("admin", admin_password, "관리자", "admin")
+        )
+
+    conn.commit()
+    conn.close()
+
+# 앱 시작 시 사용자 DB 초기화
+init_user_db()
+
+def verify_user_session(session_id):
+    """세션 유효성 검증"""
+    if not session_id or session_id not in USER_SESSIONS:
+        return None
+
+    session = USER_SESSIONS[session_id]
+    # 8시간 후 세션 만료
+    if datetime.now() - session['login_time'] > timedelta(hours=8):
+        del USER_SESSIONS[session_id]
+        return None
+
+    session['last_activity'] = datetime.now()
+    return session
+
+def login_required(f):
+    """로그인 필수 데코레이터"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        session = verify_user_session(session_id)
+        if not session:
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Unauthorized', 'logged_in': False}), 401
+            return redirect('/login')
+        request.user_session = session
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    """관리자 권한 필수 데코레이터"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        session = verify_user_session(session_id)
+        if not session or session.get('role') != 'admin':
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Admin access required'}), 403
+            return redirect('/login')
+        request.user_session = session
+        return f(*args, **kwargs)
+    return decorated_function
+
+def log_user_activity(user_id, action, details=None, ip_address=None):
+    """사용자 활동 기록"""
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO user_activity (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
+            (user_id, action, details, ip_address)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Activity log error: {e}")
+
+def log_menu_access(user_id, menu_name):
+    """메뉴 접근 기록"""
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO menu_logs (user_id, menu_name) VALUES (?, ?)",
+            (user_id, menu_name)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Menu log error: {e}")
+
+def log_ai_analysis(user_id, prompt, response_length=0, tokens_used=0):
+    """AI 분석 기록"""
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO ai_logs (user_id, prompt, response_length, tokens_used) VALUES (?, ?, ?, ?)",
+            (user_id, prompt, response_length, tokens_used)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"AI log error: {e}")
 
 # 터미널 인증 설정
 TERMINAL_PASSWORD = "biofl2024"  # 터미널 접속 비밀번호
@@ -1982,6 +2149,527 @@ def process_data(data, purpose_filter=None):
         ][:100]  # 상위 100개만
     }
 
+# ============ 로그인 페이지 템플릿 ============
+LOGIN_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인 - 실적 분석 시스템</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 50px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .logo-container {
+            margin-bottom: 30px;
+        }
+        .logo-container img {
+            max-width: 200px;
+            height: auto;
+        }
+        .program-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1a1a2e;
+            margin-bottom: 30px;
+        }
+        .login-form { width: 100%; }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #0f3460;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(15, 52, 96, 0.4);
+        }
+        .error-msg {
+            color: #e74c3c;
+            margin-top: 15px;
+            display: none;
+        }
+        .copyright {
+            margin-top: 40px;
+            color: #888;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo-container">
+            <img src="https://www.biofl.co.kr/wp-content/uploads/2024/01/logo-10th-bfl.png" alt="BFL Logo" onerror="this.style.display='none'">
+        </div>
+        <h1 class="program-title">실적 분석 시스템</h1>
+        <form class="login-form" onsubmit="return handleLogin(event)">
+            <div class="form-group">
+                <label for="username">사용자 ID</label>
+                <input type="text" id="username" name="username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="login-btn">로그인</button>
+            <p class="error-msg" id="errorMsg"></p>
+        </form>
+        <p class="copyright">© 2026 HS.KIM. All rights reserved.</p>
+    </div>
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('errorMsg');
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    errorMsg.textContent = data.error || '로그인 실패';
+                    errorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                errorMsg.textContent = '서버 연결 오류';
+                errorMsg.style.display = 'block';
+            }
+            return false;
+        }
+    </script>
+</body>
+</html>
+'''
+
+# ============ 관리자 페이지 템플릿 ============
+ADMIN_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 - 실적 분석 시스템</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .admin-header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .admin-header h1 { font-size: 24px; }
+        .admin-header a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+        }
+        .admin-content {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .admin-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .admin-tab {
+            padding: 12px 24px;
+            background: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .admin-tab.active {
+            background: #0f3460;
+            color: white;
+        }
+        .admin-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .admin-panel.active { display: block; }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .panel-header h2 { font-size: 20px; color: #333; }
+        .add-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th { background: #f9f9f9; font-weight: 600; }
+        .status-active { color: #27ae60; }
+        .status-suspended { color: #e74c3c; }
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            font-size: 12px;
+        }
+        .btn-suspend { background: #f39c12; color: white; }
+        .btn-delete { background: #e74c3c; color: white; }
+        .btn-activate { background: #27ae60; color: white; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+        .modal-content h3 { margin-bottom: 20px; }
+        .modal-content .form-group {
+            margin-bottom: 15px;
+        }
+        .modal-content label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .modal-content input, .modal-content select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn-save { background: #0f3460; color: white; }
+        .btn-cancel { background: #ddd; }
+        .copyright {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-header">
+        <h1>관리자 대시보드</h1>
+        <div>
+            <a href="/">← 메인으로</a>
+            <a href="/api/auth/logout" style="margin-left:10px;">로그아웃</a>
+        </div>
+    </div>
+
+    <div class="admin-content">
+        <div class="admin-tabs">
+            <button class="admin-tab active" onclick="showPanel('users')">사용자 관리</button>
+            <button class="admin-tab" onclick="showPanel('activity')">활동 로그</button>
+            <button class="admin-tab" onclick="showPanel('aiLogs')">AI 분석 로그</button>
+        </div>
+
+        <div id="usersPanel" class="admin-panel active">
+            <div class="panel-header">
+                <h2>사용자 목록</h2>
+                <button class="add-btn" onclick="showAddUserModal()">+ 사용자 추가</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>사용자명</th>
+                        <th>이름</th>
+                        <th>역할</th>
+                        <th>상태</th>
+                        <th>마지막 로그인</th>
+                        <th>관리</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTable"></tbody>
+            </table>
+        </div>
+
+        <div id="activityPanel" class="admin-panel">
+            <div class="panel-header">
+                <h2>활동 로그</h2>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>시간</th>
+                        <th>사용자</th>
+                        <th>활동</th>
+                        <th>상세</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody id="activityTable"></tbody>
+            </table>
+        </div>
+
+        <div id="aiLogsPanel" class="admin-panel">
+            <div class="panel-header">
+                <h2>AI 분석 로그</h2>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>시간</th>
+                        <th>사용자</th>
+                        <th>프롬프트</th>
+                        <th>응답 길이</th>
+                        <th>토큰</th>
+                    </tr>
+                </thead>
+                <tbody id="aiLogsTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal" id="addUserModal">
+        <div class="modal-content">
+            <h3>새 사용자 추가</h3>
+            <form onsubmit="return addUser(event)">
+                <div class="form-group">
+                    <label>사용자 ID</label>
+                    <input type="text" id="newUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>이름</label>
+                    <input type="text" id="newName" required>
+                </div>
+                <div class="form-group">
+                    <label>비밀번호</label>
+                    <input type="password" id="newPassword" required>
+                </div>
+                <div class="form-group">
+                    <label>역할</label>
+                    <select id="newRole">
+                        <option value="user">일반 사용자</option>
+                        <option value="admin">관리자</option>
+                    </select>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="btn-cancel" onclick="closeModal()">취소</button>
+                    <button type="submit" class="btn-save">추가</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <p class="copyright">© 2026 HS.KIM. All rights reserved.</p>
+
+    <script>
+        function showPanel(panel) {
+            document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(panel + 'Panel').classList.add('active');
+            event.target.classList.add('active');
+
+            if (panel === 'users') loadUsers();
+            else if (panel === 'activity') loadActivity();
+            else if (panel === 'aiLogs') loadAiLogs();
+        }
+
+        async function loadUsers() {
+            const response = await fetch('/api/admin/users');
+            const data = await response.json();
+            const tbody = document.getElementById('usersTable');
+            tbody.innerHTML = data.users.map(u => `
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${u.username}</td>
+                    <td>${u.name || '-'}</td>
+                    <td>${u.role === 'admin' ? '관리자' : '사용자'}</td>
+                    <td class="${u.status === 'active' ? 'status-active' : 'status-suspended'}">${u.status === 'active' ? '활성' : '정지'}</td>
+                    <td>${u.last_login || '-'}</td>
+                    <td>
+                        ${u.status === 'active'
+                            ? `<button class="action-btn btn-suspend" onclick="toggleUserStatus(${u.id}, 'suspended')">정지</button>`
+                            : `<button class="action-btn btn-activate" onclick="toggleUserStatus(${u.id}, 'active')">활성화</button>`
+                        }
+                        <button class="action-btn btn-delete" onclick="deleteUser(${u.id})">삭제</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadActivity() {
+            const response = await fetch('/api/admin/activity');
+            const data = await response.json();
+            const tbody = document.getElementById('activityTable');
+            tbody.innerHTML = data.activities.map(a => `
+                <tr>
+                    <td>${a.created_at}</td>
+                    <td>${a.username || 'Unknown'}</td>
+                    <td>${a.action}</td>
+                    <td>${a.details || '-'}</td>
+                    <td>${a.ip_address || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadAiLogs() {
+            const response = await fetch('/api/admin/ai-logs');
+            const data = await response.json();
+            const tbody = document.getElementById('aiLogsTable');
+            tbody.innerHTML = data.logs.map(l => `
+                <tr>
+                    <td>${l.created_at}</td>
+                    <td>${l.username || 'Unknown'}</td>
+                    <td>${(l.prompt || '').substring(0, 100)}${l.prompt && l.prompt.length > 100 ? '...' : ''}</td>
+                    <td>${l.response_length || 0}</td>
+                    <td>${l.tokens_used || 0}</td>
+                </tr>
+            `).join('');
+        }
+
+        function showAddUserModal() {
+            document.getElementById('addUserModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('addUserModal').style.display = 'none';
+        }
+
+        async function addUser(e) {
+            e.preventDefault();
+            const response = await fetch('/api/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('newUsername').value,
+                    name: document.getElementById('newName').value,
+                    password: document.getElementById('newPassword').value,
+                    role: document.getElementById('newRole').value
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                closeModal();
+                loadUsers();
+            } else {
+                alert(data.error);
+            }
+            return false;
+        }
+
+        async function toggleUserStatus(userId, status) {
+            await fetch(`/api/admin/users/${userId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            });
+            loadUsers();
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('정말 삭제하시겠습니까?')) return;
+            await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+            loadUsers();
+        }
+
+        // 초기 로드
+        loadUsers();
+    </script>
+</body>
+</html>
+'''
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ko">
@@ -3875,6 +4563,11 @@ HTML_TEMPLATE = '''
                     <span>💻</span>
                     <span>터미널</span>
                 </button>
+            </div>
+            <div class="user-menu" style="display:flex; align-items:center; gap:10px; margin-left:15px;">
+                <span id="userInfo" style="color:#fff; font-size:14px;">로딩중...</span>
+                <a href="/admin" id="adminBtn" style="display:none; background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">관리자</a>
+                <a href="/api/auth/logout" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">로그아웃</a>
             </div>
         </div>
     </header>
@@ -21495,8 +22188,25 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // 세션 정보 로드
+        async function loadSessionInfo() {
+            try {
+                const response = await fetch('/api/auth/session');
+                const data = await response.json();
+                if (data.logged_in) {
+                    document.getElementById('userInfo').textContent = (data.user.name || data.user.username) + '님';
+                    if (data.user.role === 'admin') {
+                        document.getElementById('adminBtn').style.display = 'inline-block';
+                    }
+                }
+            } catch (e) {
+                console.error('Session load error:', e);
+            }
+        }
+
         // 초기화
         loadTokenUsage();
+        loadSessionInfo();
         showToast('조회 버튼을 클릭하세요.', 'loading', 3000);
     </script>
 </body>
@@ -21504,7 +22214,190 @@ HTML_TEMPLATE = '''
 
 '''
 
+# ============ 인증 관련 라우트 ============
+@app.route('/login')
+def login_page():
+    session_id = request.cookies.get('session_id')
+    if verify_user_session(session_id):
+        return redirect('/')
+    return render_template_string(LOGIN_TEMPLATE)
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    username = data.get('username', '')
+    password = data.get('password', '')
+
+    if not username or not password:
+        return jsonify({'success': False, 'error': '아이디와 비밀번호를 입력하세요'})
+
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, username, name, role, status FROM users WHERE username = ? AND password_hash = ?",
+            (username, password_hash)
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            conn.close()
+            return jsonify({'success': False, 'error': '아이디 또는 비밀번호가 올바르지 않습니다'})
+
+        if user['status'] != 'active':
+            conn.close()
+            return jsonify({'success': False, 'error': '계정이 정지되었습니다'})
+
+        # 마지막 로그인 시간 업데이트
+        cursor.execute("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user['id'],))
+        conn.commit()
+        conn.close()
+
+        # 세션 생성
+        session_id = secrets.token_hex(32)
+        USER_SESSIONS[session_id] = {
+            'user_id': user['id'],
+            'username': user['username'],
+            'name': user['name'],
+            'role': user['role'],
+            'login_time': datetime.now(),
+            'last_activity': datetime.now()
+        }
+
+        # 활동 로그 기록
+        log_user_activity(user['id'], 'login', f'로그인 성공', request.remote_addr)
+
+        response = make_response(jsonify({'success': True}))
+        response.set_cookie('session_id', session_id, httponly=True, max_age=8*60*60)
+        return response
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/auth/logout')
+def api_logout():
+    session_id = request.cookies.get('session_id')
+    if session_id and session_id in USER_SESSIONS:
+        session = USER_SESSIONS[session_id]
+        log_user_activity(session['user_id'], 'logout', '로그아웃', request.remote_addr)
+        del USER_SESSIONS[session_id]
+
+    response = make_response(redirect('/login'))
+    response.delete_cookie('session_id')
+    return response
+
+@app.route('/api/auth/session')
+def api_session():
+    session_id = request.cookies.get('session_id')
+    session = verify_user_session(session_id)
+    if session:
+        return jsonify({
+            'logged_in': True,
+            'user': {
+                'username': session['username'],
+                'name': session.get('name'),
+                'role': session['role']
+            }
+        })
+    return jsonify({'logged_in': False})
+
+@app.route('/admin')
+@admin_required
+def admin_page():
+    return render_template_string(ADMIN_TEMPLATE)
+
+@app.route('/api/admin/users', methods=['GET', 'POST'])
+@admin_required
+def api_admin_users():
+    if request.method == 'GET':
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, name, role, status, last_login FROM users ORDER BY id")
+        users = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'users': users})
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        name = data.get('name', '').strip()
+        password = data.get('password', '')
+        role = data.get('role', 'user')
+
+        if not username or not password:
+            return jsonify({'success': False, 'error': '필수 항목을 입력하세요'})
+
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        try:
+            conn = get_user_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)",
+                (username, password_hash, name, role)
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        except sqlite3.IntegrityError:
+            return jsonify({'success': False, 'error': '이미 존재하는 사용자명입니다'})
+
+@app.route('/api/admin/users/<int:user_id>/status', methods=['PUT'])
+@admin_required
+def api_admin_user_status(user_id):
+    data = request.get_json()
+    status = data.get('status', 'active')
+
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def api_admin_delete_user(user_id):
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/activity')
+@admin_required
+def api_admin_activity():
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT a.*, u.username FROM user_activity a
+        LEFT JOIN users u ON a.user_id = u.id
+        ORDER BY a.created_at DESC LIMIT 100
+    ''')
+    activities = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'activities': activities})
+
+@app.route('/api/admin/ai-logs')
+@admin_required
+def api_admin_ai_logs():
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT l.*, u.username FROM ai_logs l
+        LEFT JOIN users u ON l.user_id = u.id
+        ORDER BY l.created_at DESC LIMIT 100
+    ''')
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'logs': logs})
+
+# ============ 메인 페이지 ============
 @app.route('/')
+@login_required
 def index():
     return render_template_string(HTML_TEMPLATE)
 

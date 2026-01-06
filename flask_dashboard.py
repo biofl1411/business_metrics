@@ -5527,7 +5527,7 @@ HTML_TEMPLATE = '''
             <div class="user-menu" style="display:flex; align-items:center; gap:10px; margin-left:15px;">
                 <span id="userInfo" style="color:#fff; font-size:14px;">로딩중...</span>
                 <a href="/admin" id="adminBtn" style="display:none; background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">관리자</a>
-                <button onclick="openPasswordModal()" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; border:none; font-size:13px; cursor:pointer;">🔐 비밀번호 변경</button>
+                <button type="button" id="passwordChangeBtn" onclick="openPasswordModal()" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; border:none; font-size:13px; cursor:pointer;">🔐 비밀번호 변경</button>
                 <a href="/api/auth/logout" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">로그아웃</a>
             </div>
         </div>

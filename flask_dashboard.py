@@ -2375,6 +2375,7 @@ LOGIN_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
     <title>로그인 - 실적 분석 시스템</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2518,6 +2519,7 @@ ADMIN_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
     <title>관리자 - 실적 분석 시스템</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3066,7 +3068,7 @@ ADMIN_TEMPLATE = '''
                 </div>
                 <div class="form-group">
                     <label>비밀번호</label>
-                    <input type="password" class="form-control" id="newPassword">
+                    <input type="password" class="form-control" id="newPassword" autocomplete="new-password">
                     <small style="color: #64748b;">수정 시 비워두면 변경하지 않습니다</small>
                 </div>
                 <div class="form-group">
@@ -3614,6 +3616,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
     <title>경영지표 대시보드</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -5997,19 +6000,19 @@ HTML_TEMPLATE = '''
                         <form id="passwordForm" onsubmit="return changePassword(event)">
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">현재 비밀번호</label>
-                                <input type="password" id="currentPassword" required
+                                <input type="password" id="currentPassword" required autocomplete="current-password"
                                     style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
                                     placeholder="현재 비밀번호를 입력하세요">
                             </div>
                             <div style="margin-bottom: 20px;">
                                 <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">새 비밀번호</label>
-                                <input type="password" id="newPassword" required minlength="4"
+                                <input type="password" id="newPassword" required minlength="4" autocomplete="new-password"
                                     style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
                                     placeholder="새 비밀번호 (4자 이상)">
                             </div>
                             <div style="margin-bottom: 24px;">
                                 <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">새 비밀번호 확인</label>
-                                <input type="password" id="confirmPassword" required minlength="4"
+                                <input type="password" id="confirmPassword" required minlength="4" autocomplete="new-password"
                                     style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
                                     placeholder="새 비밀번호를 다시 입력하세요">
                             </div>

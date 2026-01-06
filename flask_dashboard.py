@@ -5524,6 +5524,7 @@ HTML_TEMPLATE = '''
             <div class="user-menu" style="display:flex; align-items:center; gap:10px; margin-left:15px;">
                 <span id="userInfo" style="color:#fff; font-size:14px;">로딩중...</span>
                 <a href="/admin" id="adminBtn" style="display:none; background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">관리자</a>
+                <button onclick="openPasswordModal()" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; border:none; font-size:13px; cursor:pointer;">🔐 비밀번호 변경</button>
                 <a href="/api/auth/logout" style="background:rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:5px; text-decoration:none; font-size:13px;">로그아웃</a>
             </div>
         </div>
@@ -5981,6 +5982,50 @@ HTML_TEMPLATE = '''
                             <thead id="managerTableHead"></thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 비밀번호 변경 모달 -->
+            <div id="passwordModal" class="modal-overlay" style="display: none;">
+                <div class="modal-content" style="max-width: 420px;">
+                    <div class="modal-header">
+                        <h3>🔐 비밀번호 변경</h3>
+                        <button class="modal-close" onclick="closePasswordModal()">✕</button>
+                    </div>
+                    <div class="modal-body" style="padding: 24px;">
+                        <form id="passwordForm" onsubmit="return changePassword(event)">
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">현재 비밀번호</label>
+                                <input type="password" id="currentPassword" required
+                                    style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+                                    placeholder="현재 비밀번호를 입력하세요">
+                            </div>
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">새 비밀번호</label>
+                                <input type="password" id="newPassword" required minlength="4"
+                                    style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+                                    placeholder="새 비밀번호 (4자 이상)">
+                            </div>
+                            <div style="margin-bottom: 24px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">새 비밀번호 확인</label>
+                                <input type="password" id="confirmPassword" required minlength="4"
+                                    style="width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+                                    placeholder="새 비밀번호를 다시 입력하세요">
+                            </div>
+                            <div id="passwordError" style="display: none; margin-bottom: 16px; padding: 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; font-size: 13px;"></div>
+                            <div id="passwordSuccess" style="display: none; margin-bottom: 16px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #16a34a; font-size: 13px;"></div>
+                            <div style="display: flex; gap: 12px;">
+                                <button type="button" onclick="closePasswordModal()"
+                                    style="flex: 1; padding: 12px; border: 1px solid #d1d5db; background: white; border-radius: 8px; font-size: 14px; cursor: pointer;">
+                                    취소
+                                </button>
+                                <button type="submit" id="passwordSubmitBtn"
+                                    style="flex: 1; padding: 12px; border: none; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+                                    변경하기
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -12223,6 +12268,106 @@ HTML_TEMPLATE = '''
         function closeManagerModal() {
             document.getElementById('managerModal').style.display = 'none';
         }
+
+        // ====== 비밀번호 변경 관련 함수 ======
+        function openPasswordModal() {
+            document.getElementById('passwordModal').style.display = 'flex';
+            document.getElementById('passwordForm').reset();
+            document.getElementById('passwordError').style.display = 'none';
+            document.getElementById('passwordSuccess').style.display = 'none';
+            document.getElementById('currentPassword').focus();
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+            document.getElementById('passwordForm').reset();
+            document.getElementById('passwordError').style.display = 'none';
+            document.getElementById('passwordSuccess').style.display = 'none';
+        }
+
+        async function changePassword(e) {
+            e.preventDefault();
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorDiv = document.getElementById('passwordError');
+            const successDiv = document.getElementById('passwordSuccess');
+            const submitBtn = document.getElementById('passwordSubmitBtn');
+
+            // 에러/성공 메시지 초기화
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            // 클라이언트 측 유효성 검사
+            if (newPassword !== confirmPassword) {
+                errorDiv.textContent = '새 비밀번호가 일치하지 않습니다.';
+                errorDiv.style.display = 'block';
+                return false;
+            }
+
+            if (newPassword.length < 4) {
+                errorDiv.textContent = '비밀번호는 4자 이상이어야 합니다.';
+                errorDiv.style.display = 'block';
+                return false;
+            }
+
+            // 버튼 비활성화
+            submitBtn.disabled = true;
+            submitBtn.textContent = '변경 중...';
+
+            try {
+                const response = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    successDiv.textContent = result.message || '비밀번호가 성공적으로 변경되었습니다.';
+                    successDiv.style.display = 'block';
+                    document.getElementById('passwordForm').reset();
+
+                    // 2초 후 모달 닫기
+                    setTimeout(() => {
+                        closePasswordModal();
+                    }, 2000);
+                } else {
+                    errorDiv.textContent = result.error || '비밀번호 변경에 실패했습니다.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = '서버 오류가 발생했습니다. 다시 시도해주세요.';
+                errorDiv.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '변경하기';
+            }
+
+            return false;
+        }
+
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('passwordModal').style.display === 'flex') {
+                    closePasswordModal();
+                }
+            }
+        });
+
+        // 모달 바깥 클릭 시 닫기
+        document.getElementById('passwordModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePasswordModal();
+            }
+        });
 
         // ====== 팀별 탭 관련 함수 ======
         function updateTeamTab() {
@@ -23790,6 +23935,64 @@ def api_logout():
     response = make_response(redirect('/login'))
     response.delete_cookie('session_id')
     return response
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@login_required
+def api_change_password():
+    """사용자 비밀번호 변경"""
+    session_id = request.cookies.get('session_id')
+    session = verify_user_session(session_id)
+
+    if not session:
+        return jsonify({'success': False, 'error': '로그인이 필요합니다'})
+
+    data = request.get_json()
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+    confirm_password = data.get('confirm_password', '')
+
+    # 유효성 검사
+    if not current_password or not new_password or not confirm_password:
+        return jsonify({'success': False, 'error': '모든 필드를 입력해주세요'})
+
+    if new_password != confirm_password:
+        return jsonify({'success': False, 'error': '새 비밀번호가 일치하지 않습니다'})
+
+    if len(new_password) < 4:
+        return jsonify({'success': False, 'error': '비밀번호는 4자 이상이어야 합니다'})
+
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+
+        # 현재 비밀번호 확인
+        current_hash = hashlib.sha256(current_password.encode()).hexdigest()
+        cursor.execute(
+            "SELECT id FROM users WHERE id = ? AND password_hash = ?",
+            (session['user_id'], current_hash)
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            conn.close()
+            return jsonify({'success': False, 'error': '현재 비밀번호가 올바르지 않습니다'})
+
+        # 새 비밀번호로 업데이트
+        new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        cursor.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_hash, session['user_id'])
+        )
+        conn.commit()
+        conn.close()
+
+        # 활동 로그 기록
+        log_user_activity(session['user_id'], 'change_password', '비밀번호 변경', request.remote_addr)
+
+        return jsonify({'success': True, 'message': '비밀번호가 성공적으로 변경되었습니다'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/auth/session')
 def api_session():

@@ -12356,16 +12356,22 @@ HTML_TEMPLATE = '''
         // ESC 키로 모달 닫기
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                if (document.getElementById('passwordModal').style.display === 'flex') {
+                const passwordModal = document.getElementById('passwordModal');
+                if (passwordModal && passwordModal.style.display === 'flex') {
                     closePasswordModal();
                 }
             }
         });
 
-        // 모달 바깥 클릭 시 닫기
-        document.getElementById('passwordModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closePasswordModal();
+        // 모달 바깥 클릭 시 닫기 (DOMContentLoaded 후 실행)
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordModal = document.getElementById('passwordModal');
+            if (passwordModal) {
+                passwordModal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closePasswordModal();
+                    }
+                });
             }
         });
 

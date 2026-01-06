@@ -12274,7 +12274,14 @@ HTML_TEMPLATE = '''
 
         // ====== 비밀번호 변경 관련 함수 ======
         function openPasswordModal() {
-            document.getElementById('passwordModal').style.display = 'flex';
+            console.log('[DEBUG] openPasswordModal() called');
+            const modal = document.getElementById('passwordModal');
+            console.log('[DEBUG] passwordModal element:', modal);
+            if (!modal) {
+                console.error('[ERROR] passwordModal element not found!');
+                return;
+            }
+            modal.style.display = 'flex';
             document.getElementById('passwordForm').reset();
             document.getElementById('passwordError').style.display = 'none';
             document.getElementById('passwordSuccess').style.display = 'none';

@@ -25397,8 +25397,16 @@ HTML_TEMPLATE = '''
         let currentProfitTab = 'purpose';
 
         async function loadProfitAnalysisData() {
-            const year = document.getElementById('yearSelect').value;
+            console.log('[손익분석] loadProfitAnalysisData 호출됨');
+            const yearEl = document.getElementById('yearSelect');
+            if (!yearEl) {
+                console.error('[손익분석] yearSelect 요소를 찾을 수 없음');
+                return;
+            }
+            const year = yearEl.value;
+            console.log('[손익분석] 조회 연도:', year);
             try {
+                console.log('[손익분석] API 호출 시작...');
                 const [summaryRes, purposeRes, managerRes, monthRes] = await Promise.all([
                     fetch(`/api/profit/summary?year=${year}`),
                     fetch(`/api/profit/by-purpose?year=${year}`),
@@ -25406,10 +25414,15 @@ HTML_TEMPLATE = '''
                     fetch(`/api/profit/by-month?year=${year}`)
                 ]);
 
+                console.log('[손익분석] API 응답 상태:', summaryRes.status, purposeRes.status, managerRes.status, monthRes.status);
+
                 const summary = await summaryRes.json();
                 const purposeData = await purposeRes.json();
                 const managerData = await managerRes.json();
                 const monthData = await monthRes.json();
+
+                console.log('[손익분석] summary:', summary);
+                console.log('[손익분석] purposeData:', purposeData);
 
                 // KPI 업데이트
                 document.getElementById('profitTotalSales').textContent = formatCurrency(summary.total_actual_sales || 0);
@@ -25417,6 +25430,7 @@ HTML_TEMPLATE = '''
                 document.getElementById('profitTotalProfit').textContent = formatCurrency(summary.estimated_profit || 0);
                 document.getElementById('profitMarginRate').textContent = (summary.profit_rate || 0) + '%';
                 document.getElementById('profitDiscountRate').textContent = (summary.discount_rate || 0) + '%';
+                console.log('[손익분석] KPI 업데이트 완료');
 
                 // 테이블 및 차트 업데이트
                 updateProfitByPurposeTable(purposeData.data || []);

@@ -6478,6 +6478,10 @@ HTML_TEMPLATE = '''
                 <div class="tab-icon">💵</div>
                 <div class="tab-label">수금</div>
             </div>
+            <div class="tab-card" onclick="showTab('profitAnalysis')">
+                <div class="tab-icon">📊</div>
+                <div class="tab-label">손익분석</div>
+            </div>
         </section>
 
         <!-- KPI 카드 -->
@@ -8451,6 +8455,152 @@ HTML_TEMPLATE = '''
             </div>
         </div>
 
+        <!-- 손익분석 탭 -->
+        <div id="profitAnalysis" class="tab-content">
+            <!-- 손익 KPI -->
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">총 매출</div>
+                    <div id="profitTotalSales" style="font-size: 22px; font-weight: 700; color: #2563eb;">-</div>
+                </div>
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">추정 원가 (69.7%)</div>
+                    <div id="profitTotalCost" style="font-size: 22px; font-weight: 700; color: #dc2626;">-</div>
+                </div>
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">추정 이익</div>
+                    <div id="profitTotalProfit" style="font-size: 22px; font-weight: 700; color: #059669;">-</div>
+                </div>
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">이익률</div>
+                    <div id="profitMarginRate" style="font-size: 22px; font-weight: 700; color: #7c3aed;">-</div>
+                </div>
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">할인율 (정상가 대비)</div>
+                    <div id="profitDiscountRate" style="font-size: 22px; font-weight: 700; color: #f59e0b;">-</div>
+                </div>
+            </div>
+
+            <!-- 분석 선택 탭 -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn" id="btnProfitByPurpose" onclick="showProfitTab('purpose')" style="background: #2563eb; color: white;">검사목적별</button>
+                <button class="btn" id="btnProfitByManager" onclick="showProfitTab('manager')">담당자별</button>
+                <button class="btn" id="btnProfitByMonth" onclick="showProfitTab('month')">월별 추이</button>
+            </div>
+
+            <!-- 검사목적별 분석 -->
+            <div id="profitByPurpose" class="profit-section">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">📊 검사목적별 매출 vs 이익</span>
+                        </div>
+                        <div class="card-body"><div class="chart-container"><canvas id="profitByPurposeChart"></canvas></div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">🥧 검사목적별 이익 비중</span>
+                        </div>
+                        <div class="card-body"><div class="chart-container"><canvas id="profitByPurposePieChart"></canvas></div></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📋 검사목적별 손익 상세</span>
+                    </div>
+                    <div class="card-body" style="overflow-x: auto;">
+                        <table class="data-table" id="profitByPurposeTable">
+                            <thead>
+                                <tr>
+                                    <th>검사목적</th>
+                                    <th>건수</th>
+                                    <th>정상가 합계</th>
+                                    <th>실제 매출</th>
+                                    <th>할인율</th>
+                                    <th>추정 원가</th>
+                                    <th>추정 이익</th>
+                                    <th>이익률</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 담당자별 분석 -->
+            <div id="profitByManager" class="profit-section" style="display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">📊 담당자별 매출 vs 이익</span>
+                        </div>
+                        <div class="card-body"><div class="chart-container"><canvas id="profitByManagerChart"></canvas></div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">📈 담당자별 이익률 비교</span>
+                        </div>
+                        <div class="card-body"><div class="chart-container"><canvas id="profitByManagerRateChart"></canvas></div></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📋 담당자별 손익 상세</span>
+                    </div>
+                    <div class="card-body" style="overflow-x: auto;">
+                        <table class="data-table" id="profitByManagerTable">
+                            <thead>
+                                <tr>
+                                    <th>담당자</th>
+                                    <th>건수</th>
+                                    <th>정상가 합계</th>
+                                    <th>실제 매출</th>
+                                    <th>할인율</th>
+                                    <th>추정 원가</th>
+                                    <th>추정 이익</th>
+                                    <th>이익률</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 월별 추이 -->
+            <div id="profitByMonth" class="profit-section" style="display: none;">
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <span class="card-title">📈 월별 손익 추이</span>
+                    </div>
+                    <div class="card-body"><div class="chart-container" style="height: 350px;"><canvas id="profitMonthlyTrendChart"></canvas></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📋 월별 손익 상세</span>
+                    </div>
+                    <div class="card-body" style="overflow-x: auto;">
+                        <table class="data-table" id="profitByMonthTable">
+                            <thead>
+                                <tr>
+                                    <th>월</th>
+                                    <th>건수</th>
+                                    <th>정상가 합계</th>
+                                    <th>실제 매출</th>
+                                    <th>할인율</th>
+                                    <th>추정 원가</th>
+                                    <th>추정 이익</th>
+                                    <th>이익률</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- AI 분석 탭 -->
         <div id="aiAnalysis" class="tab-content">
             <section class="ai-section">
@@ -8677,6 +8827,11 @@ HTML_TEMPLATE = '''
             if (content) content.classList.add('active');
             document.getElementById('kpiSection').classList.toggle('hidden', tabId !== 'main');
 
+            // 손익분석 탭이면 데이터 로드
+            if (tabId === 'profitAnalysis') {
+                loadProfitAnalysisData();
+            }
+
             // 탭 이용 기록 저장
             const tabNames = {
                 'main': '대시보드',
@@ -8687,6 +8842,7 @@ HTML_TEMPLATE = '''
                 'defectAnalysis': '부적합분석',
                 'livestockTab': '축산물분석',
                 'collectionTab': '수금현황',
+                'profitAnalysis': '손익분석',
                 'aiAnalysis': 'AI분석'
             };
             const menuName = tabNames[tabId] || tabId;
@@ -24727,6 +24883,218 @@ HTML_TEMPLATE = '''
             }
         }
 
+        // ============ 손익분석 함수들 ============
+        let profitCharts = {};
+        let currentProfitTab = 'purpose';
+
+        async function loadProfitAnalysisData() {
+            const year = document.getElementById('yearSelect').value;
+            try {
+                const [summaryRes, purposeRes, managerRes, monthRes] = await Promise.all([
+                    fetch(`/api/profit/summary?year=${year}`),
+                    fetch(`/api/profit/by-purpose?year=${year}`),
+                    fetch(`/api/profit/by-manager?year=${year}`),
+                    fetch(`/api/profit/by-month?year=${year}`)
+                ]);
+
+                const summary = await summaryRes.json();
+                const purposeData = await purposeRes.json();
+                const managerData = await managerRes.json();
+                const monthData = await monthRes.json();
+
+                // KPI 업데이트
+                document.getElementById('profitTotalSales').textContent = formatCurrency(summary.total_actual_sales || 0);
+                document.getElementById('profitTotalCost').textContent = formatCurrency(summary.estimated_cost || 0);
+                document.getElementById('profitTotalProfit').textContent = formatCurrency(summary.estimated_profit || 0);
+                document.getElementById('profitMarginRate').textContent = (summary.profit_rate || 0) + '%';
+                document.getElementById('profitDiscountRate').textContent = (summary.discount_rate || 0) + '%';
+
+                // 테이블 및 차트 업데이트
+                updateProfitByPurposeTable(purposeData.data || []);
+                updateProfitByManagerTable(managerData.data || []);
+                updateProfitByMonthTable(monthData.data || []);
+                updateProfitCharts(purposeData.data, managerData.data, monthData.data);
+            } catch (e) {
+                console.error('손익분석 데이터 로드 실패:', e);
+            }
+        }
+
+        function showProfitTab(tab) {
+            currentProfitTab = tab;
+            document.querySelectorAll('.profit-section').forEach(s => s.style.display = 'none');
+            document.getElementById('profitBy' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.display = 'block';
+            document.querySelectorAll('#profitAnalysis .btn').forEach(b => {
+                b.style.background = '#e2e8f0';
+                b.style.color = '#1e293b';
+            });
+            document.getElementById('btnProfitBy' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.background = '#2563eb';
+            document.getElementById('btnProfitBy' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.color = 'white';
+        }
+
+        function updateProfitByPurposeTable(data) {
+            const tbody = document.querySelector('#profitByPurposeTable tbody');
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td>${d.purpose}</td>
+                    <td style="text-align:right;">${d.count.toLocaleString()}</td>
+                    <td style="text-align:right;">${formatCurrency(d.normal_price)}</td>
+                    <td style="text-align:right;">${formatCurrency(d.actual_sales)}</td>
+                    <td style="text-align:right; color:${d.discount_rate > 0 ? '#f59e0b' : '#059669'};">${d.discount_rate}%</td>
+                    <td style="text-align:right; color:#dc2626;">${formatCurrency(d.estimated_cost)}</td>
+                    <td style="text-align:right; color:${d.estimated_profit >= 0 ? '#059669' : '#dc2626'};">${formatCurrency(d.estimated_profit)}</td>
+                    <td style="text-align:right; font-weight:bold;">${d.profit_rate}%</td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" style="text-align:center;">데이터 없음</td></tr>';
+        }
+
+        function updateProfitByManagerTable(data) {
+            const tbody = document.querySelector('#profitByManagerTable tbody');
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td>${d.manager}</td>
+                    <td style="text-align:right;">${d.count.toLocaleString()}</td>
+                    <td style="text-align:right;">${formatCurrency(d.normal_price)}</td>
+                    <td style="text-align:right;">${formatCurrency(d.actual_sales)}</td>
+                    <td style="text-align:right; color:${d.discount_rate > 0 ? '#f59e0b' : '#059669'};">${d.discount_rate}%</td>
+                    <td style="text-align:right; color:#dc2626;">${formatCurrency(d.estimated_cost)}</td>
+                    <td style="text-align:right; color:${d.estimated_profit >= 0 ? '#059669' : '#dc2626'};">${formatCurrency(d.estimated_profit)}</td>
+                    <td style="text-align:right; font-weight:bold;">${d.profit_rate}%</td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" style="text-align:center;">데이터 없음</td></tr>';
+        }
+
+        function updateProfitByMonthTable(data) {
+            const tbody = document.querySelector('#profitByMonthTable tbody');
+            tbody.innerHTML = data.filter(d => d.count > 0).map(d => `
+                <tr>
+                    <td>${d.month_name}</td>
+                    <td style="text-align:right;">${d.count.toLocaleString()}</td>
+                    <td style="text-align:right;">${formatCurrency(d.normal_price)}</td>
+                    <td style="text-align:right;">${formatCurrency(d.actual_sales)}</td>
+                    <td style="text-align:right; color:${d.discount_rate > 0 ? '#f59e0b' : '#059669'};">${d.discount_rate}%</td>
+                    <td style="text-align:right; color:#dc2626;">${formatCurrency(d.estimated_cost)}</td>
+                    <td style="text-align:right; color:${d.estimated_profit >= 0 ? '#059669' : '#dc2626'};">${formatCurrency(d.estimated_profit)}</td>
+                    <td style="text-align:right; font-weight:bold;">${d.profit_rate}%</td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" style="text-align:center;">데이터 없음</td></tr>';
+        }
+
+        function updateProfitCharts(purposeData, managerData, monthData) {
+            // 검사목적별 차트
+            const purposeCtx = document.getElementById('profitByPurposeChart');
+            if (purposeCtx && purposeData) {
+                if (profitCharts.purpose) profitCharts.purpose.destroy();
+                profitCharts.purpose = new Chart(purposeCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: purposeData.slice(0, 10).map(d => d.purpose),
+                        datasets: [{
+                            label: '매출',
+                            data: purposeData.slice(0, 10).map(d => d.actual_sales),
+                            backgroundColor: 'rgba(37, 99, 235, 0.7)'
+                        }, {
+                            label: '이익',
+                            data: purposeData.slice(0, 10).map(d => d.estimated_profit),
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: v => (v/100000000).toFixed(1) + '억' } } } }
+                });
+            }
+
+            // 검사목적별 파이 차트
+            const purposePieCtx = document.getElementById('profitByPurposePieChart');
+            if (purposePieCtx && purposeData) {
+                if (profitCharts.purposePie) profitCharts.purposePie.destroy();
+                profitCharts.purposePie = new Chart(purposePieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: purposeData.slice(0, 6).map(d => d.purpose),
+                        datasets: [{
+                            data: purposeData.slice(0, 6).map(d => d.estimated_profit),
+                            backgroundColor: ['#2563eb', '#059669', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            // 담당자별 차트
+            const managerCtx = document.getElementById('profitByManagerChart');
+            if (managerCtx && managerData) {
+                if (profitCharts.manager) profitCharts.manager.destroy();
+                profitCharts.manager = new Chart(managerCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: managerData.slice(0, 10).map(d => d.manager),
+                        datasets: [{
+                            label: '매출',
+                            data: managerData.slice(0, 10).map(d => d.actual_sales),
+                            backgroundColor: 'rgba(37, 99, 235, 0.7)'
+                        }, {
+                            label: '이익',
+                            data: managerData.slice(0, 10).map(d => d.estimated_profit),
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: v => (v/100000000).toFixed(1) + '억' } } } }
+                });
+            }
+
+            // 담당자별 이익률 차트
+            const managerRateCtx = document.getElementById('profitByManagerRateChart');
+            if (managerRateCtx && managerData) {
+                if (profitCharts.managerRate) profitCharts.managerRate.destroy();
+                profitCharts.managerRate = new Chart(managerRateCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: managerData.slice(0, 10).map(d => d.manager),
+                        datasets: [{
+                            label: '이익률 (%)',
+                            data: managerData.slice(0, 10).map(d => d.profit_rate),
+                            backgroundColor: managerData.slice(0, 10).map(d => d.profit_rate >= 30 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)')
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 50 } } }
+                });
+            }
+
+            // 월별 추이 차트
+            const monthCtx = document.getElementById('profitMonthlyTrendChart');
+            if (monthCtx && monthData) {
+                if (profitCharts.month) profitCharts.month.destroy();
+                profitCharts.month = new Chart(monthCtx, {
+                    type: 'line',
+                    data: {
+                        labels: monthData.map(d => d.month_name),
+                        datasets: [{
+                            label: '매출',
+                            data: monthData.map(d => d.actual_sales),
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }, {
+                            label: '이익',
+                            data: monthData.map(d => d.estimated_profit),
+                            borderColor: '#059669',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }, {
+                            label: '원가',
+                            data: monthData.map(d => d.estimated_cost),
+                            borderColor: '#dc2626',
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.3
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: v => (v/100000000).toFixed(1) + '억' } } } }
+                });
+            }
+        }
+
         // 초기화
         console.log('[DEBUG] Initializing...');
         loadTokenUsage();
@@ -25538,6 +25906,200 @@ def api_cost_profit_analysis():
         },
         'data': profit_data[:100]  # 상위 100개만
     })
+
+# ============ 손익분석 (메인 대시보드용) ============
+COST_RATE = 0.697  # 원가율 69.7%
+
+@app.route('/api/profit/summary')
+@login_required
+def api_profit_summary():
+    """손익 요약 API (원가율 기반)"""
+    year = request.args.get('year', '2025')
+    data = load_data(year)
+
+    total_normal_price = 0  # 정상가 합계
+    total_actual_sales = 0  # 실제 매출
+
+    for row in data:
+        # 정상가 (항목수수료 합계)
+        normal = row.get('수수료합계', 0) or 0
+        if isinstance(normal, str):
+            normal = float(normal.replace(',', '')) if normal else 0
+        total_normal_price += normal
+
+        # 실제 매출
+        actual = row.get('매출액', row.get('실입금액', 0)) or 0
+        if isinstance(actual, str):
+            actual = float(actual.replace(',', '')) if actual else 0
+        total_actual_sales += actual
+
+    # 손익 계산
+    estimated_cost = total_actual_sales * COST_RATE
+    estimated_profit = total_actual_sales - estimated_cost
+    profit_rate = (estimated_profit / total_actual_sales * 100) if total_actual_sales > 0 else 0
+    discount_rate = ((total_normal_price - total_actual_sales) / total_normal_price * 100) if total_normal_price > 0 else 0
+
+    return jsonify({
+        'success': True,
+        'year': year,
+        'total_normal_price': total_normal_price,
+        'total_actual_sales': total_actual_sales,
+        'estimated_cost': estimated_cost,
+        'estimated_profit': estimated_profit,
+        'profit_rate': round(profit_rate, 1),
+        'discount_rate': round(discount_rate, 1),
+        'cost_rate': COST_RATE * 100
+    })
+
+@app.route('/api/profit/by-purpose')
+@login_required
+def api_profit_by_purpose():
+    """검사목적별 손익 분석"""
+    year = request.args.get('year', '2025')
+    data = load_data(year)
+
+    purpose_stats = {}
+    for row in data:
+        purpose = str(row.get('검사목적', '기타')).strip() or '기타'
+
+        if purpose not in purpose_stats:
+            purpose_stats[purpose] = {'count': 0, 'normal_price': 0, 'actual_sales': 0}
+
+        purpose_stats[purpose]['count'] += 1
+
+        normal = row.get('수수료합계', 0) or 0
+        if isinstance(normal, str):
+            normal = float(normal.replace(',', '')) if normal else 0
+        purpose_stats[purpose]['normal_price'] += normal
+
+        actual = row.get('매출액', row.get('실입금액', 0)) or 0
+        if isinstance(actual, str):
+            actual = float(actual.replace(',', '')) if actual else 0
+        purpose_stats[purpose]['actual_sales'] += actual
+
+    result = []
+    for purpose, stats in purpose_stats.items():
+        estimated_cost = stats['actual_sales'] * COST_RATE
+        estimated_profit = stats['actual_sales'] - estimated_cost
+        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
+        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+
+        result.append({
+            'purpose': purpose,
+            'count': stats['count'],
+            'normal_price': stats['normal_price'],
+            'actual_sales': stats['actual_sales'],
+            'discount_rate': round(discount_rate, 1),
+            'estimated_cost': estimated_cost,
+            'estimated_profit': estimated_profit,
+            'profit_rate': round(profit_rate, 1)
+        })
+
+    result.sort(key=lambda x: x['actual_sales'], reverse=True)
+    return jsonify({'success': True, 'data': result})
+
+@app.route('/api/profit/by-manager')
+@login_required
+def api_profit_by_manager():
+    """담당자별 손익 분석"""
+    year = request.args.get('year', '2025')
+    data = load_data(year)
+
+    manager_stats = {}
+    for row in data:
+        manager = str(row.get('영업담당', '미지정')).strip() or '미지정'
+
+        if manager not in manager_stats:
+            manager_stats[manager] = {'count': 0, 'normal_price': 0, 'actual_sales': 0}
+
+        manager_stats[manager]['count'] += 1
+
+        normal = row.get('수수료합계', 0) or 0
+        if isinstance(normal, str):
+            normal = float(normal.replace(',', '')) if normal else 0
+        manager_stats[manager]['normal_price'] += normal
+
+        actual = row.get('매출액', row.get('실입금액', 0)) or 0
+        if isinstance(actual, str):
+            actual = float(actual.replace(',', '')) if actual else 0
+        manager_stats[manager]['actual_sales'] += actual
+
+    result = []
+    for manager, stats in manager_stats.items():
+        estimated_cost = stats['actual_sales'] * COST_RATE
+        estimated_profit = stats['actual_sales'] - estimated_cost
+        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
+        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+
+        result.append({
+            'manager': manager,
+            'count': stats['count'],
+            'normal_price': stats['normal_price'],
+            'actual_sales': stats['actual_sales'],
+            'discount_rate': round(discount_rate, 1),
+            'estimated_cost': estimated_cost,
+            'estimated_profit': estimated_profit,
+            'profit_rate': round(profit_rate, 1)
+        })
+
+    result.sort(key=lambda x: x['actual_sales'], reverse=True)
+    return jsonify({'success': True, 'data': result})
+
+@app.route('/api/profit/by-month')
+@login_required
+def api_profit_by_month():
+    """월별 손익 분석"""
+    year = request.args.get('year', '2025')
+    data = load_data(year)
+
+    month_stats = {m: {'count': 0, 'normal_price': 0, 'actual_sales': 0} for m in range(1, 13)}
+
+    for row in data:
+        date_str = row.get('접수일자', '')
+        if not date_str:
+            continue
+        try:
+            if isinstance(date_str, str):
+                month = int(date_str.split('-')[1]) if '-' in date_str else int(date_str.split('/')[1])
+            else:
+                month = date_str.month
+        except:
+            continue
+
+        if 1 <= month <= 12:
+            month_stats[month]['count'] += 1
+
+            normal = row.get('수수료합계', 0) or 0
+            if isinstance(normal, str):
+                normal = float(normal.replace(',', '')) if normal else 0
+            month_stats[month]['normal_price'] += normal
+
+            actual = row.get('매출액', row.get('실입금액', 0)) or 0
+            if isinstance(actual, str):
+                actual = float(actual.replace(',', '')) if actual else 0
+            month_stats[month]['actual_sales'] += actual
+
+    result = []
+    for month in range(1, 13):
+        stats = month_stats[month]
+        estimated_cost = stats['actual_sales'] * COST_RATE
+        estimated_profit = stats['actual_sales'] - estimated_cost
+        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
+        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+
+        result.append({
+            'month': month,
+            'month_name': f'{month}월',
+            'count': stats['count'],
+            'normal_price': stats['normal_price'],
+            'actual_sales': stats['actual_sales'],
+            'discount_rate': round(discount_rate, 1),
+            'estimated_cost': estimated_cost,
+            'estimated_profit': estimated_profit,
+            'profit_rate': round(profit_rate, 1)
+        })
+
+    return jsonify({'success': True, 'data': result})
 
 # ============ 메인 페이지 ============
 @app.route('/')

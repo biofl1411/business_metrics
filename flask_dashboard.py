@@ -176,6 +176,7 @@ def init_user_db():
             user_id INTEGER,
             menu_name TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            exit_at TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
@@ -316,10 +317,16 @@ def log_user_activity(user_id, action, details=None, ip_address=None):
         print(f"Activity log error: {e}")
 
 def log_menu_access(user_id, menu_name):
-    """메뉴 접근 기록"""
+    """메뉴 접근 기록 - 이전 탭 종료시간 업데이트 후 새 기록 생성"""
     try:
         conn = get_user_db()
         cursor = conn.cursor()
+        # 이전 탭의 종료시간 업데이트 (exit_at이 NULL인 가장 최근 기록)
+        cursor.execute('''
+            UPDATE menu_logs SET exit_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND exit_at IS NULL
+        ''', (user_id,))
+        # 새 탭 진입 기록
         cursor.execute(
             "INSERT INTO menu_logs (user_id, menu_name) VALUES (?, ?)",
             (user_id, menu_name)
@@ -2812,9 +2819,10 @@ ADMIN_TEMPLATE = '''
                     <table>
                         <thead>
                             <tr>
-                                <th>시간</th>
                                 <th>사용자</th>
                                 <th>메뉴</th>
+                                <th>진입시간</th>
+                                <th>종료시간</th>
                             </tr>
                         </thead>
                         <tbody id="menuLogsTable"></tbody>
@@ -3287,9 +3295,10 @@ ADMIN_TEMPLATE = '''
             const data = await response.json();
             document.getElementById('menuLogsTable').innerHTML = (data.logs || []).map(l => `
                 <tr>
-                    <td>${l.created_at}</td>
-                    <td>${l.username || 'Unknown'}</td>
-                    <td>${l.menu_name}</td>
+                    <td>${l.display_name || l.username || '알 수 없음'}</td>
+                    <td>${l.menu_name_kr || l.menu_name}</td>
+                    <td>${l.entry_time || l.created_at}</td>
+                    <td>${l.exit_time || '-'}</td>
                 </tr>
             `).join('');
         }
@@ -24510,24 +24519,53 @@ def api_admin_menu_logs():
     from datetime import timezone, timedelta
     KST = timezone(timedelta(hours=9))
 
+    # 메뉴명 한글 매핑
+    menu_names_kr = {
+        'main': '대시보드', '대시보드': '대시보드',
+        'monthlySales': '월별매출', '월별매출': '월별매출',
+        'sampleType': '검체유형', '검체유형': '검체유형',
+        'branchChart': '지역별', '지역별': '지역별',
+        'clientAnalysis': '업체분석', '업체분석': '업체분석',
+        'defectAnalysis': '부적합분석', '부적합분석': '부적합분석',
+        'livestockTab': '축산물분석', '축산물분석': '축산물분석',
+        'collectionTab': '수금현황', '수금현황': '수금현황',
+        'aiAnalysis': 'AI분석', 'AI분석': 'AI분석',
+        'foodItem': '검사항목', 'purpose': '검사목적', 'team': '팀별',
+        'monthly': '월별', 'personal': '개인별'
+    }
+
     conn = get_user_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT m.*, u.username FROM menu_logs m
+        SELECT m.*, u.username, u.name as user_name FROM menu_logs m
         LEFT JOIN users u ON m.user_id = u.id
         ORDER BY m.created_at DESC LIMIT 100
     ''')
     logs = []
     for row in cursor.fetchall():
         log = dict(row)
-        # UTC -> KST 변환
+        # 메뉴명 한글 변환
+        log['menu_name_kr'] = menu_names_kr.get(log.get('menu_name', ''), log.get('menu_name', ''))
+        # 사용자명 (이름 우선, 없으면 username)
+        log['display_name'] = log.get('user_name') or log.get('username') or '알 수 없음'
+        # UTC -> KST 변환 (진입시간)
         if log.get('created_at'):
             try:
                 utc_time = datetime.strptime(log['created_at'], '%Y-%m-%d %H:%M:%S')
                 kst_time = utc_time.replace(tzinfo=timezone.utc).astimezone(KST)
-                log['created_at'] = kst_time.strftime('%Y-%m-%d %H:%M:%S')
+                log['entry_time'] = kst_time.strftime('%Y-%m-%d %H:%M:%S')
             except:
-                pass
+                log['entry_time'] = log['created_at']
+        # UTC -> KST 변환 (종료시간)
+        if log.get('exit_at'):
+            try:
+                utc_time = datetime.strptime(log['exit_at'], '%Y-%m-%d %H:%M:%S')
+                kst_time = utc_time.replace(tzinfo=timezone.utc).astimezone(KST)
+                log['exit_time'] = kst_time.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                log['exit_time'] = log['exit_at']
+        else:
+            log['exit_time'] = '-'
         logs.append(log)
     conn.close()
     return jsonify({'logs': logs})

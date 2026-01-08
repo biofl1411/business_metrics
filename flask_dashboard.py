@@ -693,7 +693,20 @@ def init_sqlite_db():
     for col in new_columns:
         try:
             cursor.execute(f'ALTER TABLE excel_data ADD COLUMN {col} TEXT')
-            print(f"[SQLITE] 컬럼 추가: {col}")
+            print(f"[SQLITE] excel_data 컬럼 추가: {col}")
+        except:
+            pass  # 이미 존재하면 무시
+
+    # food_item_data 마이그레이션
+    food_item_columns = ['접수일자', '발행일', '검체유형', '업체명', '의뢰인명', '업체주소',
+                         '항목명', '규격', '항목담당', '결과입력자', '입력일', '분석일',
+                         '항목단위', '시험결과', '시험치', '성적서결과', '판정', '검사목적',
+                         '긴급여부', '항목수수료', '영업담당']
+    for col in food_item_columns:
+        try:
+            col_type = 'REAL' if col == '항목수수료' else 'TEXT'
+            cursor.execute(f'ALTER TABLE food_item_data ADD COLUMN {col} {col_type}')
+            print(f"[SQLITE] food_item_data 컬럼 추가: {col}")
         except:
             pass  # 이미 존재하면 무시
 

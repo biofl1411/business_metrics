@@ -194,6 +194,40 @@ def init_user_db():
         )
     ''')
 
+    # 원가 데이터 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cost_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_name TEXT NOT NULL,
+            category TEXT,
+            classification TEXT,
+            material_cost REAL DEFAULT 0,
+            labor_cost REAL DEFAULT 0,
+            expense REAL DEFAULT 0,
+            direct_cost REAL DEFAULT 0,
+            indirect_labor REAL DEFAULT 0,
+            indirect_expense REAL DEFAULT 0,
+            indirect_cost REAL DEFAULT 0,
+            test_cost REAL DEFAULT 0,
+            admin_cost REAL DEFAULT 0,
+            profit REAL DEFAULT 0,
+            total_cost REAL DEFAULT 0,
+            fee REAL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 원가-매출 항목 매핑 테이블
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cost_mapping (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cost_item_name TEXT NOT NULL,
+            sales_item_name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cost_item_name, sales_item_name)
+        )
+    ''')
+
     # 기존 users 테이블에 team_id, email 컬럼 추가 (마이그레이션)
     try:
         cursor.execute('ALTER TABLE users ADD COLUMN team_id INTEGER')
@@ -349,6 +383,106 @@ def log_ai_analysis(user_id, prompt, response_length=0, tokens_used=0):
         conn.close()
     except Exception as e:
         print(f"AI log error: {e}")
+
+def load_cost_data_from_excel(file_path=None):
+    """엑셀에서 원가 데이터 로드"""
+    import pandas as pd
+    import os
+
+    if file_path is None:
+        file_path = os.path.expanduser('~/gdrive_data/cost_data/식품_원가산출표.xls')
+
+    if not os.path.exists(file_path):
+        print(f"[COST] 원가 파일 없음: {file_path}")
+        return {'success': False, 'error': '파일 없음'}
+
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+
+        # 기존 데이터 삭제
+        cursor.execute('DELETE FROM cost_data')
+
+        total_count = 0
+        sheets = ['이화학적검사 집계', '미생물학적검사 집계']
+
+        for sheet_name in sheets:
+            try:
+                df = pd.read_excel(file_path, sheet_name=sheet_name, header=1)
+                category = '이화학' if '이화학' in sheet_name else '미생물'
+
+                for _, row in df.iterrows():
+                    item_name = str(row.get('구분', '')).strip()
+                    if not item_name or item_name == 'nan':
+                        continue
+
+                    cursor.execute('''
+                        INSERT INTO cost_data (item_name, category, classification,
+                            material_cost, labor_cost, expense, direct_cost,
+                            indirect_labor, indirect_expense, indirect_cost,
+                            test_cost, admin_cost, profit, total_cost, fee)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        item_name,
+                        category,
+                        str(row.get('분류', '')),
+                        float(row.get('재료비', 0) or 0),
+                        float(row.get('노무비', 0) or 0),
+                        float(row.get('경비', 0) or 0),
+                        float(row.get('직접비 계', 0) or 0),
+                        float(row.get('간접노무비', row.get('간 접노무비', 0)) or 0),
+                        float(row.get('간접경비', 0) or 0),
+                        float(row.get('간접비 계', 0) or 0),
+                        float(row.get('시험원가', 0) or 0),
+                        float(row.get('일반관리비', 0) or 0),
+                        float(row.get('이윤', 0) or 0),
+                        float(row.get('총원가', 0) or 0),
+                        float(row.get('수수료', 0) or 0)
+                    ))
+                    total_count += 1
+
+                print(f"[COST] {sheet_name}: {total_count}개 로드")
+            except Exception as e:
+                print(f"[COST] {sheet_name} 처리 오류: {e}")
+
+        conn.commit()
+        conn.close()
+        print(f"[COST] 총 {total_count}개 원가 데이터 로드 완료")
+        return {'success': True, 'count': total_count}
+
+    except Exception as e:
+        print(f"[COST] 원가 데이터 로드 오류: {e}")
+        return {'success': False, 'error': str(e)}
+
+def get_cost_data():
+    """원가 데이터 조회"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM cost_data ORDER BY category, item_name')
+    data = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return data
+
+def get_cost_by_item_name(item_name):
+    """항목명으로 원가 조회 (매핑 테이블 우선, 없으면 직접 매칭)"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+
+    # 매핑 테이블에서 검색
+    cursor.execute('''
+        SELECT c.* FROM cost_data c
+        JOIN cost_mapping m ON c.item_name = m.cost_item_name
+        WHERE m.sales_item_name = ?
+    ''', (item_name,))
+    row = cursor.fetchone()
+
+    if not row:
+        # 직접 매칭 시도
+        cursor.execute('SELECT * FROM cost_data WHERE item_name = ?', (item_name,))
+        row = cursor.fetchone()
+
+    conn.close()
+    return dict(row) if row else None
 
 # 터미널 인증 설정
 TERMINAL_PASSWORD = "biofl2024"  # 터미널 접속 비밀번호
@@ -24584,6 +24718,149 @@ def api_admin_download_logs():
     logs = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'logs': logs})
+
+# ============ 원가 관리 API ============
+@app.route('/api/admin/cost-data')
+@admin_required
+def api_admin_cost_data():
+    """원가 데이터 조회"""
+    data = get_cost_data()
+    return jsonify({'success': True, 'data': data, 'count': len(data)})
+
+@app.route('/api/admin/cost-data/reload', methods=['POST'])
+@admin_required
+def api_admin_reload_cost_data():
+    """원가 데이터 엑셀에서 다시 로드"""
+    result = load_cost_data_from_excel()
+    return jsonify(result)
+
+@app.route('/api/admin/cost-mapping')
+@admin_required
+def api_admin_cost_mapping():
+    """원가-매출 매핑 목록 조회"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM cost_mapping ORDER BY cost_item_name')
+    mappings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({'success': True, 'mappings': mappings})
+
+@app.route('/api/admin/cost-mapping', methods=['POST'])
+@admin_required
+def api_admin_add_cost_mapping():
+    """원가-매출 매핑 추가"""
+    cost_item = request.json.get('cost_item_name', '').strip()
+    sales_item = request.json.get('sales_item_name', '').strip()
+
+    if not cost_item or not sales_item:
+        return jsonify({'success': False, 'error': '항목명을 입력하세요'})
+
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO cost_mapping (cost_item_name, sales_item_name)
+            VALUES (?, ?)
+        ''', (cost_item, sales_item))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/cost-mapping/<int:mapping_id>', methods=['DELETE'])
+@admin_required
+def api_admin_delete_cost_mapping(mapping_id):
+    """원가-매출 매핑 삭제"""
+    conn = get_user_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM cost_mapping WHERE id = ?', (mapping_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/cost/profit-analysis')
+@login_required
+def api_cost_profit_analysis():
+    """손익 분석 API"""
+    year = request.args.get('year', '2025')
+
+    # 매출 데이터 로드
+    sales_data = load_food_item_data(year)
+
+    # 항목별 매출 집계
+    item_sales = {}
+    for row in sales_data:
+        item_name = str(row.get('항목명', '')).strip()
+        fee = row.get('항목수수료', 0) or 0
+        if isinstance(fee, str):
+            fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+
+        if item_name:
+            if item_name not in item_sales:
+                item_sales[item_name] = {'count': 0, 'revenue': 0}
+            item_sales[item_name]['count'] += 1
+            item_sales[item_name]['revenue'] += fee
+
+    # 원가 데이터와 매칭하여 손익 계산
+    profit_data = []
+    total_revenue = 0
+    total_cost = 0
+    matched_count = 0
+
+    for item_name, sales in item_sales.items():
+        cost_info = get_cost_by_item_name(item_name)
+
+        if cost_info:
+            unit_cost = cost_info.get('total_cost', 0)
+            total_item_cost = unit_cost * sales['count']
+            profit = sales['revenue'] - total_item_cost
+            profit_rate = (profit / sales['revenue'] * 100) if sales['revenue'] > 0 else 0
+
+            profit_data.append({
+                'item_name': item_name,
+                'count': sales['count'],
+                'revenue': sales['revenue'],
+                'unit_cost': unit_cost,
+                'total_cost': total_item_cost,
+                'profit': profit,
+                'profit_rate': round(profit_rate, 1),
+                'matched': True
+            })
+
+            total_revenue += sales['revenue']
+            total_cost += total_item_cost
+            matched_count += 1
+        else:
+            profit_data.append({
+                'item_name': item_name,
+                'count': sales['count'],
+                'revenue': sales['revenue'],
+                'unit_cost': 0,
+                'total_cost': 0,
+                'profit': sales['revenue'],
+                'profit_rate': 100,
+                'matched': False
+            })
+            total_revenue += sales['revenue']
+
+    # 정렬 (매출액 기준 내림차순)
+    profit_data.sort(key=lambda x: x['revenue'], reverse=True)
+
+    return jsonify({
+        'success': True,
+        'year': year,
+        'summary': {
+            'total_revenue': total_revenue,
+            'total_cost': total_cost,
+            'total_profit': total_revenue - total_cost,
+            'profit_rate': round((total_revenue - total_cost) / total_revenue * 100, 1) if total_revenue > 0 else 0,
+            'total_items': len(item_sales),
+            'matched_items': matched_count,
+            'match_rate': round(matched_count / len(item_sales) * 100, 1) if item_sales else 0
+        },
+        'data': profit_data[:100]  # 상위 100개만
+    })
 
 # ============ 메인 페이지 ============
 @app.route('/')

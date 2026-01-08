@@ -8966,27 +8966,35 @@ HTML_TEMPLATE = '''
 
         <!-- 손익분석 탭 -->
         <div id="profitAnalysis" class="tab-content">
-            <!-- 손익 KPI -->
-            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
+            <!-- 손익계산서 요약 KPI -->
+            <div id="profitKpiSource" style="text-align: right; font-size: 12px; color: #9ca3af; margin-bottom: 10px;">데이터 소스: -</div>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 20px;">
                 <div class="card" style="text-align: center; padding: 20px;">
-                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">총 매출</div>
-                    <div id="profitTotalSales" style="font-size: 22px; font-weight: 700; color: #2563eb;">-</div>
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">매출액</div>
+                    <div id="profitTotalSales" style="font-size: 20px; font-weight: 700; color: #2563eb;">-</div>
                 </div>
                 <div class="card" style="text-align: center; padding: 20px;">
-                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">추정 원가 (69.7%)</div>
-                    <div id="profitTotalCost" style="font-size: 22px; font-weight: 700; color: #dc2626;">-</div>
+                    <div id="profitCostLabel" style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">매출원가</div>
+                    <div id="profitTotalCost" style="font-size: 20px; font-weight: 700; color: #dc2626;">-</div>
+                    <div id="profitCostRate" style="font-size: 11px; color: #9ca3af; margin-top: 4px;">-</div>
                 </div>
                 <div class="card" style="text-align: center; padding: 20px;">
-                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">추정 이익</div>
-                    <div id="profitTotalProfit" style="font-size: 22px; font-weight: 700; color: #059669;">-</div>
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">판관비</div>
+                    <div id="profitSgaExpense" style="font-size: 20px; font-weight: 700; color: #f97316;">-</div>
+                    <div id="profitSgaRate" style="font-size: 11px; color: #9ca3af; margin-top: 4px;">-</div>
                 </div>
                 <div class="card" style="text-align: center; padding: 20px;">
-                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">이익률</div>
-                    <div id="profitMarginRate" style="font-size: 22px; font-weight: 700; color: #7c3aed;">-</div>
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">영업이익</div>
+                    <div id="profitTotalProfit" style="font-size: 20px; font-weight: 700; color: #059669;">-</div>
                 </div>
                 <div class="card" style="text-align: center; padding: 20px;">
-                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">할인율 (정상가 대비)</div>
-                    <div id="profitDiscountRate" style="font-size: 22px; font-weight: 700; color: #f59e0b;">-</div>
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">영업이익률</div>
+                    <div id="profitMarginRate" style="font-size: 20px; font-weight: 700; color: #7c3aed;">-</div>
+                </div>
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div style="color: #6b7280; font-size: 13px; margin-bottom: 8px;">세전이익</div>
+                    <div id="profitNetProfit" style="font-size: 20px; font-weight: 700; color: #0891b2;">-</div>
+                    <div id="profitDiscountRate" style="font-size: 11px; color: #9ca3af; margin-top: 4px;">-</div>
                 </div>
             </div>
 
@@ -25424,12 +25432,45 @@ HTML_TEMPLATE = '''
                 console.log('[손익분석] summary:', summary);
                 console.log('[손익분석] purposeData:', purposeData);
 
-                // KPI 업데이트
+                // KPI 업데이트 (손익계산서 구조)
+                const isFinSettings = summary.source === 'financial_settings';
+                document.getElementById('profitKpiSource').textContent = `데이터 소스: ${isFinSettings ? '손익계산서 설정' : 'Excel 데이터'}`;
+
                 document.getElementById('profitTotalSales').textContent = formatCurrency(summary.total_actual_sales || 0);
-                document.getElementById('profitTotalCost').textContent = formatCurrency(summary.estimated_cost || 0);
-                document.getElementById('profitTotalProfit').textContent = formatCurrency(summary.estimated_profit || 0);
+                document.getElementById('profitTotalCost').textContent = formatCurrency(summary.estimated_cost || summary.cost_of_sales || 0);
+                document.getElementById('profitCostRate').textContent = `원가율: ${summary.cost_rate || 0}%`;
+
+                // 판관비 (financial_settings에서만)
+                const sgaEl = document.getElementById('profitSgaExpense');
+                const sgaRateEl = document.getElementById('profitSgaRate');
+                if (isFinSettings && summary.sga_expense) {
+                    sgaEl.textContent = formatCurrency(summary.sga_expense);
+                    sgaRateEl.textContent = `판관비율: ${summary.sga_rate || 0}%`;
+                } else {
+                    sgaEl.textContent = '-';
+                    sgaRateEl.textContent = '데이터 없음';
+                }
+
+                // 영업이익 (음수면 빨간색)
+                const profitEl = document.getElementById('profitTotalProfit');
+                const profitVal = summary.estimated_profit || summary.operating_profit || 0;
+                profitEl.textContent = formatCurrency(profitVal);
+                profitEl.style.color = profitVal >= 0 ? '#059669' : '#dc2626';
+
                 document.getElementById('profitMarginRate').textContent = (summary.profit_rate || 0) + '%';
-                document.getElementById('profitDiscountRate').textContent = (summary.discount_rate || 0) + '%';
+
+                // 세전이익 (financial_settings에서만)
+                const netProfitEl = document.getElementById('profitNetProfit');
+                const discountEl = document.getElementById('profitDiscountRate');
+                if (isFinSettings && summary.net_profit !== undefined) {
+                    netProfitEl.textContent = formatCurrency(summary.net_profit);
+                    netProfitEl.style.color = summary.net_profit >= 0 ? '#0891b2' : '#dc2626';
+                    discountEl.textContent = `영업외: ${formatCurrency(summary.non_operating_income || 0)}`;
+                } else {
+                    netProfitEl.textContent = '-';
+                    discountEl.textContent = `할인율: ${summary.discount_rate || 0}%`;
+                }
+
                 console.log('[손익분석] KPI 업데이트 완료');
 
                 // 테이블 및 차트 업데이트
@@ -26433,11 +26474,68 @@ def api_cost_profit_analysis():
 # ============ 손익분석 (메인 대시보드용) ============
 COST_RATE = 0.697  # 원가율 69.7%
 
+def get_financial_settings(year):
+    """손익계산서 설정 데이터 조회"""
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM financial_settings WHERE year = ?', (int(year),))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[ERROR] get_financial_settings: {e}")
+        return None
+
 @app.route('/api/profit/summary')
 @login_required
 def api_profit_summary():
-    """손익 요약 API (원가율 기반)"""
+    """손익 요약 API (원가율 기반, financial_settings 우선)"""
     year = request.args.get('year', '2025')
+
+    # financial_settings에서 데이터 가져오기 (우선)
+    fin_settings = get_financial_settings(year)
+
+    if fin_settings and fin_settings.get('revenue', 0) > 0:
+        # financial_settings 데이터 사용
+        revenue = fin_settings.get('revenue', 0)
+        cost_of_sales = fin_settings.get('cost_of_sales', 0)
+        sga_expense = fin_settings.get('sga_expense', 0)
+        non_operating = fin_settings.get('non_operating_income', 0)
+        cost_rate = fin_settings.get('cost_rate', 69.7)
+        sga_rate = fin_settings.get('sga_rate', 58.4)
+
+        gross_profit = revenue - cost_of_sales  # 매출총이익
+        operating_profit = gross_profit - sga_expense  # 영업이익
+        net_profit = operating_profit + non_operating  # 세전이익
+
+        profit_rate = (operating_profit / revenue * 100) if revenue > 0 else 0
+        gross_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
+
+        return jsonify({
+            'success': True,
+            'year': year,
+            'source': 'financial_settings',
+            'total_actual_sales': revenue,
+            'cost_of_sales': cost_of_sales,
+            'gross_profit': gross_profit,
+            'sga_expense': sga_expense,
+            'operating_profit': operating_profit,
+            'non_operating_income': non_operating,
+            'net_profit': net_profit,
+            'estimated_cost': cost_of_sales,
+            'estimated_profit': operating_profit,
+            'profit_rate': round(profit_rate, 1),
+            'gross_margin': round(gross_margin, 1),
+            'cost_rate': cost_rate,
+            'sga_rate': sga_rate,
+            'discount_rate': 0,
+            'total_normal_price': revenue
+        })
+
+    # Excel 데이터 사용 (폴백)
     data = load_excel_data(year)
 
     total_normal_price = 0  # 정상가 합계
@@ -26465,6 +26563,7 @@ def api_profit_summary():
     return jsonify({
         'success': True,
         'year': year,
+        'source': 'excel_data',
         'total_normal_price': total_normal_price,
         'total_actual_sales': total_actual_sales,
         'estimated_cost': estimated_cost,

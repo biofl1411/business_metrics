@@ -26492,128 +26492,110 @@ def get_financial_settings(year):
 @app.route('/api/profit/summary')
 @login_required
 def api_profit_summary():
-    """손익 요약 API (원가율 기반, financial_settings 우선)"""
+    """손익 요약 API - 실제 매출 데이터 + 원가율/판관비율 적용"""
     year = request.args.get('year', '2025')
 
-    # financial_settings에서 데이터 가져오기 (우선)
-    fin_settings = get_financial_settings(year)
-
-    if fin_settings and fin_settings.get('revenue', 0) > 0:
-        # financial_settings 데이터 사용
-        revenue = fin_settings.get('revenue', 0)
-        cost_of_sales = fin_settings.get('cost_of_sales', 0)
-        sga_expense = fin_settings.get('sga_expense', 0)
-        non_operating = fin_settings.get('non_operating_income', 0)
-        cost_rate = fin_settings.get('cost_rate', 69.7)
-        sga_rate = fin_settings.get('sga_rate', 58.4)
-
-        gross_profit = revenue - cost_of_sales  # 매출총이익
-        operating_profit = gross_profit - sga_expense  # 영업이익
-        net_profit = operating_profit + non_operating  # 세전이익
-
-        profit_rate = (operating_profit / revenue * 100) if revenue > 0 else 0
-        gross_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
-
-        return jsonify({
-            'success': True,
-            'year': year,
-            'source': 'financial_settings',
-            'total_actual_sales': revenue,
-            'cost_of_sales': cost_of_sales,
-            'gross_profit': gross_profit,
-            'sga_expense': sga_expense,
-            'operating_profit': operating_profit,
-            'non_operating_income': non_operating,
-            'net_profit': net_profit,
-            'estimated_cost': cost_of_sales,
-            'estimated_profit': operating_profit,
-            'profit_rate': round(profit_rate, 1),
-            'gross_margin': round(gross_margin, 1),
-            'cost_rate': cost_rate,
-            'sga_rate': sga_rate,
-            'discount_rate': 0,
-            'total_normal_price': revenue
-        })
-
-    # Excel 데이터 사용 (폴백)
+    # 1. 실제 매출 데이터 가져오기 (Excel 데이터에서)
     data = load_excel_data(year)
 
-    total_normal_price = 0  # 정상가 합계
-    total_actual_sales = 0  # 실제 매출
-
+    total_sales = 0  # 실제 매출액 (총금액 합계)
     for row in data:
-        # 정상가 (항목수수료 합계)
-        normal = row.get('수수료합계', 0) or 0
-        if isinstance(normal, str):
-            normal = float(normal.replace(',', '')) if normal else 0
-        total_normal_price += normal
+        fee = row.get('총금액', 0) or 0
+        if isinstance(fee, str):
+            fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+        total_sales += fee
 
-        # 실제 매출
-        actual = row.get('매출액', row.get('실입금액', 0)) or 0
-        if isinstance(actual, str):
-            actual = float(actual.replace(',', '')) if actual else 0
-        total_actual_sales += actual
+    # 2. 원가율/판관비율 가져오기 (financial_settings에서)
+    fin_settings = get_financial_settings(year)
 
-    # 손익 계산
-    estimated_cost = total_actual_sales * COST_RATE
-    estimated_profit = total_actual_sales - estimated_cost
-    profit_rate = (estimated_profit / total_actual_sales * 100) if total_actual_sales > 0 else 0
-    discount_rate = ((total_normal_price - total_actual_sales) / total_normal_price * 100) if total_normal_price > 0 else 0
+    if fin_settings:
+        cost_rate = fin_settings.get('cost_rate', 69.7) / 100  # % -> 비율
+        sga_rate = fin_settings.get('sga_rate', 58.4) / 100
+        non_operating = fin_settings.get('non_operating_income', 0)
+    else:
+        cost_rate = COST_RATE  # 기본값 69.7%
+        sga_rate = 0.584  # 기본값 58.4%
+        non_operating = 0
+
+    # 3. 손익 계산 (실제 매출 × 비율)
+    cost_of_sales = total_sales * cost_rate  # 매출원가
+    gross_profit = total_sales - cost_of_sales  # 매출총이익
+    sga_expense = total_sales * sga_rate  # 판관비
+    operating_profit = gross_profit - sga_expense  # 영업이익
+    net_profit = operating_profit + non_operating  # 세전이익
+
+    profit_rate = (operating_profit / total_sales * 100) if total_sales > 0 else 0
+    gross_margin = (gross_profit / total_sales * 100) if total_sales > 0 else 0
 
     return jsonify({
         'success': True,
         'year': year,
         'source': 'excel_data',
-        'total_normal_price': total_normal_price,
-        'total_actual_sales': total_actual_sales,
-        'estimated_cost': estimated_cost,
-        'estimated_profit': estimated_profit,
+        'data_count': len(data),
+        'total_actual_sales': total_sales,
+        'cost_of_sales': cost_of_sales,
+        'gross_profit': gross_profit,
+        'sga_expense': sga_expense,
+        'operating_profit': operating_profit,
+        'non_operating_income': non_operating,
+        'net_profit': net_profit,
+        'estimated_cost': cost_of_sales,
+        'estimated_profit': operating_profit,
         'profit_rate': round(profit_rate, 1),
-        'discount_rate': round(discount_rate, 1),
-        'cost_rate': COST_RATE * 100
+        'gross_margin': round(gross_margin, 1),
+        'cost_rate': round(cost_rate * 100, 1),
+        'sga_rate': round(sga_rate * 100, 1),
+        'discount_rate': 0,
+        'total_normal_price': total_sales
     })
 
 @app.route('/api/profit/by-purpose')
 @login_required
 def api_profit_by_purpose():
-    """검사목적별 손익 분석"""
+    """검사목적별 손익 분석 - 실제 매출 + 원가율/판관비율 적용"""
     year = request.args.get('year', '2025')
     data = load_excel_data(year)
+
+    # 원가율/판관비율 가져오기
+    fin_settings = get_financial_settings(year)
+    if fin_settings:
+        cost_rate = fin_settings.get('cost_rate', 69.7) / 100
+        sga_rate = fin_settings.get('sga_rate', 58.4) / 100
+    else:
+        cost_rate = COST_RATE
+        sga_rate = 0.584
 
     purpose_stats = {}
     for row in data:
         purpose = str(row.get('검사목적', '기타')).strip() or '기타'
 
         if purpose not in purpose_stats:
-            purpose_stats[purpose] = {'count': 0, 'normal_price': 0, 'actual_sales': 0}
+            purpose_stats[purpose] = {'count': 0, 'sales': 0}
 
         purpose_stats[purpose]['count'] += 1
 
-        normal = row.get('수수료합계', 0) or 0
-        if isinstance(normal, str):
-            normal = float(normal.replace(',', '')) if normal else 0
-        purpose_stats[purpose]['normal_price'] += normal
-
-        actual = row.get('매출액', row.get('실입금액', 0)) or 0
-        if isinstance(actual, str):
-            actual = float(actual.replace(',', '')) if actual else 0
-        purpose_stats[purpose]['actual_sales'] += actual
+        # 총금액 사용
+        fee = row.get('총금액', 0) or 0
+        if isinstance(fee, str):
+            fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+        purpose_stats[purpose]['sales'] += fee
 
     result = []
     for purpose, stats in purpose_stats.items():
-        estimated_cost = stats['actual_sales'] * COST_RATE
-        estimated_profit = stats['actual_sales'] - estimated_cost
-        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
-        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+        sales = stats['sales']
+        cost_of_sales = sales * cost_rate
+        sga_expense = sales * sga_rate
+        operating_profit = sales - cost_of_sales - sga_expense
+        profit_rate = (operating_profit / sales * 100) if sales > 0 else 0
 
         result.append({
             'purpose': purpose,
             'count': stats['count'],
-            'normal_price': stats['normal_price'],
-            'actual_sales': stats['actual_sales'],
-            'discount_rate': round(discount_rate, 1),
-            'estimated_cost': estimated_cost,
-            'estimated_profit': estimated_profit,
+            'actual_sales': sales,
+            'cost_of_sales': cost_of_sales,
+            'sga_expense': sga_expense,
+            'estimated_cost': cost_of_sales + sga_expense,
+            'estimated_profit': operating_profit,
             'profit_rate': round(profit_rate, 1)
         })
 
@@ -26623,44 +26605,50 @@ def api_profit_by_purpose():
 @app.route('/api/profit/by-manager')
 @login_required
 def api_profit_by_manager():
-    """담당자별 손익 분석"""
+    """담당자별 손익 분석 - 실제 매출 + 원가율/판관비율 적용"""
     year = request.args.get('year', '2025')
     data = load_excel_data(year)
+
+    # 원가율/판관비율 가져오기
+    fin_settings = get_financial_settings(year)
+    if fin_settings:
+        cost_rate = fin_settings.get('cost_rate', 69.7) / 100
+        sga_rate = fin_settings.get('sga_rate', 58.4) / 100
+    else:
+        cost_rate = COST_RATE
+        sga_rate = 0.584
 
     manager_stats = {}
     for row in data:
         manager = str(row.get('영업담당', '미지정')).strip() or '미지정'
 
         if manager not in manager_stats:
-            manager_stats[manager] = {'count': 0, 'normal_price': 0, 'actual_sales': 0}
+            manager_stats[manager] = {'count': 0, 'sales': 0}
 
         manager_stats[manager]['count'] += 1
 
-        normal = row.get('수수료합계', 0) or 0
-        if isinstance(normal, str):
-            normal = float(normal.replace(',', '')) if normal else 0
-        manager_stats[manager]['normal_price'] += normal
-
-        actual = row.get('매출액', row.get('실입금액', 0)) or 0
-        if isinstance(actual, str):
-            actual = float(actual.replace(',', '')) if actual else 0
-        manager_stats[manager]['actual_sales'] += actual
+        # 총금액 사용
+        fee = row.get('총금액', 0) or 0
+        if isinstance(fee, str):
+            fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+        manager_stats[manager]['sales'] += fee
 
     result = []
     for manager, stats in manager_stats.items():
-        estimated_cost = stats['actual_sales'] * COST_RATE
-        estimated_profit = stats['actual_sales'] - estimated_cost
-        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
-        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+        sales = stats['sales']
+        cost_of_sales = sales * cost_rate
+        sga_expense = sales * sga_rate
+        operating_profit = sales - cost_of_sales - sga_expense
+        profit_rate = (operating_profit / sales * 100) if sales > 0 else 0
 
         result.append({
             'manager': manager,
             'count': stats['count'],
-            'normal_price': stats['normal_price'],
-            'actual_sales': stats['actual_sales'],
-            'discount_rate': round(discount_rate, 1),
-            'estimated_cost': estimated_cost,
-            'estimated_profit': estimated_profit,
+            'actual_sales': sales,
+            'cost_of_sales': cost_of_sales,
+            'sga_expense': sga_expense,
+            'estimated_cost': cost_of_sales + sga_expense,
+            'estimated_profit': operating_profit,
             'profit_rate': round(profit_rate, 1)
         })
 
@@ -26670,11 +26658,20 @@ def api_profit_by_manager():
 @app.route('/api/profit/by-month')
 @login_required
 def api_profit_by_month():
-    """월별 손익 분석"""
+    """월별 손익 분석 - 실제 매출 + 원가율/판관비율 적용"""
     year = request.args.get('year', '2025')
     data = load_excel_data(year)
 
-    month_stats = {m: {'count': 0, 'normal_price': 0, 'actual_sales': 0} for m in range(1, 13)}
+    # 원가율/판관비율 가져오기
+    fin_settings = get_financial_settings(year)
+    if fin_settings:
+        cost_rate = fin_settings.get('cost_rate', 69.7) / 100
+        sga_rate = fin_settings.get('sga_rate', 58.4) / 100
+    else:
+        cost_rate = COST_RATE
+        sga_rate = 0.584
+
+    month_stats = {m: {'count': 0, 'sales': 0} for m in range(1, 13)}
 
     for row in data:
         date_str = row.get('접수일자', '')
@@ -26691,33 +26688,30 @@ def api_profit_by_month():
         if 1 <= month <= 12:
             month_stats[month]['count'] += 1
 
-            normal = row.get('수수료합계', 0) or 0
-            if isinstance(normal, str):
-                normal = float(normal.replace(',', '')) if normal else 0
-            month_stats[month]['normal_price'] += normal
-
-            actual = row.get('매출액', row.get('실입금액', 0)) or 0
-            if isinstance(actual, str):
-                actual = float(actual.replace(',', '')) if actual else 0
-            month_stats[month]['actual_sales'] += actual
+            # 총금액 사용
+            fee = row.get('총금액', 0) or 0
+            if isinstance(fee, str):
+                fee = float(fee.replace(',', '').replace('원', '')) if fee else 0
+            month_stats[month]['sales'] += fee
 
     result = []
     for month in range(1, 13):
         stats = month_stats[month]
-        estimated_cost = stats['actual_sales'] * COST_RATE
-        estimated_profit = stats['actual_sales'] - estimated_cost
-        profit_rate = (estimated_profit / stats['actual_sales'] * 100) if stats['actual_sales'] > 0 else 0
-        discount_rate = ((stats['normal_price'] - stats['actual_sales']) / stats['normal_price'] * 100) if stats['normal_price'] > 0 else 0
+        sales = stats['sales']
+        cost_of_sales = sales * cost_rate
+        sga_expense = sales * sga_rate
+        operating_profit = sales - cost_of_sales - sga_expense
+        profit_rate = (operating_profit / sales * 100) if sales > 0 else 0
 
         result.append({
             'month': month,
             'month_name': f'{month}월',
             'count': stats['count'],
-            'normal_price': stats['normal_price'],
-            'actual_sales': stats['actual_sales'],
-            'discount_rate': round(discount_rate, 1),
-            'estimated_cost': estimated_cost,
-            'estimated_profit': estimated_profit,
+            'actual_sales': sales,
+            'cost_of_sales': cost_of_sales,
+            'sga_expense': sga_expense,
+            'estimated_cost': cost_of_sales + sga_expense,
+            'estimated_profit': operating_profit,
             'profit_rate': round(profit_rate, 1)
         })
 

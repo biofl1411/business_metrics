@@ -223,10 +223,17 @@ def init_user_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cost_item_name TEXT NOT NULL,
             sales_item_name TEXT NOT NULL,
+            group_name TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(cost_item_name, sales_item_name)
         )
     ''')
+
+    # group_name 컬럼 추가 (마이그레이션)
+    try:
+        cursor.execute('ALTER TABLE cost_mapping ADD COLUMN group_name TEXT')
+    except:
+        pass
 
     # 기존 users 테이블에 team_id, email 컬럼 추가 (마이그레이션)
     try:
@@ -3174,11 +3181,15 @@ ADMIN_TEMPLATE = '''
                         </table>
                     </div>
                     <div class="card" style="flex: 1;">
-                        <div class="card-title">미매핑 매출 항목 (상위 50개)</div>
+                        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>미매핑 매출 항목 (상위 50개)</span>
+                            <button class="btn btn-sm btn-primary" onclick="showBatchMappingModal()">선택 항목 일괄 매핑</button>
+                        </div>
                         <div style="max-height: 400px; overflow-y: auto;">
                             <table>
                                 <thead>
                                     <tr>
+                                        <th style="width: 30px;"><input type="checkbox" id="selectAllUnmapped" onchange="toggleAllUnmapped()"></th>
                                         <th>매출 항목명</th>
                                         <th>건수</th>
                                         <th>매핑</th>
@@ -3439,6 +3450,37 @@ ADMIN_TEMPLATE = '''
         </div>
     </div>
 
+    <!-- 일괄 매핑 모달 -->
+    <div class="modal" id="batchMappingModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3>일괄 매핑 (그룹)</h3>
+                <button class="modal-close" onclick="closeModal('batchMappingModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>선택된 매출 항목 (<span id="selectedCount">0</span>개)</label>
+                <div id="selectedItemsList" style="max-height: 150px; overflow-y: auto; background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 13px;"></div>
+            </div>
+            <div class="form-group">
+                <label>그룹명 (같은 그룹은 원가를 1번만 계산)</label>
+                <input type="text" class="form-control" id="batchGroupName" placeholder="예: 영양성분검사">
+            </div>
+            <div class="form-group">
+                <label>원가 항목 검색</label>
+                <input type="text" class="form-control" id="batchCostSearch" placeholder="원가 항목 검색..." oninput="searchBatchCostItems()">
+            </div>
+            <div id="batchCostSuggestions" style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 15px;"></div>
+            <div class="form-group">
+                <label>선택된 원가 항목</label>
+                <input type="text" class="form-control" id="batchCostItem" readonly style="background: #ecfdf5; border-color: #10b981;">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('batchMappingModal')">취소</button>
+                <button type="button" class="btn btn-primary" onclick="saveBatchMapping()">일괄 매핑 저장</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 사용자 추가/수정 모달 -->
     <div class="modal" id="userModal">
         <div class="modal-content">
@@ -3669,6 +3711,7 @@ ADMIN_TEMPLATE = '''
         // ============ 원가 관리 함수들 ============
         let costDataCache = [];
         let costMappingCache = [];
+        let unmappedItemsCache = [];
 
         // 원가 데이터 로드
         async function loadCostData() {
@@ -3756,25 +3799,28 @@ ADMIN_TEMPLATE = '''
                 costMappingCache = mappingData.mappings || [];
                 document.getElementById('mappingCount').textContent = costMappingCache.length;
 
-                // 매핑 테이블 렌더링
+                // 매핑 테이블 렌더링 (그룹명 표시)
                 document.getElementById('costMappingTable').innerHTML = costMappingCache.map(m => `
                     <tr>
-                        <td>${m.cost_item_name}</td>
+                        <td>${m.cost_item_name}${m.group_name ? '<br><small style="color:#64748b;">그룹: ' + m.group_name + '</small>' : ''}</td>
                         <td>${m.sales_item_name}</td>
                         <td><button class="btn btn-sm" style="background:#ef4444; color:#fff;" onclick="deleteMapping(${m.id})">삭제</button></td>
                     </tr>
                 `).join('') || '<tr><td colspan="3" style="text-align:center;">매핑된 항목이 없습니다</td></tr>';
 
-                // 미매핑 항목 표시
+                // 미매핑 항목 표시 (체크박스 포함)
                 const unmapped = (profitData.data || []).filter(p => !p.matched);
+                unmappedItemsCache = unmapped;
                 document.getElementById('unmappedCount').textContent = unmapped.length;
-                document.getElementById('unmappedItemsTable').innerHTML = unmapped.slice(0, 50).map(p => `
+                document.getElementById('unmappedItemsTable').innerHTML = unmapped.slice(0, 50).map((p, idx) => `
                     <tr>
+                        <td><input type="checkbox" class="unmapped-checkbox" data-item="${p.item_name.replace(/"/g, '&quot;')}"></td>
                         <td>${p.item_name}</td>
                         <td>${p.count}</td>
                         <td><button class="btn btn-sm btn-primary" onclick="quickMapping('${p.item_name.replace(/'/g, "\\\\'")}')">매핑</button></td>
                     </tr>
-                `).join('') || '<tr><td colspan="3" style="text-align:center;">모든 항목이 매핑되었습니다</td></tr>';
+                `).join('') || '<tr><td colspan="4" style="text-align:center;">모든 항목이 매핑되었습니다</td></tr>';
+                document.getElementById('selectAllUnmapped').checked = false;
             } catch (e) {
                 console.error('매핑 데이터 로드 실패:', e);
             }
@@ -3902,6 +3948,118 @@ ADMIN_TEMPLATE = '''
                 }
             } catch (e) {
                 alert('저장 실패: ' + e.message);
+            }
+        }
+
+        // 전체 선택/해제
+        function toggleAllUnmapped() {
+            const checked = document.getElementById('selectAllUnmapped').checked;
+            document.querySelectorAll('.unmapped-checkbox').forEach(cb => cb.checked = checked);
+        }
+
+        // 선택된 항목 가져오기
+        function getSelectedUnmappedItems() {
+            const selected = [];
+            document.querySelectorAll('.unmapped-checkbox:checked').forEach(cb => {
+                selected.push(cb.dataset.item);
+            });
+            return selected;
+        }
+
+        // 일괄 매핑 모달 표시
+        function showBatchMappingModal() {
+            const selected = getSelectedUnmappedItems();
+            if (selected.length === 0) {
+                alert('매핑할 항목을 선택하세요');
+                return;
+            }
+
+            document.getElementById('selectedCount').textContent = selected.length;
+            document.getElementById('selectedItemsList').innerHTML = selected.map(item =>
+                `<span style="display: inline-block; background: #e2e8f0; padding: 2px 8px; margin: 2px; border-radius: 4px;">${item}</span>`
+            ).join('');
+            document.getElementById('batchGroupName').value = '';
+            document.getElementById('batchCostSearch').value = '';
+            document.getElementById('batchCostItem').value = '';
+            document.getElementById('batchCostSuggestions').innerHTML = '<div style="padding: 15px; text-align: center; color: #64748b;">원가 항목을 검색하세요</div>';
+            document.getElementById('batchMappingModal').classList.add('show');
+        }
+
+        // 일괄 매핑용 원가 항목 검색
+        function searchBatchCostItems() {
+            const search = document.getElementById('batchCostSearch').value.toLowerCase().trim();
+            if (!search) {
+                document.getElementById('batchCostSuggestions').innerHTML = '<div style="padding: 15px; text-align: center; color: #64748b;">원가 항목을 검색하세요</div>';
+                return;
+            }
+
+            const filtered = costDataCache.filter(c =>
+                (c.item_name || '').toLowerCase().includes(search)
+            ).slice(0, 15);
+
+            if (!filtered.length) {
+                document.getElementById('batchCostSuggestions').innerHTML = '<div style="padding: 15px; text-align: center; color: #64748b;">일치하는 항목 없음</div>';
+                return;
+            }
+
+            document.getElementById('batchCostSuggestions').innerHTML = filtered.map(c => `
+                <div onclick="selectBatchCostItem('${c.item_name.replace(/'/g, "\\\\'")}')"
+                     style="padding: 10px 15px; cursor: pointer; border-bottom: 1px solid #e2e8f0;"
+                     onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+                    <div style="font-weight: 500;">${c.item_name}</div>
+                    <div style="font-size: 12px; color: #64748b;">${c.category || ''} | 총원가: ${formatNumber(c.total_cost)}원</div>
+                </div>
+            `).join('');
+        }
+
+        function selectBatchCostItem(itemName) {
+            document.getElementById('batchCostItem').value = itemName;
+            // 그룹명 자동 설정
+            if (!document.getElementById('batchGroupName').value) {
+                document.getElementById('batchGroupName').value = itemName;
+            }
+        }
+
+        // 일괄 매핑 저장
+        async function saveBatchMapping() {
+            const costItem = document.getElementById('batchCostItem').value.trim();
+            const groupName = document.getElementById('batchGroupName').value.trim();
+            const salesItems = getSelectedUnmappedItems();
+
+            if (!costItem) {
+                alert('원가 항목을 선택하세요');
+                return;
+            }
+            if (!groupName) {
+                alert('그룹명을 입력하세요');
+                return;
+            }
+            if (salesItems.length === 0) {
+                alert('매핑할 매출 항목이 없습니다');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/cost-mapping/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cost_item_name: costItem,
+                        sales_item_names: salesItems,
+                        group_name: groupName
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.count + '개 항목이 "' + result.group_name + '" 그룹으로 매핑되었습니다');
+                    closeModal('batchMappingModal');
+                    loadCostMapping();
+                    loadProfitAnalysis();
+                } else {
+                    alert('매핑 실패: ' + (result.error || '알 수 없는 오류'));
+                }
+            } catch (e) {
+                alert('매핑 실패: ' + e.message);
             }
         }
 
@@ -25237,6 +25395,7 @@ def api_admin_add_cost_mapping():
     """원가-매출 매핑 추가"""
     cost_item = request.json.get('cost_item_name', '').strip()
     sales_item = request.json.get('sales_item_name', '').strip()
+    group_name = request.json.get('group_name', '').strip() or None
 
     if not cost_item or not sales_item:
         return jsonify({'success': False, 'error': '항목명을 입력하세요'})
@@ -25245,12 +25404,44 @@ def api_admin_add_cost_mapping():
         conn = get_user_db()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT OR REPLACE INTO cost_mapping (cost_item_name, sales_item_name)
-            VALUES (?, ?)
-        ''', (cost_item, sales_item))
+            INSERT OR REPLACE INTO cost_mapping (cost_item_name, sales_item_name, group_name)
+            VALUES (?, ?, ?)
+        ''', (cost_item, sales_item, group_name))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/cost-mapping/batch', methods=['POST'])
+@admin_required
+def api_admin_batch_cost_mapping():
+    """원가-매출 일괄 매핑 (그룹)"""
+    cost_item = request.json.get('cost_item_name', '').strip()
+    sales_items = request.json.get('sales_item_names', [])
+    group_name = request.json.get('group_name', '').strip()
+
+    if not cost_item or not sales_items:
+        return jsonify({'success': False, 'error': '원가 항목과 매출 항목을 선택하세요'})
+
+    if not group_name:
+        group_name = f"그룹_{cost_item}"
+
+    try:
+        conn = get_user_db()
+        cursor = conn.cursor()
+        count = 0
+        for sales_item in sales_items:
+            sales_item = sales_item.strip()
+            if sales_item:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO cost_mapping (cost_item_name, sales_item_name, group_name)
+                    VALUES (?, ?, ?)
+                ''', (cost_item, sales_item, group_name))
+                count += 1
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'count': count, 'group_name': group_name})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

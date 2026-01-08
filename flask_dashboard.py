@@ -7889,6 +7889,25 @@ HTML_TEMPLATE = '''
             const content = document.getElementById(tabId);
             if (content) content.classList.add('active');
             document.getElementById('kpiSection').classList.toggle('hidden', tabId !== 'main');
+
+            // 탭 이용 기록 저장
+            const tabNames = {
+                'main': '대시보드',
+                'monthlySales': '월별매출',
+                'sampleType': '검체유형',
+                'branchChart': '지역별',
+                'clientAnalysis': '업체분석',
+                'defectAnalysis': '부적합분석',
+                'livestockTab': '축산물분석',
+                'collectionTab': '수금현황',
+                'aiAnalysis': 'AI분석'
+            };
+            const menuName = tabNames[tabId] || tabId;
+            fetch('/api/log-menu', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({menu: menuName})
+            }).catch(() => {});
         }
 
         // 비교 체크박스
@@ -24470,10 +24489,27 @@ def api_admin_permission_groups():
         conn.close()
         return jsonify({'success': True})
 
+@app.route('/api/log-menu', methods=['POST'])
+@login_required
+def api_log_menu():
+    """메뉴 접근 로깅 API"""
+    session_id = request.cookies.get('session_id')
+    session = verify_user_session(session_id)
+    if not session:
+        return jsonify({'error': '로그인 필요'}), 401
+
+    menu_name = request.json.get('menu', '')
+    if menu_name:
+        log_menu_access(session.get('user_id'), menu_name)
+    return jsonify({'success': True})
+
 @app.route('/api/admin/menu-logs')
 @admin_required
 def api_admin_menu_logs():
     """메뉴 접근 로그"""
+    from datetime import timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+
     conn = get_user_db()
     cursor = conn.cursor()
     cursor.execute('''
@@ -24481,7 +24517,18 @@ def api_admin_menu_logs():
         LEFT JOIN users u ON m.user_id = u.id
         ORDER BY m.created_at DESC LIMIT 100
     ''')
-    logs = [dict(row) for row in cursor.fetchall()]
+    logs = []
+    for row in cursor.fetchall():
+        log = dict(row)
+        # UTC -> KST 변환
+        if log.get('created_at'):
+            try:
+                utc_time = datetime.strptime(log['created_at'], '%Y-%m-%d %H:%M:%S')
+                kst_time = utc_time.replace(tzinfo=timezone.utc).astimezone(KST)
+                log['created_at'] = kst_time.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                pass
+        logs.append(log)
     conn.close()
     return jsonify({'logs': logs})
 

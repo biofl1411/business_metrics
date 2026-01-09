@@ -40,6 +40,8 @@ business_metrics/
 ├── flask_dashboard.py      # 메인 웹앱 (26,500줄+)
 ├── config/settings.py      # 컬럼매핑, 담당자매핑, KPI임계값
 ├── modules/                # data_loader, metrics_calculator 등
+├── colab/                  # Colab 노트북
+│   └── excel_to_sqlite_uploader.ipynb  # 드라이브→SQLite 변환
 └── data/
     ├── users.db            # 사용자/권한 DB
     ├── business_data.db    # 데이터 캐시 DB (~1GB)
@@ -62,10 +64,28 @@ business_metrics/
 
 ## 데이터 변환 (Colab → 서버)
 
-1. Colab에서 엑셀 → SQLite 변환
-2. `business_data.db`를 서버에 업로드 (`/api/upload-db`)
+### Colab 노트북 사용
 
-**주의**: 서버의 `data/2024/`, `data/2025/` 폴더에 엑셀 파일이 없으면 변환 안됨
+`colab/excel_to_sqlite_uploader.ipynb` 노트북을 Google Colab에서 실행
+
+**구글 드라이브 폴더 구조**:
+```
+MyDrive/business_metrics_data/
+├── 2024/*.xlsx          # 메인 매출 데이터
+├── 2025/*.xlsx
+└── food_item/
+    ├── 2024/*.xlsx      # 음식항목 데이터
+    └── 2025/*.xlsx
+```
+
+**실행 순서**:
+1. 드라이브에 엑셀 파일 업로드
+2. Colab에서 노트북 실행 (드라이브 마운트 → 변환 → 업로드)
+3. 데모 서버에서 먼저 테스트 후 본 사이트 적용
+
+**업로드 API**: `/api/upload-db`
+- 헤더: `X-API-Key: biofl1411-upload-key`
+- 자동으로 기존 DB 백업 및 캐시 초기화
 
 ---
 
